@@ -1,0 +1,11 @@
+node_modules/
+.env
+output/*
+!output/.gitkeep
+data/*
+!data/.gitkeep
+npm-debug.log
+
+# Documentos gerados/salvos localmente (exemplos, PDFs de referência) —
+# não são código-fonte do projeto.
+Modelos/

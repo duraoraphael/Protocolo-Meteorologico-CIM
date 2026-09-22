@@ -1,0 +1,39 @@
+# Blueprint do Render (render.com) — permite criar o serviço com
+# "New +" > "Blueprint" apontando pra este repositório, em vez de preencher
+# tudo manualmente na tela. Os valores marcados com "sync: false" são
+# preenchidos por vocês no painel do Render (nunca ficam no repositório).
+#
+# Plano "free": não pede cartão, mas tem duas limitações a saber:
+# 1. O serviço "dorme" depois de ~15 min sem acesso, e o envio automático
+#    diário (node-cron) só dispara se o processo estiver rodando na hora —
+#    ver seção 9 do README para o contorno gratuito (um "despertador"
+#    externo tipo cron-job.org/GitHub Actions batendo em /api/gerar-relatorio
+#    no horário certo).
+# 2. Sem disco persistente (também exige cartão no Render), o cadastro de
+#    responsáveis (data/responsaveis.json) volta ao vazio a cada novo
+#    deploy — precisa recadastrar pelo painel (botão 👥) depois de cada
+#    `git push`. Se no futuro quiserem resolver isso sem cartão, dá pra
+#    trocar a persistência por um serviço externo gratuito (ex.: um Google
+#    Sheet ou um KV store gratuito) — não é o padrão atual do projeto.
+services:
+  - type: web
+    name: protocolo-meteorologico-cim
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/cidades
+    envVars:
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: REPORT_RECIPIENTS
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: CIDADE
+        value: rio_de_janeiro
+      - key: ENVIO_AUTOMATICO_DIARIO
+        value: "true"
+      - key: HORA_ENVIO_DIARIO
+        value: "07:30"

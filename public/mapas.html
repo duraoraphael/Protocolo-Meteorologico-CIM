@@ -1,0 +1,7 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mapas e Radar · CIM</title><link rel="icon" href="/logo/CIM.png"><link rel="stylesheet" href="mapas.css"></head>
+<body class="cim-map-page">
+<header class="cim-map-header"><a id="cim-map-home" href="/">CIM <span>Voltar ao painel</span></a><h1>Mapas e Radar</h1><label>Base <select id="cim-map-base" aria-label="Selecionar base" disabled></select></label></header>
+<main class="cim-map-main"><div class="cim-map-toolbar"><label>Camada <select id="cim-map-layer" disabled><option>Aguardando mapa</option></select></label><button id="cim-map-center" disabled>Centralizar na base</button><button id="cim-map-picker" disabled>Consultar ponto da base</button></div><p id="cim-map-status" role="status" aria-live="polite">Carregando configuração do mapa…</p><p class="cim-map-hint">Previsão espacial Windy. Camadas e radar dependem da disponibilidade da API e do plano contratado. No computador, clique no mapa para consultar um ponto.</p><section class="cim-map-frame" aria-label="Mapa meteorológico"><div id="windy"></div></section></main>
+<script src="mapas.js" defer></script></body></html>

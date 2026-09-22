@@ -1,0 +1,30 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consulta de áreas Oceanop — CIM</title>
+<link rel="icon" href="/logo/CIM.png"><link rel="stylesheet" href="dashboard.css?v=hero-ediselonge-7"><link rel="stylesheet" href="areas.css?v=area-2">
+</head>
+<body>
+<header class="areas-header"><a href="/">← Dashboard CIM</a><span>OCEANOP / PETROBRAS</span></header>
+<main class="areas-main">
+<p class="eyebrow">Monitoramento por área</p>
+<h1>Previsões Oceanop</h1>
+<p class="intro">Consulte temperatura, vento, chuva e condições marítimas por local e intervalo.</p>
+<form id="consulta" class="query-panel">
+<label>Base atendida<select id="base" required><option value="">Carregando bases…</option></select></label>
+<label>Local Oceanop<input id="local" maxlength="100" required placeholder="Identificador fornecido pelo Oceanop" autocomplete="off" aria-describedby="vinculo"></label>
+<button class="botao-primario" id="consultar" type="submit">Consultar previsão</button>
+<p id="vinculo" class="query-note">Carregando bases cadastradas no projeto.</p>
+</form>
+<p class="data-note">Previsões por intervalo, não medições em tempo real. Unidades e fuso horário não foram informados no contrato disponibilizado; os valores são apresentados sem conversão.</p>
+<div id="status" role="status" aria-live="polite">Escolha uma base e informe o local Oceanop.</div>
+<section id="resultados" hidden aria-label="Previsões retornadas">
+<div class="result-heading"><h2 id="resultado-titulo"></h2><label>Local retornado<select id="local-retornado"></select></label></div>
+<p id="consulta-info"></p><p>Datas e horários conforme retornados pela fonte.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Previsões por intervalo"><table class="tabela-periodos"><caption class="sr-only">Previsões Oceanop por local e intervalo</caption><thead><tr><th>Local</th><th>Início</th><th>Fim</th><th>Temperatura</th><th>Vento</th><th>Rajada a 10 m</th><th>Onda máxima</th><th>Precipitação</th><th>Demais parâmetros</th></tr></thead><tbody id="previsoes"></tbody></table></div>
+</section>
+</main>
+<script src="areas.js?v=area-2"></script>
+</body>
+</html>

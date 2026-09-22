@@ -1,0 +1,6 @@
+node_modules
+.env
+output/*.pdf
+data/*.json
+npm-debug.log
+.git

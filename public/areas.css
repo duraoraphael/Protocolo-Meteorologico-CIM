@@ -1,0 +1,13 @@
+﻿.areas-header { display:flex; justify-content:space-between; gap:20px; padding:24px var(--page-gutter); border-bottom:1px solid var(--border-medium); }
+.areas-header a { color:var(--yellow-petro); }.areas-header span { font-size:11px; letter-spacing:.1em; color:var(--text-secondary); }
+.areas-main { padding:36px var(--page-gutter); }.areas-main h1 { font-size:clamp(28px,4vw,44px); }.intro { color:var(--text-secondary); line-height:1.6; }
+.query-panel { display:grid; grid-template-columns:1.2fr 1.2fr auto; gap:16px; align-items:end; margin:28px 0 16px; padding:22px; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; }
+.query-panel label,.result-heading label { display:grid; gap:8px; font-size:12px; color:var(--text-secondary); min-width:0; }
+.query-panel input,.query-panel select,.result-heading select { width:100%; min-width:0; padding:11px; border:1px solid var(--border-medium); border-radius:6px; background:var(--bg-main); color:var(--text-primary); }
+.query-panel button { min-height:42px; }.query-note { grid-column:1/-1; margin:0; font-size:12px; line-height:1.5; color:var(--yellow-petro); }
+.data-note,#consulta-info,#resultados>p { font-size:12px; color:var(--text-secondary); line-height:1.6; max-width:100ch; }
+#status { padding:18px 0; line-height:1.5; }#status[data-error="true"] { color:var(--orange-alert); }
+#resultados { padding:20px; border:1px solid var(--border-soft); border-radius:10px; background:var(--bg-surface); }.result-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }.result-heading h2 { font-size:20px; }.result-heading label { min-width:180px; }
+#previsoes td { vertical-align:top; }#previsoes td small { display:block; margin-top:4px; color:var(--text-secondary); }#previsoes details { min-width:190px; }#previsoes summary { color:var(--yellow-petro); cursor:pointer; }#previsoes dl { display:grid; gap:8px; }#previsoes dt { color:var(--text-secondary); }#previsoes dd { margin:0 0 5px; }
+@media(max-width:1000px){.query-panel{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.query-panel{grid-template-columns:1fr;padding:16px}.result-heading{align-items:stretch;flex-direction:column}.areas-header span{display:none}.areas-main{padding-top:24px}#resultados{padding:12px}}

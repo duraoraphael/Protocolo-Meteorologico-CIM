@@ -1,0 +1,106 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Protocolo Meteorológico CIM</title>
+<link rel="icon" href="/logo/CIM.png" type="image/png" />
+<link rel="stylesheet" href="dashboard.css?v=windy-9" />
+</head>
+<body>
+
+  <a class="skip-link" href="#conteudo">Pular para os dados meteorológicos</a>
+  <header class="hero" id="inicio">
+    <img class="hero-image" src="/logo/ediselonge.png" alt="" aria-hidden="true" fetchpriority="high" />
+    <div class="hero-overlay" aria-hidden="true"></div>
+    <nav class="top-navigation" aria-label="Navegação principal">
+      <a href="#inicio" class="brand cim-wordmark" aria-label="CIM — início"><span aria-hidden="true">C<span class="cim-wordmark-accent">I</span>M</span></a>
+      <button id="menu-toggle" class="menu-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu-principal">☰</button>
+      <div class="navigation-links" id="menu-principal">
+        <a href="#inicio" class="active" aria-current="page">Início</a>
+        <button data-detail="monitoramento">Monitoramento</button>
+        <a href="areas.html">Áreas Oceanop</a>
+        <button id="botao-responsaveis">Responsáveis</button>
+        <button id="botao-config">Gerar e enviar</button>
+        <button data-detail="sobre">Sobre o CIM</button>
+      </div>
+      <div id="logo-petrobras-card" class="petrobras-brand oculto"><img id="logo-petrobras" class="logo-petrobras" alt="Petrobras" /></div>
+    </nav>
+    <div class="hero-content">
+      <div class="hero-copy">
+        <p class="eyebrow">CENTRO INTEGRADO DE MONITORAMENTO</p>
+        <h1>PROTOCOLO<br>METEOROLÓGICO</h1>
+        <p class="hero-description">Monitoramento em tempo real para apoiar<br>a tomada de decisão operacional.</p>
+        <div class="hero-controls">
+          <label class="location-control"><span data-icon="pin"></span><span class="sr-only">Selecionar base</span><select id="seletor-base" aria-label="Selecionar base"><option value="">Carregando bases…</option></select></label>
+          <div class="current-date"><span data-icon="calendar"></span><time id="data-atual"></time></div>
+        </div>
+        <p class="hero-note">Informações meteorológicas integradas para operações mais seguras e eficientes.</p>
+      </div>
+      <div class="hero-weather">
+        <div class="clock-label">Horário oficial</div>
+        <div class="relogio" id="relogio">--:--:--</div>
+        <div class="clock-zone">Horário de Brasília</div>
+        <div class="ultima-atualizacao" id="ultima-atualizacao">Última atualização: —</div>
+        <section class="current-weather" aria-label="Condições atuais" id="tempo-atual"><span id="subtitulo-cidade">Carregando condições atuais…</span></section>
+      </div>
+    </div>
+  </header>
+  <main id="conteudo" class="conteudo" tabindex="-1" aria-busy="true"><div class="carregando" role="status">Carregando dados meteorológicos…</div></main>
+  <dialog id="detalhes" class="details-dialog" aria-labelledby="detalhes-titulo"><div class="dialog-heading"><h2 id="detalhes-titulo"></h2><button id="fechar-detalhes" aria-label="Fechar detalhes">×</button></div><div id="detalhes-conteudo"></div></dialog>
+
+  <div id="overlay-senha" class="overlay oculto">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Gerar e enviar relatório">
+      <h2>Gerar e Enviar Relatório</h2>
+      <p>Digite a senha operacional do CIM para disparar a coleta de dados, gerar o PDF e enviar o e-mail.</p>
+      <input id="input-senha" aria-label="Senha operacional" type="password" placeholder="Senha" autocomplete="off" />
+      <div id="modal-mensagem" class="modal-mensagem"></div>
+      <div class="modal-botoes">
+        <button id="botao-cancelar" class="botao-secundario">Cancelar</button>
+        <button id="botao-confirmar" class="botao-primario">Gerar e Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay-responsaveis" class="overlay oculto">
+    <div class="modal modal-responsaveis" role="dialog" aria-modal="true" aria-label="Gerenciar responsáveis">
+      <h2>Gerenciar Responsáveis — <span id="resp-nome-base">—</span></h2>
+      <p>Digite a senha operacional para cadastrar ou remover quem recebe o informativo desta base por e-mail.</p>
+
+      <div id="resp-bloco-senha">
+        <input id="resp-input-senha" aria-label="Senha operacional" type="password" placeholder="Senha" autocomplete="off" />
+        <div id="resp-senha-mensagem" class="modal-mensagem"></div>
+        <div class="modal-botoes">
+          <button id="resp-botao-cancelar" class="botao-secundario">Cancelar</button>
+          <button id="resp-botao-desbloquear" class="botao-primario">Desbloquear</button>
+        </div>
+      </div>
+
+      <div id="resp-bloco-gestao" class="oculto">
+        <ul id="resp-lista" class="resp-lista"></ul>
+
+        <form id="resp-form" class="resp-form">
+          <input id="resp-input-nome" aria-label="Nome do responsável" type="text" placeholder="Nome do responsável" autocomplete="off" />
+          <input id="resp-input-email" aria-label="E-mail do responsável" type="email" placeholder="E-mail" autocomplete="off" />
+          <button type="submit" class="botao-primario">Adicionar</button>
+        </form>
+        <div id="resp-form-mensagem" class="modal-mensagem"></div>
+
+        <div class="modal-botoes">
+          <button id="resp-botao-fechar" class="botao-secundario">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div role="status" id="toast" class="toast oculto"></div>
+
+  <script src="dashboard-components.js"></script>
+  <script src="dashboard.js?v=windy-9"></script>
+</body>
+</html>
+
+
+
+
+
