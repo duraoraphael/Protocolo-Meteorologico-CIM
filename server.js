@@ -22,6 +22,7 @@ const { problemaSenhaConfigurada, criarComparadorSenha } = require("./src/securi
 const { cabecalhosSeguranca } = require("./src/security/cabecalhos");
 const { tratadorDeErros, naoEncontrado } = require("./src/security/erros");
 const { criarLinksRelatorio, senhaDoBasicAuth } = require("./src/security/linksRelatorio");
+const { criarControleTentativas, valorTrustProxy } = require("./src/security/tentativas");
 
 // Hospedagens em nuvem (Render, Railway, etc.) definem PORT automaticamente —
 // PORTA continua valendo para rodar local/Windows sem mexer no .env.
@@ -35,12 +36,18 @@ function criarApp({
   senhaPainel = process.env.DASHBOARD_PASSWORD,
   cidadeAtiva = process.env.CIDADE || undefined,
   pastaRelatorios = PASTA_SAIDA,
+  trustProxy = process.env.TRUST_PROXY,
+  opcoesTentativas = {},
 } = {}) {
   const senhaConfere = criarComparadorSenha(senhaPainel);
   const app = express();
   // V-08: não anunciar a tecnologia e aplicar cabeçalhos de segurança
   // (CSP, nosniff, X-Frame-Options, Referrer-Policy) em todas as respostas.
   app.disable("x-powered-by");
+  // TRUST_PROXY (padrão desligado): só ative atrás de um proxy reverso
+  // (IIS/nginx) para que req.ip seja o IP real do cliente, e não o do proxy.
+  const confiancaProxy = valorTrustProxy(trustProxy);
+  if (confiancaProxy !== false) app.set("trust proxy", confiancaProxy);
   app.use(cabecalhosSeguranca());
   app.use(express.json({ limit: "100kb" }));
   app.use("/api/windy", require("./src/integrations/windyRoutes"));
@@ -104,54 +111,16 @@ function criarApp({
   });
 
   // -----------------------------------------------------------------------
-  // Geração + envio sob demanda (botão do painel, protegido por senha).
-  // Throttle simples em memória para reduzir tentativas de força bruta na
-  // senha, já que o painel fica em rede local da sala de operação.
+  // Senha operacional (botão Gerar e enviar, responsáveis, PDFs). V-05:
+  // atraso progressivo por IP em vez de bloqueio — a senha correta nunca é
+  // recusada por causa de erros de outra pessoa no mesmo IP.
   // -----------------------------------------------------------------------
-  const tentativasPorIp = new Map();
-  const JANELA_BLOQUEIO_MS = 5 * 60 * 1000;
-  const MAX_TENTATIVAS = 5;
+  const controleTentativas = criarControleTentativas(opcoesTentativas);
+  app.locals.controleTentativas = controleTentativas;
 
-  function ipBloqueado(ip) {
-    const registro = tentativasPorIp.get(ip);
-    if (!registro) return false;
-    if (Date.now() - registro.desde > JANELA_BLOQUEIO_MS) {
-      tentativasPorIp.delete(ip);
-      return false;
-    }
-    return registro.contagem >= MAX_TENTATIVAS;
-  }
-
-  function registrarTentativaFalha(ip) {
-    const registro = tentativasPorIp.get(ip) || { contagem: 0, desde: Date.now() };
-    registro.contagem += 1;
-    tentativasPorIp.set(ip, registro);
-  }
-
-  function limparTentativas(ip) {
-    tentativasPorIp.delete(ip);
-  }
-
-  // Valida a senha operacional com o mesmo throttle anti-força-bruta usado
-  // pela geração manual do relatório. Retorna { ok, status, erro } — usado por
-  // todos os endpoints que alteram estado (gerar relatório, cadastrar/remover
-  // responsável).
-  function verificarSenha(req, senha = req.body?.senha) {
-    const ip = req.ip;
-    if (ipBloqueado(ip)) {
-      return {
-        ok: false,
-        status: 429,
-        erro: "Muitas tentativas de senha incorretas. Aguarde alguns minutos e tente novamente.",
-      };
-    }
-
-    if (!senhaConfere(senha)) {
-      registrarTentativaFalha(ip);
-      return { ok: false, status: 401, erro: "Senha incorreta." };
-    }
-    limparTentativas(ip);
-    return { ok: true };
+  // Retorna { ok, status, erro } — usado por todos os endpoints protegidos.
+  async function verificarSenha(req, senha = req.body?.senha) {
+    return controleTentativas.verificar(req.ip, () => senhaConfere(senha));
   }
 
   // -----------------------------------------------------------------------
@@ -166,7 +135,7 @@ function criarApp({
   app.locals.linksRelatorio = linksRelatorio;
   const NOME_PDF_VALIDO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.pdf$/;
 
-  app.get("/relatorios/:arquivo", (req, res, next) => {
+  app.get("/relatorios/:arquivo", async (req, res, next) => {
     const { arquivo } = req.params;
     if (!NOME_PDF_VALIDO.test(arquivo)) {
       return res.status(404).json({ ok: false, erro: "Não encontrado." });
@@ -175,7 +144,7 @@ function criarApp({
     const token = req.query.token;
     if (!(typeof token === "string" && linksRelatorio.valido(token, arquivo))) {
       const senha = senhaDoBasicAuth(req);
-      const checagem = senha === undefined ? { ok: false, status: 401 } : verificarSenha(req, senha);
+      const checagem = senha === undefined ? { ok: false, status: 401 } : await verificarSenha(req, senha);
       if (!checagem.ok) {
         if (checagem.status === 401) {
           res.setHeader("WWW-Authenticate", 'Basic realm="Relatorios CIM", charset="UTF-8"');
@@ -196,7 +165,7 @@ function criarApp({
   let geracaoEmAndamento = false;
 
   app.post("/api/gerar-relatorio", async (req, res) => {
-    const checagem = verificarSenha(req);
+    const checagem = await verificarSenha(req);
     if (!checagem.ok) {
       return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
     }
@@ -273,8 +242,8 @@ function criarApp({
     }
     return responsaveis.listarTodos().map((b) => ({ ...b, responsaveis: formatar(b.responsaveis) }));
   }
-  app.post("/api/verificar-senha", (req, res) => {
-    const checagem = verificarSenha(req);
+  app.post("/api/verificar-senha", async (req, res) => {
+    const checagem = await verificarSenha(req);
     if (!checagem.ok) {
       return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
     }
@@ -289,8 +258,8 @@ function criarApp({
     }
   });
 
-  app.post("/api/responsaveis/consultar", (req, res) => {
-    const checagem = verificarSenha(req);
+  app.post("/api/responsaveis/consultar", async (req, res) => {
+    const checagem = await verificarSenha(req);
     if (!checagem.ok) {
       return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
     }
@@ -301,8 +270,8 @@ function criarApp({
     }
   });
 
-  app.post("/api/responsaveis", (req, res) => {
-    const checagem = verificarSenha(req);
+  app.post("/api/responsaveis", async (req, res) => {
+    const checagem = await verificarSenha(req);
     if (!checagem.ok) {
       return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
     }
@@ -315,8 +284,8 @@ function criarApp({
     }
   });
 
-  app.delete("/api/responsaveis", (req, res) => {
-    const checagem = verificarSenha(req);
+  app.delete("/api/responsaveis", async (req, res) => {
+    const checagem = await verificarSenha(req);
     if (!checagem.ok) {
       return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
     }

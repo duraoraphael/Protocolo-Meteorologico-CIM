@@ -351,5 +351,8 @@ funcionando normalmente ali dentro.
   (`urlArquivo`, com `?token=`) devolvido por `/api/gerar-relatorio`, válido
   por 24 h e só para aquele arquivo. Links deixam de valer se o servidor
   reiniciar.
-- O painel tem um bloqueio simples (5 tentativas de senha erradas = 5 min de
-  bloqueio por IP) para reduzir tentativas de força bruta na rede local.
+- Tentativas de senha erradas deixam o IP mais lento, sem bloquear: a partir
+  da 3ª falha seguida, cada tentativa desse IP espera 0,5 s, 1 s, 2 s... até
+  30 s. A senha correta sempre entra (no máximo com esse atraso) e zera o
+  contador. Atrás de proxy reverso, configure `TRUST_PROXY` (ver
+  `INSTALACAO_SERVIDOR_PETROBRAS.md`); sem proxy, deixe desligado.
