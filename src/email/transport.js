@@ -12,6 +12,30 @@
 
 const nodemailer = require("nodemailer");
 
+let avisoTlsEmitido = false;
+
+/**
+ * Validação do certificado TLS do relay (V-11). Sempre ligada, a não ser que
+ * SMTP_TLS_INSEGURO=true — válvula de escape temporária, com aviso no log.
+ * O caminho correto para CA interna é NODE_EXTRA_CA_CERTS (ver
+ * INSTALACAO_SERVIDOR_PETROBRAS.md).
+ */
+function opcoesTlsRelay() {
+  const inseguro = process.env.SMTP_TLS_INSEGURO === "true";
+  if (inseguro && !avisoTlsEmitido) {
+    avisoTlsEmitido = true;
+    console.warn(
+      "[CIM] AVISO DE SEGURANÇA: SMTP_TLS_INSEGURO=true — o certificado do relay SMTP NÃO está sendo validado. " +
+        "Instale a CA interna via NODE_EXTRA_CA_CERTS e remova essa variável."
+    );
+  }
+  if (process.env.SMTP_IGNORAR_TLS === "true" && !avisoTlsEmitido) {
+    avisoTlsEmitido = true;
+    console.warn("[CIM] AVISO DE SEGURANÇA: SMTP_IGNORAR_TLS=true — os e-mails trafegam sem criptografia até o relay.");
+  }
+  return { rejectUnauthorized: !inseguro };
+}
+
 function usandoRelayCorporativo() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_HOST.trim());
 }
@@ -48,13 +72,14 @@ function criarTransportador() {
       // o nodemailer tentar autenticar e o servidor recusar.
       secure: false,
       auth: undefined,
-      // Relays internos costumam anunciar STARTTLS com certificado emitido
-      // por CA interna, que não está na lista de confiança do Node. Sem isso
-      // o envio falha com "self signed certificate". Aceitável porque o
-      // tráfego não sai da rede corporativa.
-      tls: { rejectUnauthorized: false },
+      // Certificado do relay SEMPRE validado (V-11). Relays internos usam
+      // certificado da CA corporativa: aponte NODE_EXTRA_CA_CERTS para o
+      // arquivo .pem/.crt dessa CA. SMTP_TLS_INSEGURO=true desliga a
+      // validação (só como paliativo temporário; gera aviso no log).
+      tls: opcoesTlsRelay(),
       // Se o relay não suportar STARTTLS, SMTP_IGNORAR_TLS=true desliga a
-      // tentativa em vez de deixar a conexão falhar.
+      // tentativa em vez de deixar a conexão falhar (sem criptografia — gera
+      // aviso no log; evite).
       ignoreTLS: process.env.SMTP_IGNORAR_TLS === "true",
       connectionTimeout: 20000,
       greetingTimeout: 15000,

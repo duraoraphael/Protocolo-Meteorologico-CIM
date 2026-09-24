@@ -100,6 +100,31 @@ comitados no repositório**):
 Demais variáveis (bases monitoradas, Windy opcional etc.) já vêm com
 valores padrão razoáveis — ver comentários no próprio `.env.example`.
 
+### 5.1 Certificado do relay SMTP (CA interna)
+
+O envio pelo relay corporativo **valida o certificado TLS** do servidor
+SMTP (STARTTLS). Como o certificado do relay é emitido pela CA interna da
+Petrobras, que não vem na lista de confiança do Node, informe a CA ao Node:
+
+1. Peça à TI a cadeia da CA interna (raiz e intermediárias) em formato
+   **PEM/Base64** (`.pem`/`.crt` com `-----BEGIN CERTIFICATE-----`). Pode
+   ser um único arquivo com vários certificados concatenados.
+2. Salve, por exemplo, em `D:\Certificados\ca-petrobras.pem`.
+3. Defina a variável **de ambiente do sistema** (não funciona pelo `.env`,
+   porque o Node lê essa variável antes de iniciar):
+
+   ```powershell
+   [Environment]::SetEnvironmentVariable("NODE_EXTRA_CA_CERTS", "D:\Certificados\ca-petrobras.pem", "Machine")
+   ```
+
+   Reinicie a tarefa agendada (ou o servidor) para valer.
+4. Teste com `node src/cliTestarEmail.js --enviar-para=...` (passo 6).
+
+Só se o teste falhar com erro de certificado e for preciso enviar enquanto
+a CA não é instalada, use temporariamente `SMTP_TLS_INSEGURO=true` no
+`.env` — o log mostra um aviso a cada inicialização. Remova assim que a CA
+estiver configurada. Evite `SMTP_IGNORAR_TLS=true` (desliga a criptografia).
+
 ## 6. Validar antes de confiar em qualquer automação
 
 **E-mail** — confirma o SMTP corporativo com um envio de teste real:

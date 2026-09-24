@@ -38,7 +38,9 @@ function argumento(nome) {
     console.error("Causas comuns:");
     console.error("  · Servidor/porta incorretos ou bloqueados por firewall");
     console.error("  · Relay que só aceita conexões de IPs autorizados (rodar do servidor correto)");
-    console.error("  · STARTTLS exigido ou indisponível — tente SMTP_IGNORAR_TLS=true");
+    console.error("  · Certificado do relay não reconhecido (self-signed / unable to verify) — configure");
+    console.error("    NODE_EXTRA_CA_CERTS com a CA interna (INSTALACAO_SERVIDOR_PETROBRAS.md, passo 5.1)");
+    console.error("  · Relay sem STARTTLS — só como último recurso, SMTP_IGNORAR_TLS=true (sem criptografia)");
     process.exitCode = 1;
     return;
   }
