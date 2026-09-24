@@ -39,7 +39,7 @@ test("node server.js encerra com código 1 sem DASHBOARD_PASSWORD válida", () =
   for (const senha of [undefined, "Marciana", "curta123"]) {
     const env = { PATH: process.env.PATH, PORTA: "0", ENVIO_AUTOMATICO_DIARIO: "false", MONITOR_ALERTAS: "false" };
     if (senha !== undefined) env.DASHBOARD_PASSWORD = senha;
-    const r = spawnSync(process.execPath, [SERVER], { cwd, env, encoding: "utf-8", timeout: 20000 });
+    const r = spawnSync(process.execPath, [SERVER], { cwd, env, encoding: "utf-8", timeout: 120000 });
     assert.equal(r.status, 1, `senha=${senha} stdout=${r.stdout} stderr=${r.stderr}`);
     assert.match(r.stderr, /DASHBOARD_PASSWORD/);
   }

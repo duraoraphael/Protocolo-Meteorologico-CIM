@@ -65,7 +65,7 @@ function renderListaDestinatariosPainel(responsaveis) {
     return;
   }
   alvo.innerHTML = `<div class="chips-destinatarios">${responsaveis
-    .map((r) => `<span class="chip-destinatario">${esc(r.nome)} — ${esc(r.email)}</span>`)
+    .map((r) => `<span class="chip-destinatario">${esc(r.nome)}${r.email ? ` — ${esc(r.email)}` : ""}</span>`)
     .join("")}</div>`;
 }
 
@@ -269,7 +269,12 @@ respInputSenha.addEventListener("keydown", (e) => {
 
 async function renderListaModal() {
   respLista.innerHTML = `<li class="resp-vazio">Carregando…</li>`;
-  const resp = await fetch(`/api/responsaveis?cidade=${encodeURIComponent(cidadeAtivaChave)}`);
+  // E-mails só vêm com a senha (V-06): a leitura pública devolve só nomes.
+  const resp = await fetch("/api/responsaveis/consultar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ senha: senhaDesbloqueada, cidade: cidadeAtivaChave }),
+  });
   const dados = await resp.json();
   if (!dados.ok) throw new Error(dados.erro || "Falha ao carregar responsáveis.");
   const lista = dados.bases[0]?.responsaveis || [];
@@ -290,7 +295,8 @@ async function renderListaModal() {
     btn.addEventListener("click", () => removerResponsavel(btn.dataset.email));
   });
 
-  renderListaDestinatariosPainel(lista); // mantém o painel principal sincronizado
+  // mantém o painel principal sincronizado, sem deixar e-mails à mostra na TV
+  renderListaDestinatariosPainel(lista.map(({ nome }) => ({ nome })));
 }
 
 respBotaoDesbloquear.addEventListener("click", async () => {

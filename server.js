@@ -21,6 +21,7 @@ const { arquivosLogos } = require("./src/config/logos");
 const { problemaSenhaConfigurada, criarComparadorSenha } = require("./src/security/senha");
 const { cabecalhosSeguranca } = require("./src/security/cabecalhos");
 const { tratadorDeErros, naoEncontrado } = require("./src/security/erros");
+const { criarLinksRelatorio, senhaDoBasicAuth } = require("./src/security/linksRelatorio");
 
 // Hospedagens em nuvem (Render, Railway, etc.) definem PORT automaticamente —
 // PORTA continua valendo para rodar local/Windows sem mexer no .env.
@@ -33,6 +34,7 @@ const PORTA = process.env.PORT || process.env.PORTA || 3210;
 function criarApp({
   senhaPainel = process.env.DASHBOARD_PASSWORD,
   cidadeAtiva = process.env.CIDADE || undefined,
+  pastaRelatorios = PASTA_SAIDA,
 } = {}) {
   const senhaConfere = criarComparadorSenha(senhaPainel);
   const app = express();
@@ -44,7 +46,6 @@ function criarApp({
   app.use("/api/windy", require("./src/integrations/windyRoutes"));
   app.use("/api/oceanop", require("./src/integrations/oceanopRoutes"));
   app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
-  app.use("/relatorios", express.static(PASTA_SAIDA));
   // Logos (Petrobras + CIM) ficam em Logo/, na raiz do projeto, fora de
   // public/ — servidos em /logo/<arquivo> para uso no painel e no PDF.
   app.use("/logo", express.static(path.join(__dirname, "Logo")));
@@ -135,7 +136,7 @@ function criarApp({
   // pela geração manual do relatório. Retorna { ok, status, erro } — usado por
   // todos os endpoints que alteram estado (gerar relatório, cadastrar/remover
   // responsável).
-  function verificarSenha(req) {
+  function verificarSenha(req, senha = req.body?.senha) {
     const ip = req.ip;
     if (ipBloqueado(ip)) {
       return {
@@ -145,8 +146,6 @@ function criarApp({
       };
     }
 
-    const { senha } = req.body || {};
-
     if (!senhaConfere(senha)) {
       registrarTentativaFalha(ip);
       return { ok: false, status: 401, erro: "Senha incorreta." };
@@ -154,6 +153,45 @@ function criarApp({
     limparTentativas(ip);
     return { ok: true };
   }
+
+  // -----------------------------------------------------------------------
+  // PDFs gerados (V-07). Antes eram servidos por express.static sem
+  // autenticação e com nome previsível. Agora só com:
+  //   - link temporário (?token=...) criado em /api/gerar-relatorio, válido
+  //     por 24 h e só para aquele arquivo; ou
+  //   - a senha operacional via HTTP Basic (o navegador pede a senha; o nome
+  //     de usuário é ignorado), com o mesmo controle de tentativas.
+  // -----------------------------------------------------------------------
+  const linksRelatorio = criarLinksRelatorio();
+  app.locals.linksRelatorio = linksRelatorio;
+  const NOME_PDF_VALIDO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.pdf$/;
+
+  app.get("/relatorios/:arquivo", (req, res, next) => {
+    const { arquivo } = req.params;
+    if (!NOME_PDF_VALIDO.test(arquivo)) {
+      return res.status(404).json({ ok: false, erro: "Não encontrado." });
+    }
+
+    const token = req.query.token;
+    if (!(typeof token === "string" && linksRelatorio.valido(token, arquivo))) {
+      const senha = senhaDoBasicAuth(req);
+      const checagem = senha === undefined ? { ok: false, status: 401 } : verificarSenha(req, senha);
+      if (!checagem.ok) {
+        if (checagem.status === 401) {
+          res.setHeader("WWW-Authenticate", 'Basic realm="Relatorios CIM", charset="UTF-8"');
+        }
+        return res.status(checagem.status).json({ ok: false, erro: checagem.erro || "Não autorizado." });
+      }
+    }
+
+    res.sendFile(
+      arquivo,
+      { root: pastaRelatorios, dotfiles: "deny", headers: { "Cache-Control": "private, no-store" } },
+      (erro) => {
+        if (erro && !res.headersSent) next(erro.status === 404 || erro.code === "ENOENT" ? Object.assign(erro, { status: 404 }) : erro);
+      }
+    );
+  });
 
   let geracaoEmAndamento = false;
 
@@ -182,10 +220,15 @@ function criarApp({
       const resultado = await executarPipeline({ cidadeChave, enviarEmail: true });
       // atualiza o cache dessa base na hora, sem esperar o próximo /api/preview
       previewCachePorBase.set(resultado.report.cidade.chave, { dados: resultado.report, timestamp: Date.now() });
+      // Link de download com token aleatório, válido por 24 h (V-07).
+      const link = resultado.arquivoPdf ? linksRelatorio.gerar(resultado.arquivoPdf) : null;
       res.json({
         ok: true,
         arquivo: resultado.arquivoPdf,
-        urlArquivo: `/relatorios/${resultado.arquivoPdf}`,
+        urlArquivo: link
+          ? `/relatorios/${encodeURIComponent(resultado.arquivoPdf)}?token=${link.token}`
+          : null,
+        linkExpiraEmISO: link ? link.expiraEmISO : null,
         destinatarios: resultado.envio?.destinatarios || [],
         geradoEmISO: resultado.report.geradoEmISO,
         avisosColeta: resultado.report.avisosColeta,
@@ -216,9 +259,20 @@ function criarApp({
 
   // -----------------------------------------------------------------------
   // Responsáveis (nome + e-mail) que recebem o informativo de cada base.
-  // Leitura é pública (fica à mostra no painel da TV); cadastrar/remover
-  // exige a mesma senha operacional do botão de gerar relatório.
+  // Leitura pública devolve SÓ OS NOMES (ficam à mostra no painel da TV).
+  // E-mails (dado pessoal, V-06) só com a senha operacional, via
+  // POST /api/responsaveis/consultar; cadastrar/remover também exige senha.
   // -----------------------------------------------------------------------
+  const somenteNomes = (lista) => lista.map((r) => ({ nome: r?.nome }));
+
+  function basesResponsaveis(cidadeChave, { comEmail }) {
+    const formatar = comEmail ? (l) => l : somenteNomes;
+    if (cidadeChave) {
+      const cidade = getCidade(cidadeChave);
+      return [{ chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, responsaveis: formatar(responsaveis.listarPorCidade(cidade.chave)) }];
+    }
+    return responsaveis.listarTodos().map((b) => ({ ...b, responsaveis: formatar(b.responsaveis) }));
+  }
   app.post("/api/verificar-senha", (req, res) => {
     const checagem = verificarSenha(req);
     if (!checagem.ok) {
@@ -229,16 +283,21 @@ function criarApp({
 
   app.get("/api/responsaveis", (req, res) => {
     try {
-      if (req.query.cidade) {
-        const cidade = getCidade(req.query.cidade);
-        return res.json({
-          ok: true,
-          bases: [{ chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, responsaveis: responsaveis.listarPorCidade(cidade.chave) }],
-        });
-      }
-      res.json({ ok: true, bases: responsaveis.listarTodos() });
+      res.json({ ok: true, bases: basesResponsaveis(req.query.cidade, { comEmail: false }) });
     } catch (erro) {
       responderErro(res, erro, "Erro ao listar responsáveis");
+    }
+  });
+
+  app.post("/api/responsaveis/consultar", (req, res) => {
+    const checagem = verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+    try {
+      res.json({ ok: true, bases: basesResponsaveis(req.body?.cidade, { comEmail: true }) });
+    } catch (erro) {
+      responderErro(res, erro, "Erro ao consultar responsáveis");
     }
   });
 

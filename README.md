@@ -344,5 +344,12 @@ funcionando normalmente ali dentro.
   suba para um repositório git (já está no `.gitignore`).
 - `DASHBOARD_PASSWORD` é obrigatória (mínimo 12 caracteres, sem valor
   padrão); o servidor recusa iniciar sem ela.
+- Sem senha, `GET /api/responsaveis` devolve só os **nomes**; os e-mails só
+  aparecem no modal 👥 depois de desbloquear (`POST /api/responsaveis/consultar`).
+- PDFs em `/relatorios/<arquivo>.pdf` exigem a senha (o navegador abre uma
+  janela de login; o usuário pode ser qualquer um) ou o link temporário
+  (`urlArquivo`, com `?token=`) devolvido por `/api/gerar-relatorio`, válido
+  por 24 h e só para aquele arquivo. Links deixam de valer se o servidor
+  reiniciar.
 - O painel tem um bloqueio simples (5 tentativas de senha erradas = 5 min de
   bloqueio por IP) para reduzir tentativas de força bruta na rede local.
