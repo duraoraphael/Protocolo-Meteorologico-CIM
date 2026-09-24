@@ -19,6 +19,8 @@ const {
 const responsaveis = require("./src/config/recipients");
 const { arquivosLogos } = require("./src/config/logos");
 const { problemaSenhaConfigurada, criarComparadorSenha } = require("./src/security/senha");
+const { cabecalhosSeguranca } = require("./src/security/cabecalhos");
+const { tratadorDeErros, naoEncontrado } = require("./src/security/erros");
 
 // Hospedagens em nuvem (Render, Railway, etc.) definem PORT automaticamente —
 // PORTA continua valendo para rodar local/Windows sem mexer no .env.
@@ -34,7 +36,11 @@ function criarApp({
 } = {}) {
   const senhaConfere = criarComparadorSenha(senhaPainel);
   const app = express();
-  app.use(express.json());
+  // V-08: não anunciar a tecnologia e aplicar cabeçalhos de segurança
+  // (CSP, nosniff, X-Frame-Options, Referrer-Policy) em todas as respostas.
+  app.disable("x-powered-by");
+  app.use(cabecalhosSeguranca());
+  app.use(express.json({ limit: "100kb" }));
   app.use("/api/windy", require("./src/integrations/windyRoutes"));
   app.use("/api/oceanop", require("./src/integrations/oceanopRoutes"));
   app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
@@ -263,6 +269,11 @@ function criarApp({
       responderErro(res, erro, "Erro ao remover responsável");
     }
   });
+
+  // V-09: 404 em JSON para rotas desconhecidas e handler final que nunca
+  // expõe stack trace (JSON malformado, corpo grande demais etc.).
+  app.use(naoEncontrado);
+  app.use(tratadorDeErros);
 
   return app;
 }

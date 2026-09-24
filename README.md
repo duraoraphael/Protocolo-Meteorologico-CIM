@@ -327,6 +327,12 @@ st.components.v1.iframe(
 )
 ```
 
+> **Cabeçalhos de segurança:** por padrão o painel envia
+> `frame-ancestors 'none'` e `X-Frame-Options: DENY`, que impedem qualquer
+> site de embuti-lo. Para liberar o iframe do Streamlit, defina no ambiente
+> `FRAME_ANCESTORS=https://<sua-app>.streamlit.app` (várias origens separadas
+> por espaço ou vírgula; só `https://`).
+
 Isso mostra o painel completo (visual de TV, cards, tabela, destinatários e
 os botões ⚙ / 👥) dentro da página do Streamlit, como se fosse parte dela —
 inclusive as senhas de gerar relatório e gerenciar responsáveis continuam

@@ -350,3 +350,8 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .cim-loading-card { min-height:150px; border-radius:10px; background:var(--bg-card, #12332c); opacity:.6; }
 
 .metric-source { font-size:10px; color:var(--text-secondary); margin:6px 0 0; line-height:1.4; }
+
+/* Mensagens do bloco de destinatários (antes eram atributos de estilo inline, que a
+   Content-Security-Policy sem 'unsafe-inline' bloqueia). */
+.texto-aviso { color: var(--laranja); }
+.texto-erro { color: var(--vermelho); }

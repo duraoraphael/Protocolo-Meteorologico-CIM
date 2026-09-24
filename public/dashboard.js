@@ -61,7 +61,7 @@ function renderListaDestinatariosPainel(responsaveis) {
   const alvo = document.getElementById("lista-destinatarios-painel");
   if (!alvo) return;
   if (!responsaveis || responsaveis.length === 0) {
-    alvo.innerHTML = `<span style="color:var(--laranja)">Nenhum responsável cadastrado para esta base — o botão 👥 permite cadastrar.</span>`;
+    alvo.innerHTML = `<span class="texto-aviso">Nenhum responsável cadastrado para esta base — o botão 👥 permite cadastrar.</span>`;
     return;
   }
   alvo.innerHTML = `<div class="chips-destinatarios">${responsaveis
@@ -78,7 +78,7 @@ async function carregarDestinatariosPainel() {
     renderListaDestinatariosPainel(dados.bases[0]?.responsaveis || []);
   } catch (erro) {
     const alvo = document.getElementById("lista-destinatarios-painel");
-    if (alvo) alvo.innerHTML = `<span style="color:var(--vermelho)">Erro ao carregar: ${esc(erro.message)}</span>`;
+    if (alvo) alvo.innerHTML = `<span class="texto-erro">Erro ao carregar: ${esc(erro.message)}</span>`;
   }
 }
 
