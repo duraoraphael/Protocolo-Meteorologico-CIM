@@ -3,7 +3,7 @@
 // sobreviver a reinícios do servidor, sem depender de banco de dados.
 const fs = require("fs");
 const path = require("path");
-const { CIDADES } = require("./cities");
+const { CIDADES, baseExiste, erroBaseInvalida } = require("./cities");
 
 const ARQUIVO = path.join(__dirname, "..", "..", "data", "responsaveis.json");
 
@@ -61,18 +61,15 @@ function salvarTodos(dados) {
   fs.writeFileSync(ARQUIVO, JSON.stringify(dados, null, 2), "utf-8");
 }
 
+// V-10: só string ^[a-z_]{2,40}$ que seja chave própria de CIDADES.
 function validarCidade(chave) {
-  if (!CIDADES[chave]) {
-    throw new Error(
-      `Base "${chave}" não cadastrada em src/config/cities.js. Bases disponíveis: ${Object.keys(CIDADES).join(", ")}`
-    );
-  }
+  if (!baseExiste(chave)) throw erroBaseInvalida();
 }
 
 function listarPorCidade(chave) {
   validarCidade(chave);
   const dados = carregarTodos();
-  return dados[chave] || [];
+  return Array.isArray(dados[chave]) ? dados[chave] : [];
 }
 
 function listarTodos() {
@@ -81,7 +78,7 @@ function listarTodos() {
     chave,
     nome: CIDADES[chave].nome,
     uf: CIDADES[chave].uf,
-    responsaveis: dados[chave] || [],
+    responsaveis: Array.isArray(dados[chave]) ? dados[chave] : [],
   }));
 }
 
@@ -124,4 +121,4 @@ function remover(chave, email) {
   return novaLista;
 }
 
-module.exports = { listarPorCidade, listarTodos, adicionar, remover, validarNome, validarEmail };
+module.exports = { listarPorCidade, listarTodos, adicionar, remover, validarNome, validarEmail, validarCidade };

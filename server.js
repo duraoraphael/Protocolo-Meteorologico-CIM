@@ -54,8 +54,18 @@ function criarApp({
   const previewEmAndamento = new Map();
   const PREVIEW_TTL_MS = 10 * 60 * 1000; // 10 minutos
 
-  async function obterPreview(cidadeChave) {
-    const cidade = getCidade(cidadeChave);
+  // Respostas de erro das rotas (V-10/V-09): só mensagens marcadas como
+  // públicas (fixas, sem dado interno) vão para o cliente; o resto vira uma
+  // mensagem genérica e o detalhe fica só no console do servidor.
+  function responderErro(res, erro, contexto, mensagemGenerica = "Erro interno. Consulte o log do servidor.") {
+    if (erro && erro.publico) {
+      return res.status(erro.status || 400).json({ ok: false, erro: erro.message });
+    }
+    console.error(`[CIM] ${contexto}:`, erro);
+    return res.status(500).json({ ok: false, erro: mensagemGenerica });
+  }
+
+  async function obterPreview(cidade) {
     const agora = Date.now();
     const cache = previewCachePorBase.get(cidade.chave);
     if (cache && agora - cache.timestamp < PREVIEW_TTL_MS) {
@@ -71,11 +81,18 @@ function criarApp({
   }
 
   app.get("/api/preview", async (req, res) => {
+    let cidade;
     try {
-      const report = await obterPreview(req.query.cidade || CIDADE_ATIVA);
+      cidade = getCidade(req.query.cidade || CIDADE_ATIVA);
+    } catch (erro) {
+      return res.status(400).json({ ok: false, erro: "Base inválida." });
+    }
+    try {
+      const report = await obterPreview(cidade);
       res.json({ ok: true, report });
     } catch (erro) {
-      res.status(502).json({ ok: false, erro: erro.message });
+      console.error("[CIM] Erro ao montar o preview:", erro);
+      res.status(502).json({ ok: false, erro: "Não foi possível obter os dados meteorológicos agora." });
     }
   });
 
@@ -147,9 +164,15 @@ function criarApp({
       });
     }
 
+    let cidadeChave;
+    try {
+      cidadeChave = getCidade(req.body?.cidade || CIDADE_ATIVA).chave;
+    } catch (erro) {
+      return res.status(400).json({ ok: false, erro: "Base inválida." });
+    }
+
     geracaoEmAndamento = true;
     try {
-      const cidadeChave = req.body?.cidade || CIDADE_ATIVA;
       const resultado = await executarPipeline({ cidadeChave, enviarEmail: true });
       // atualiza o cache dessa base na hora, sem esperar o próximo /api/preview
       previewCachePorBase.set(resultado.report.cidade.chave, { dados: resultado.report, timestamp: Date.now() });
@@ -163,7 +186,7 @@ function criarApp({
       });
     } catch (erro) {
       console.error("[CIM] Erro ao gerar/enviar relatório sob demanda:", erro);
-      res.status(500).json({ ok: false, erro: erro.message });
+      res.status(500).json({ ok: false, erro: "Falha ao gerar ou enviar o relatório. Detalhes no log do servidor." });
     } finally {
       geracaoEmAndamento = false;
     }
@@ -209,7 +232,7 @@ function criarApp({
       }
       res.json({ ok: true, bases: responsaveis.listarTodos() });
     } catch (erro) {
-      res.status(400).json({ ok: false, erro: erro.message });
+      responderErro(res, erro, "Erro ao listar responsáveis");
     }
   });
 
@@ -223,7 +246,7 @@ function criarApp({
       const lista = responsaveis.adicionar(cidade, nome, email);
       res.json({ ok: true, responsaveis: lista });
     } catch (erro) {
-      res.status(400).json({ ok: false, erro: erro.message });
+      responderErro(res, erro, "Erro ao cadastrar responsável");
     }
   });
 
@@ -237,7 +260,7 @@ function criarApp({
       const lista = responsaveis.remover(cidade, email);
       res.json({ ok: true, responsaveis: lista });
     } catch (erro) {
-      res.status(400).json({ ok: false, erro: erro.message });
+      responderErro(res, erro, "Erro ao remover responsável");
     }
   });
 
