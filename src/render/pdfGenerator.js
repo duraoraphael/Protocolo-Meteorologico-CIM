@@ -1,5 +1,6 @@
 const puppeteer = require("puppeteer");
 const { renderPdfHtml, headerTemplateVazio, footerTemplate } = require("./pdfTemplate");
+const { argsChromium, prepararPaginaIsolada } = require("./chromiumSeguro");
 
 let navegadorPromise = null;
 
@@ -7,15 +8,8 @@ function getBrowser() {
   if (!navegadorPromise) {
     navegadorPromise = puppeteer.launch({
       headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        // Containers Docker (Render, etc.) costumam limitar /dev/shm a
-        // ~64MB — sem essa flag o Chrome pode travar/matar a aba ao
-        // renderizar o PDF, causando "Navigation timeout" no page.setContent.
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-      ],
+      // --no-sandbox só em Linux/container (V-12) — ver chromiumSeguro.js.
+      args: argsChromium(),
     });
   }
   return navegadorPromise;
@@ -25,6 +19,8 @@ async function gerarPdfBuffer(report) {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
+    // V-12: sem JavaScript e sem rede (só data: e about:).
+    await prepararPaginaIsolada(page);
     await page.setContent(renderPdfHtml(report), { waitUntil: "networkidle0" });
     const buffer = await page.pdf({
       format: "A4",
