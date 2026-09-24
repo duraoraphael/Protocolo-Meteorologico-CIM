@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "send-now": "node src/cli.js"
+    "send-now": "node src/cli.js",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "license": "UNLICENSED",
   "dependencies": {

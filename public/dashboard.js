@@ -13,6 +13,10 @@ const toastEl = document.getElementById("toast");
 
 const REFRESH_MS = 10 * 60 * 1000; // 10 minutos
 
+// Todo texto vindo do servidor (nomes, e-mails, mensagens de erro) passa por
+// este escape antes de ir para innerHTML — evita XSS armazenado (V-01).
+const esc = Dashboard.escape;
+
 let cidadeAtivaChave = null; // preenchido após o primeiro /api/preview
 
 async function carregarLogos() {
@@ -61,7 +65,7 @@ function renderListaDestinatariosPainel(responsaveis) {
     return;
   }
   alvo.innerHTML = `<div class="chips-destinatarios">${responsaveis
-    .map((r) => `<span class="chip-destinatario">${r.nome} — ${r.email}</span>`)
+    .map((r) => `<span class="chip-destinatario">${esc(r.nome)} — ${esc(r.email)}</span>`)
     .join("")}</div>`;
 }
 
@@ -74,7 +78,7 @@ async function carregarDestinatariosPainel() {
     renderListaDestinatariosPainel(dados.bases[0]?.responsaveis || []);
   } catch (erro) {
     const alvo = document.getElementById("lista-destinatarios-painel");
-    if (alvo) alvo.innerHTML = `<span style="color:var(--vermelho)">Erro ao carregar: ${erro.message}</span>`;
+    if (alvo) alvo.innerHTML = `<span style="color:var(--vermelho)">Erro ao carregar: ${esc(erro.message)}</span>`;
   }
 }
 
@@ -99,7 +103,7 @@ async function popularSeletorBase() {
   const inicial = escolhidaNaUrl || dados.ativa;
 
   seletorBaseEl.innerHTML = dados.disponiveis
-    .map((c) => `<option value="${c.chave}">${c.nome} — ${c.uf}</option>`)
+    .map((c) => `<option value="${esc(c.chave)}">${esc(c.nome)} — ${esc(c.uf)}</option>`)
     .join("");
   seletorBaseEl.value = inicial;
   return seletorBaseEl.value || dados.ativa;
@@ -276,8 +280,8 @@ async function renderListaModal() {
       : lista
           .map(
             (r) => `<li>
-              <span>${r.nome} <span class="resp-email">${r.email}</span></span>
-              <button class="resp-remover" data-email="${r.email}" title="Remover">✕</button>
+              <span>${esc(r.nome)} <span class="resp-email">${esc(r.email)}</span></span>
+              <button class="resp-remover" data-email="${esc(r.email)}" title="Remover">✕</button>
             </li>`
           )
           .join("");
