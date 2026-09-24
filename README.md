@@ -52,11 +52,17 @@ O envio usa o Gmail via **Senha de App** (não a senha normal da conta):
 ### 2.2 Senha do painel
 
 ```
-DASHBOARD_PASSWORD=Marciana
+DASHBOARD_PASSWORD=<senha forte, mínimo 12 caracteres>
 ```
 
-Essa é a senha digitada na TV para disparar a geração manual do relatório.
-**Troque assim que possível** — é só um valor de teste inicial.
+Essa é a senha digitada na TV para disparar a geração manual do relatório e
+gerenciar responsáveis. **É obrigatória**: sem ela, com menos de 12
+caracteres ou com o antigo valor padrão público, o servidor não inicia.
+Para gerar uma senha aleatória (16+ caracteres recomendados):
+
+```
+node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))"
+```
 
 ### 2.3 Cidade e agendamento
 
@@ -284,7 +290,7 @@ iframe**.
      Puppeteer para o Chrome funcionar sem erros de biblioteca faltando).
 3. No painel do Render, preencha as variáveis de ambiente marcadas como
    secretas: `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `REPORT_RECIPIENTS`,
-   `DASHBOARD_PASSWORD` (troque o valor padrão "Marciana").
+   `DASHBOARD_PASSWORD` (obrigatória, mínimo 12 caracteres).
 4. Ao terminar o deploy, você recebe uma URL pública fixa, por exemplo:
    `https://protocolo-meteorologico-cim.onrender.com`
 
@@ -330,6 +336,7 @@ funcionando normalmente ali dentro.
 
 - O arquivo `.env` contém a senha de app do Gmail — nunca o compartilhe nem
   suba para um repositório git (já está no `.gitignore`).
-- Troque `DASHBOARD_PASSWORD` do valor padrão assim que possível.
+- `DASHBOARD_PASSWORD` é obrigatória (mínimo 12 caracteres, sem valor
+  padrão); o servidor recusa iniciar sem ela.
 - O painel tem um bloqueio simples (5 tentativas de senha erradas = 5 min de
   bloqueio por IP) para reduzir tentativas de força bruta na rede local.
