@@ -117,17 +117,20 @@ node src/cliTestarSharepoint.js --site=petrobrasbr.sharepoint.com --caminho=/tea
 ```powershell
 npm start
 ```
-Acesse `http://localhost:3210` no próprio servidor. Cadastre um responsável
+Acesse `http://localhost:3210` no próprio servidor (ou `https://localhost:3443`
+se já configurou a opção A do passo 8). Cadastre um responsável
 de teste (botão 👥) e use "Gerar e Enviar" para validar o fluxo completo
 antes de deixar automático. Pare o servidor (`Ctrl+C`) depois de validar —
 o passo 7 vai deixá-lo rodando de forma permanente.
 
 ## 7. Deixar rodando sozinho (inicia com o servidor, reinicia se cair)
 
-Abra o PowerShell **como Administrador**:
+Abra o PowerShell **como Administrador**. A tarefa roda o Node com
+`NODE_ENV=production` (desliga mensagens de depuração do Express e ativa o
+aviso de "servindo só HTTP" no log):
 
 ```powershell
-$acao = New-ScheduledTaskAction -Execute "node.exe" -Argument "server.js" -WorkingDirectory "D:\Aplicacoes\ProtocoloMeteorologicoCIM"
+$acao = New-ScheduledTaskAction -Execute "cmd.exe" -Argument '/c "set NODE_ENV=production&& node.exe server.js"' -WorkingDirectory "D:\Aplicacoes\ProtocoloMeteorologicoCIM"
 $gatilho = New-ScheduledTaskTrigger -AtStartup
 $config = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName "ProtocoloMeteorologicoCIM" -Action $acao -Trigger $gatilho -Settings $config -User "SYSTEM" -RunLevel Highest
@@ -135,25 +138,123 @@ Register-ScheduledTask -TaskName "ProtocoloMeteorologicoCIM" -Action $acao -Trig
 Start-ScheduledTask -TaskName "ProtocoloMeteorologicoCIM"
 ```
 
+> Atenção: em `set NODE_ENV=production&&` **não** pode haver espaço antes do
+> `&&` (o espaço entraria no valor). Se a tarefa já existia, remova antes com
+> `Unregister-ScheduledTask -TaskName "ProtocoloMeteorologicoCIM" -Confirm:$false`.
+> Alternativa: incluir a linha `NODE_ENV=production` no `.env`.
+
 Confirme que subiu:
 ```powershell
 Get-ScheduledTask -TaskName "ProtocoloMeteorologicoCIM" | Get-ScheduledTaskInfo
 ```
 
-## 8. Liberar acesso ao painel pela rede
+## 8. HTTPS e acesso pela rede
 
-Se outras pessoas vão acessar o painel a partir de outras máquinas:
-```powershell
-New-NetFirewallRule -DisplayName "Painel CIM" -Direction Inbound -LocalPort 3210 -Protocol TCP -Action Allow
-```
+O painel trafega a senha operacional, nomes/e-mails de responsáveis e os
+PDFs — **não o exponha na rede em HTTP puro**. Escolha **uma** das opções.
+Nos dois casos o certificado deve ser emitido pela **CA corporativa**
+(peça à equipe de certificados/TI um certificado para o nome DNS do
+servidor, ex.: `painelcim.petrobras.com.br`), para que as TVs e navegadores
+da rede confiem nele sem alerta.
+
+### Opção A — certificado direto no Node (mais simples)
+
+1. Receba o certificado em formato **.pfx** (com a chave privada) e guarde
+   fora da pasta do projeto, com acesso restrito, ex.:
+   `D:\Certificados\painelcim.pfx`.
+2. No `.env`, acrescente:
+
+   | Variável | Valor |
+   |---|---|
+   | `HTTPS_PFX_PATH` | `D:\Certificados\painelcim.pfx` |
+   | `HTTPS_PFX_SENHA` | senha do .pfx (tratar como segredo) |
+   | `HTTPS_PORTA` | `3443` (padrão; use `443` se a porta estiver livre) |
+   | `HTTPS_HOST_PUBLICO` | *(opcional)* nome DNS usado no redirecionamento, ex. `painelcim.petrobras.com.br` |
+
+3. Reinicie a tarefa. O painel passa a responder em
+   `https://painelcim.petrobras.com.br:3443`; a porta antiga `3210` fica
+   apenas **redirecionando** para HTTPS (o link salvo na TV continua
+   funcionando) e as respostas HTTPS levam `Strict-Transport-Security`.
+   Se só uma das duas variáveis estiver definida, ou o .pfx/senha estiverem
+   errados, o servidor **não sobe** (confira o log). Se o log acusar
+   certificado inválido mesmo com a senha certa, o .pfx provavelmente usa
+   criptografia antiga (RC2/3DES) que o Node 18+ não lê: exporte de novo no
+   Windows (*certlm.msc → Exportar → com chave privada → criptografia
+   AES256-SHA256*).
+4. Firewall: libere a porta HTTPS (e a 3210, se quiser manter o
+   redirecionamento), de preferência só para a faixa de IPs da sala de
+   operação/TVs:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Painel CIM HTTPS" -Direction Inbound -LocalPort 3443 -Protocol TCP -Action Allow -RemoteAddress <faixa-da-sala>
+   New-NetFirewallRule -DisplayName "Painel CIM (redireciona)" -Direction Inbound -LocalPort 3210 -Protocol TCP -Action Allow -RemoteAddress <faixa-da-sala>
+   ```
+
+### Opção B — proxy reverso IIS ou nginx, com o Node só em 127.0.0.1
+
+Use quando a área já tem IIS/nginx com o certificado instalado.
+
+1. No `.env`:
+
+   | Variável | Valor |
+   |---|---|
+   | `HOST` | `127.0.0.1` — o Node só aceita conexões da própria máquina |
+   | `TRUST_PROXY` | `127.0.0.1` — confia no `X-Forwarded-For`/`X-Forwarded-Proto` só vindos do proxy local |
+
+   (Não defina `HTTPS_PFX_PATH`/`HTTPS_PFX_SENHA` nesta opção.)
+2. **IIS** (com os módulos *URL Rewrite* e *Application Request Routing*
+   instalados): crie um site com binding **HTTPS 443** usando o certificado
+   da CA corporativa, habilite o proxy em *ARR → Server Proxy Settings* e
+   adicione a regra de reescrita para `http://127.0.0.1:3210/{R:1}`,
+   repassando o cabeçalho `X-Forwarded-Proto: https`. Crie também um
+   binding HTTP 80 com regra de redirecionamento permanente para `https://`
+   e ative HSTS no site (IIS 10: *HSTS → Enable, Max-Age 31536000*).
+3. **nginx** (exemplo mínimo):
+
+   ```nginx
+   server {
+     listen 80;
+     server_name painelcim.petrobras.com.br;
+     return 301 https://$host$request_uri;
+   }
+   server {
+     listen 443 ssl;
+     server_name painelcim.petrobras.com.br;
+     ssl_certificate     /caminho/painelcim.crt;   # cadeia da CA corporativa
+     ssl_certificate_key /caminho/painelcim.key;
+     ssl_protocols TLSv1.2 TLSv1.3;
+     add_header Strict-Transport-Security "max-age=31536000" always;
+     location / {
+       proxy_pass http://127.0.0.1:3210;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto https;
+     }
+   }
+   ```
+
+4. Firewall: libere só 443 (e 80 para o redirecionamento). **Não** libere
+   a 3210 — com `HOST=127.0.0.1` ela nem fica acessível pela rede.
+
+### Sem HTTPS (só para teste local)
+
+Sem as variáveis acima, o painel continua em `http://<servidor>:3210` em
+todas as interfaces, como antes. Com `NODE_ENV=production` o log mostra um
+aviso. Não use assim na rede da sala de operação.
+
+### Iframe (Streamlit)
+
+O painel não pode ser embutido em outros sites por padrão. Se precisar,
+defina `FRAME_ANCESTORS=https://<origem-autorizada>` (ver README §9.2).
 
 ## 9. Checklist final
 
 - [ ] `node src/cliTestarEmail.js --enviar-para=...` chegou de verdade
 - [ ] `node src/cliTestarSharepoint.js ...` resolveu o site sem erro
 - [ ] Painel acessível e responsáveis cadastrados nas 12 bases
-- [ ] Tarefa agendada criada e rodando (`Get-ScheduledTask`)
-- [ ] Firewall liberado, se aplicável
+- [ ] Tarefa agendada criada e rodando (`Get-ScheduledTask`), com `NODE_ENV=production`
+- [ ] Painel acessível só por **HTTPS** (opção A ou B do passo 8), com certificado da CA corporativa
+- [ ] Firewall liberado só para as portas e faixas de IP necessárias
 - [ ] `.env` **não** foi commitado nem enviado por canal inseguro
 
 ---

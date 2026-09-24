@@ -5,6 +5,8 @@ const executadoDiretamente = require.main === module;
 if (executadoDiretamente) require("dotenv").config();
 
 const express = require("express");
+const http = require("http");
+const https = require("https");
 const path = require("path");
 const fs = require("fs");
 
@@ -23,6 +25,7 @@ const { cabecalhosSeguranca } = require("./src/security/cabecalhos");
 const { tratadorDeErros, naoEncontrado } = require("./src/security/erros");
 const { criarLinksRelatorio, senhaDoBasicAuth } = require("./src/security/linksRelatorio");
 const { criarControleTentativas, valorTrustProxy } = require("./src/security/tentativas");
+const { opcoesDeRede, carregarPfx, redirecionarParaHttps } = require("./src/security/https");
 
 // Hospedagens em nuvem (Render, Railway, etc.) definem PORT automaticamente —
 // PORTA continua valendo para rodar local/Windows sem mexer no .env.
@@ -317,12 +320,60 @@ function iniciarServidor() {
     process.exit(1);
   }
 
+  const rede = opcoesDeRede(process.env);
+  if (rede.modo === "erro") {
+    console.error(`[CIM] ${rede.erro} O servidor não foi iniciado.`);
+    process.exit(1);
+  }
+
   const app = criarApp();
-  app.listen(PORTA, () => {
-    console.log(`[CIM] Painel disponível em http://localhost:${PORTA}`);
+  let agendamentosIniciados = false;
+  const iniciarAgendamentos = () => {
+    if (agendamentosIniciados) return;
+    agendamentosIniciados = true;
     iniciarAgendamentoDiario();
     agendarEnvioUnicoHoje();
     iniciarMonitorAlertas();
+  };
+  const hostLog = rede.host || "localhost";
+
+  if (rede.modo === "https") {
+    // V-03: HTTPS com o certificado .pfx da CA corporativa + HSTS
+    // (cabecalhos.js envia Strict-Transport-Security em req.secure).
+    const { pfx, erro } = carregarPfx(rede.caminhoPfx);
+    if (erro) {
+      console.error(`[CIM] ${erro} O servidor não foi iniciado.`);
+      process.exit(1);
+    }
+    let servidorHttps;
+    try {
+      servidorHttps = https.createServer({ pfx, passphrase: rede.senhaPfx, minVersion: "TLSv1.2" }, app);
+    } catch (erroPfx) {
+      console.error("[CIM] Certificado .pfx inválido ou HTTPS_PFX_SENHA incorreta. O servidor não foi iniciado.");
+      process.exit(1);
+    }
+    servidorHttps.listen(rede.portaHttps, rede.host, () => {
+      console.log(`[CIM] Painel disponível em https://${hostLog}:${rede.portaHttps}`);
+      iniciarAgendamentos();
+    });
+    // HTTP na porta antiga só redireciona para HTTPS (link da TV continua valendo).
+    http
+      .createServer(redirecionarParaHttps(rede.portaHttps, (process.env.HTTPS_HOST_PUBLICO || "").trim() || undefined))
+      .listen(PORTA, rede.host, () => {
+        console.log(`[CIM] http://${hostLog}:${PORTA} redireciona para HTTPS.`);
+      });
+    return;
+  }
+
+  app.listen(PORTA, rede.host, () => {
+    console.log(`[CIM] Painel disponível em http://${hostLog}:${PORTA}`);
+    if (process.env.NODE_ENV === "production" && valorTrustProxy(process.env.TRUST_PROXY) === false) {
+      console.warn(
+        "[CIM] AVISO: servindo só HTTP. Configure HTTPS_PFX_PATH/HTTPS_PFX_SENHA ou publique atrás de um " +
+          "proxy reverso com TLS (ver INSTALACAO_SERVIDOR_PETROBRAS.md)."
+      );
+    }
+    iniciarAgendamentos();
   });
 }
 
