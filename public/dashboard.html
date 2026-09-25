@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Protocolo Meteorológico CIM</title>
 <link rel="icon" href="/logo/CIM.png" type="image/png" />
-<link rel="stylesheet" href="dashboard.css?v=seg-1" />
+<link rel="stylesheet" href="dashboard.css?v=ops-2" />
 </head>
 <body>
 
@@ -64,8 +64,8 @@
 
   <div id="overlay-responsaveis" class="overlay oculto">
     <div class="modal modal-responsaveis" role="dialog" aria-modal="true" aria-label="Gerenciar responsáveis">
-      <h2>Gerenciar Responsáveis — <span id="resp-nome-base">—</span></h2>
-      <p>Digite a senha operacional para cadastrar ou remover quem recebe o informativo desta base por e-mail.</p>
+      <h2>Responsáveis e bases</h2>
+      <p>Cadastre primeiro a pessoa e depois marque as bases cujos informativos ela deve receber.</p>
 
       <div id="resp-bloco-senha">
         <input id="resp-input-senha" aria-label="Senha operacional" type="password" placeholder="Senha" autocomplete="off" />
@@ -77,14 +77,22 @@
       </div>
 
       <div id="resp-bloco-gestao" class="oculto">
+        <h3>Pessoas cadastradas</h3>
         <ul id="resp-lista" class="resp-lista"></ul>
 
         <form id="resp-form" class="resp-form">
-          <input id="resp-input-nome" aria-label="Nome do responsável" type="text" placeholder="Nome do responsável" autocomplete="off" />
-          <input id="resp-input-email" aria-label="E-mail do responsável" type="email" placeholder="E-mail" autocomplete="off" />
-          <button type="submit" class="botao-primario">Adicionar</button>
+          <h3>Cadastrar novo responsável</h3>
+          <label class="resp-campo" for="resp-input-nome">
+            <span>Nome da pessoa</span>
+            <input id="resp-input-nome" type="text" placeholder="Ex.: Maria da Silva" autocomplete="name" maxlength="100" required />
+          </label>
+          <label class="resp-campo" for="resp-input-email">
+            <span>E-mail</span>
+            <input id="resp-input-email" type="email" placeholder="Ex.: nome@empresa.com.br" autocomplete="email" maxlength="254" required />
+          </label>
+          <button id="resp-botao-cadastrar" type="submit" class="botao-primario">Cadastrar responsável</button>
         </form>
-        <div id="resp-form-mensagem" class="modal-mensagem"></div>
+        <div id="resp-form-mensagem" class="modal-mensagem" role="status" aria-live="polite"></div>
 
         <div class="modal-botoes">
           <button id="resp-botao-fechar" class="botao-secundario">Fechar</button>
@@ -95,8 +103,8 @@
 
   <div role="status" id="toast" class="toast oculto"></div>
 
-  <script src="dashboard-components.js?v=seg-1"></script>
-  <script src="dashboard.js?v=seg-1"></script>
+  <script src="dashboard-components.js?v=ops-2"></script>
+  <script src="dashboard.js?v=ops-2"></script>
 </body>
 </html>
 

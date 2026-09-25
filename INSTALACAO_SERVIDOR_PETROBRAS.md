@@ -84,7 +84,7 @@ comitados no repositório**):
 |---|---|
 | `SMTP_HOST` | `smtp.petrobras.com.br` |
 | `SMTP_PORTA` | `25` |
-| `EMAIL_REMETENTE` | `SAAUTC@petrobras.com.br` |
+| `EMAIL_REMETENTE` | `raphael.durao.prestserv@petrobras.com.br` |
 | `AZURE_TENANT_ID` | *(fornecido pelo Breno — App Registration)* |
 | `AZURE_CLIENT_ID` | *(idem)* |
 | `AZURE_CLIENT_SECRET` | *(idem — tratar como senha)* |

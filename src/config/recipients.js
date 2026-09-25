@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { CIDADES, baseExiste, erroBaseInvalida } = require("./cities");
 
-const ARQUIVO = path.join(__dirname, "..", "..", "data", "responsaveis.json");
+const ARQUIVO = process.env.RESPONSAVEIS_ARQUIVO || path.join(__dirname, "..", "..", "data", "responsaveis.json");
 
 // Limites de entrada (V-01). Nome: até 100 caracteres, sem < > " ' nem
 // caracteres de controle. E-mail: até 254 caracteres, parte local até 64,
@@ -49,9 +49,37 @@ function carregarTodos() {
   try {
     const bruto = fs.readFileSync(ARQUIVO, "utf-8");
     const dados = JSON.parse(bruto);
-    return dados && typeof dados === "object" ? dados : {};
+    if (dados?.versao === 2 && Array.isArray(dados.responsaveis)) {
+      return {
+        versao: 2,
+        responsaveis: dados.responsaveis
+          .filter((r) => r && typeof r === "object")
+          .map((r) => ({
+            nome: r.nome,
+            email: r.email,
+            bases: Array.isArray(r.bases) ? [...new Set(r.bases.filter(baseExiste))] : [],
+          })),
+      };
+    }
+
+    // Migração transparente do formato antigo { cidade: [{ nome, email }] }.
+    // O arquivo só é regravado no próximo cadastro/vínculo, evitando uma
+    // alteração em disco apenas por abrir o painel.
+    const porEmail = new Map();
+    if (dados && typeof dados === "object") {
+      for (const chave of Object.keys(CIDADES)) {
+        for (const pessoa of Array.isArray(dados[chave]) ? dados[chave] : []) {
+          const email = String(pessoa?.email || "").trim().toLowerCase();
+          if (!email) continue;
+          const atual = porEmail.get(email) || { nome: pessoa?.nome, email, bases: [] };
+          if (!atual.bases.includes(chave)) atual.bases.push(chave);
+          porEmail.set(email, atual);
+        }
+      }
+    }
+    return { versao: 2, responsaveis: [...porEmail.values()] };
   } catch (erro) {
-    if (erro.code === "ENOENT") return {};
+    if (erro.code === "ENOENT") return { versao: 2, responsaveis: [] };
     throw new Error(`Falha ao ler data/responsaveis.json: ${erro.message}`);
   }
 }
@@ -69,7 +97,9 @@ function validarCidade(chave) {
 function listarPorCidade(chave) {
   validarCidade(chave);
   const dados = carregarTodos();
-  return Array.isArray(dados[chave]) ? dados[chave] : [];
+  return dados.responsaveis
+    .filter((r) => r.bases.includes(chave))
+    .map(({ nome, email }) => ({ nome, email }));
 }
 
 function listarTodos() {
@@ -78,8 +108,55 @@ function listarTodos() {
     chave,
     nome: CIDADES[chave].nome,
     uf: CIDADES[chave].uf,
-    responsaveis: Array.isArray(dados[chave]) ? dados[chave] : [],
+    responsaveis: dados.responsaveis
+      .filter((r) => r.bases.includes(chave))
+      .map(({ nome, email }) => ({ nome, email })),
   }));
+}
+
+function listarResponsaveis() {
+  return carregarTodos().responsaveis.map((r) => ({ ...r, bases: [...r.bases] }));
+}
+
+function validarBases(bases) {
+  if (!Array.isArray(bases)) throw erroEntrada("Selecione as bases do responsável.");
+  const unicas = [...new Set(bases)];
+  for (const chave of unicas) validarCidade(chave);
+  return unicas;
+}
+
+function cadastrarResponsavel(nome, email) {
+  const nomeLimpo = validarNome(nome);
+  const emailLimpo = validarEmail(email);
+  const dados = carregarTodos();
+  if (dados.responsaveis.some((r) => String(r.email).toLowerCase() === emailLimpo)) {
+    throw erroEntrada("Este e-mail já está cadastrado.");
+  }
+  const pessoa = { nome: nomeLimpo, email: emailLimpo, bases: [] };
+  dados.responsaveis.push(pessoa);
+  salvarTodos(dados);
+  return { ...pessoa, bases: [] };
+}
+
+function atualizarBases(email, bases) {
+  const emailLimpo = validarEmail(email);
+  const basesLimpas = validarBases(bases);
+  const dados = carregarTodos();
+  const pessoa = dados.responsaveis.find((r) => String(r.email).toLowerCase() === emailLimpo);
+  if (!pessoa) throw erroEntrada("Responsável não encontrado.");
+  pessoa.bases = basesLimpas;
+  salvarTodos(dados);
+  return { ...pessoa, bases: [...pessoa.bases] };
+}
+
+function removerResponsavel(email) {
+  const emailLimpo = validarEmail(email);
+  const dados = carregarTodos();
+  const restante = dados.responsaveis.filter((r) => String(r.email).toLowerCase() !== emailLimpo);
+  if (restante.length === dados.responsaveis.length) throw erroEntrada("Responsável não encontrado.");
+  dados.responsaveis = restante;
+  salvarTodos(dados);
+  return listarResponsaveis();
 }
 
 function adicionar(chave, nome, email) {
@@ -88,16 +165,17 @@ function adicionar(chave, nome, email) {
   const emailLimpo = validarEmail(email);
 
   const dados = carregarTodos();
-  const lista = Array.isArray(dados[chave]) ? dados[chave] : [];
-
-  if (lista.some((r) => String(r?.email || "").toLowerCase() === emailLimpo)) {
+  let pessoa = dados.responsaveis.find((r) => String(r.email).toLowerCase() === emailLimpo);
+  if (pessoa?.bases.includes(chave)) {
     throw erroEntrada("Este e-mail já está cadastrado para esta base.");
   }
-
-  lista.push({ nome: nomeLimpo, email: emailLimpo });
-  dados[chave] = lista;
+  if (!pessoa) {
+    pessoa = { nome: nomeLimpo, email: emailLimpo, bases: [] };
+    dados.responsaveis.push(pessoa);
+  }
+  pessoa.bases.push(chave);
   salvarTodos(dados);
-  return lista;
+  return listarPorCidade(chave);
 }
 
 function remover(chave, email) {
@@ -109,16 +187,25 @@ function remover(chave, email) {
   }
   const emailLimpo = email.trim().toLowerCase();
   const dados = carregarTodos();
-  const lista = Array.isArray(dados[chave]) ? dados[chave] : [];
-  const novaLista = lista.filter((r) => String(r?.email || "").toLowerCase() !== emailLimpo);
-
-  if (novaLista.length === lista.length) {
+  const pessoa = dados.responsaveis.find((r) => String(r.email).toLowerCase() === emailLimpo);
+  if (!pessoa || !pessoa.bases.includes(chave)) {
     throw erroEntrada("E-mail não encontrado nos responsáveis desta base.");
   }
-
-  dados[chave] = novaLista;
+  pessoa.bases = pessoa.bases.filter((base) => base !== chave);
   salvarTodos(dados);
-  return novaLista;
+  return listarPorCidade(chave);
 }
 
-module.exports = { listarPorCidade, listarTodos, adicionar, remover, validarNome, validarEmail, validarCidade };
+module.exports = {
+  listarPorCidade,
+  listarTodos,
+  listarResponsaveis,
+  cadastrarResponsavel,
+  atualizarBases,
+  removerResponsavel,
+  adicionar,
+  remover,
+  validarNome,
+  validarEmail,
+  validarCidade,
+};

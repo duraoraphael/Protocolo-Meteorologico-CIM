@@ -11,6 +11,8 @@
 // modo corporativo sem informar o servidor.
 
 const nodemailer = require("nodemailer");
+const tls = require("node:tls");
+require("../security/certificados");
 
 let avisoTlsEmitido = false;
 
@@ -40,6 +42,10 @@ function usandoRelayCorporativo() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_HOST.trim());
 }
 
+function envioEmailAtivo() {
+  return process.env.ENVIO_EMAIL_ATIVO !== "false";
+}
+
 /**
  * Endereço que aparece como remetente.
  * No relay corporativo o remetente é uma conta de serviço e precisa ser
@@ -61,6 +67,14 @@ function enderecoRemetente() {
 }
 
 function criarTransportador() {
+  if (!envioEmailAtivo()) {
+    const erro = new Error(
+      "Envio de e-mails temporariamente desativado por ENVIO_EMAIL_ATIVO=false."
+    );
+    erro.code = "EMAIL_SEND_DISABLED";
+    throw erro;
+  }
+
   if (usandoRelayCorporativo()) {
     const porta = parseInt(process.env.SMTP_PORTA || "25", 10);
 
@@ -87,7 +101,9 @@ function criarTransportador() {
   }
 
   const usuario = process.env.GMAIL_USER;
-  const senha = process.env.GMAIL_APP_PASSWORD;
+  // O Google exibe senhas de app em quatro grupos separados por espaços.
+  // Esses espaços são apenas visuais e não fazem parte da credencial.
+  const senha = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, "");
   if (!usuario || !senha) {
     throw new Error(
       "Envio de e-mail não configurado. Defina SMTP_HOST (relay corporativo) " +
@@ -96,8 +112,21 @@ function criarTransportador() {
   }
 
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    // STARTTLS (587) é preferido aqui ao SMTPS/465. Alguns antivírus
+    // corporativos interceptam a porta 465 com uma cadeia deliberadamente
+    // não confiável, enquanto 587 apresenta a CA instalada no Windows.
+    port: 587,
+    secure: false,
+    requireTLS: true,
     auth: { user: usuario, pass: senha },
+    tls: {
+      rejectUnauthorized: true,
+      ca:
+        process.platform === "win32" && typeof tls.getCACertificates === "function"
+          ? tls.getCACertificates("default")
+          : undefined,
+    },
   });
 }
 
@@ -125,4 +154,5 @@ module.exports = {
   descreverCanal,
   verificarConexao,
   usandoRelayCorporativo,
+  envioEmailAtivo,
 };

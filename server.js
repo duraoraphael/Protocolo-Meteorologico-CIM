@@ -3,6 +3,7 @@
 // lido.
 const executadoDiretamente = require.main === module;
 if (executadoDiretamente) require("dotenv").config();
+require("./src/security/certificados");
 
 const express = require("express");
 const http = require("http");
@@ -267,7 +268,12 @@ function criarApp({
       return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
     }
     try {
-      res.json({ ok: true, bases: basesResponsaveis(req.body?.cidade, { comEmail: true }) });
+      res.json({
+        ok: true,
+        bases: basesResponsaveis(req.body?.cidade, { comEmail: true }),
+        responsaveis: responsaveis.listarResponsaveis(),
+        basesDisponiveis: Object.values(CIDADES).map(({ chave, nome, uf }) => ({ chave, nome, uf })),
+      });
     } catch (erro) {
       responderErro(res, erro, "Erro ao consultar responsáveis");
     }
@@ -280,10 +286,27 @@ function criarApp({
     }
     try {
       const { cidade, nome, email } = req.body || {};
-      const lista = responsaveis.adicionar(cidade, nome, email);
-      res.json({ ok: true, responsaveis: lista });
+      if (cidade) {
+        const lista = responsaveis.adicionar(cidade, nome, email);
+        return res.json({ ok: true, responsaveis: lista });
+      }
+      const pessoa = responsaveis.cadastrarResponsavel(nome, email);
+      res.json({ ok: true, responsavel: pessoa });
     } catch (erro) {
       responderErro(res, erro, "Erro ao cadastrar responsável");
+    }
+  });
+
+  app.put("/api/responsaveis", async (req, res) => {
+    const checagem = await verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+    try {
+      const pessoa = responsaveis.atualizarBases(req.body?.email, req.body?.bases);
+      res.json({ ok: true, responsavel: pessoa });
+    } catch (erro) {
+      responderErro(res, erro, "Erro ao vincular bases ao responsável");
     }
   });
 
@@ -294,7 +317,11 @@ function criarApp({
     }
     try {
       const { cidade, email } = req.body || {};
-      const lista = responsaveis.remover(cidade, email);
+      if (cidade) {
+        const lista = responsaveis.remover(cidade, email);
+        return res.json({ ok: true, responsaveis: lista });
+      }
+      const lista = responsaveis.removerResponsavel(email);
       res.json({ ok: true, responsaveis: lista });
     } catch (erro) {
       responderErro(res, erro, "Erro ao remover responsável");

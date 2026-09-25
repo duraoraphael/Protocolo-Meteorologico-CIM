@@ -13,6 +13,7 @@ const { logosComoDataUri } = require("../config/logos");
 
 const VERMELHO = "#C0392B";
 const VERMELHO_ESCURO = "#7B241C";
+const AMARELO_ATENCAO = "#B7791F";
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -23,21 +24,28 @@ function esc(valor) {
 }
 
 function corGravidade(gravidade) {
-  return gravidade === "severo" ? VERMELHO_ESCURO : VERMELHO;
+  if (gravidade === "severo") return VERMELHO_ESCURO;
+  if (gravidade === "atencao") return AMARELO_ATENCAO;
+  return VERMELHO;
 }
 
 function blocoAlerta(a) {
+  const titulo = a.grau ? `${a.grau} — ${String(a.tipo).toUpperCase()}` : a.tipo;
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
     style="border-left:5px solid ${corGravidade(a.gravidade)};background:#FDF3F2;border-radius:4px;margin-bottom:10px;">
     <tr><td style="padding:12px 16px;font-family:Arial,sans-serif;">
       <div style="font-size:15px;font-weight:bold;color:${VERMELHO_ESCURO};">
-        ${esc(a.tipo)}${a.motivo === "agravou" ? ' <span style="font-size:11px;font-weight:normal;background:#7B241C;color:#fff;padding:1px 6px;border-radius:3px;">AGRAVOU</span>' : ""}
+        ${esc(titulo)}${a.motivo === "agravou" ? ' <span style="font-size:11px;font-weight:normal;background:#7B241C;color:#fff;padding:1px 6px;border-radius:3px;">AGRAVOU</span>' : ""}
       </div>
+      ${a.grau ? `<div style="font-size:12px;color:${corGravidade(a.gravidade)};font-weight:bold;margin-top:2px;">Grau de severidade: ${esc(a.grau)}</div>` : ""}
       ${a.severidadeTexto ? `<div style="font-size:12px;color:${VERMELHO};font-weight:bold;margin-top:2px;">${esc(a.severidadeTexto)}</div>` : ""}
       ${a.detalhe ? `<div style="font-size:13px;color:#333;margin-top:4px;">${esc(a.detalhe)}</div>` : ""}
       <div style="font-size:11.5px;color:#777;margin-top:4px;">
-        Janela: ${esc(a.janela)} &nbsp;·&nbsp; Fonte: ${esc(a.origem)}
+        Janela: ${esc(a.janela)} &nbsp;·&nbsp; Fonte do critério: ${esc(a.origem)}
+        ${a.fonteDados ? ` &nbsp;·&nbsp; Fonte do dado: ${esc(a.fonteDados)}` : ""}
+        ${a.naturezaDado ? ` &nbsp;·&nbsp; ${esc(a.naturezaDado)}` : ""}
       </div>
+      ${a.recomendacoes?.length ? `<div style="font-size:12px;color:#333;margin-top:8px;"><strong>Recomendações:</strong><ul style="margin:5px 0 0 18px;padding:0;">${a.recomendacoes.map((item) => `<li style="margin-bottom:3px;">${esc(item)}</li>`).join("")}</ul></div>` : ""}
     </td></tr>
   </table>`;
 }
@@ -128,7 +136,12 @@ function renderAlertEmailHtml(base) {
 function assuntoAlerta(base) {
   const tipos = [...new Set(base.alertas.map((a) => a.tipo))].slice(0, 2).join(" / ");
   const temSevero = base.alertas.some((a) => a.gravidade === "severo");
-  return `${temSevero ? "🔴" : "⚠"} ALERTA — ${base.cidade.nome}/${base.cidade.uf}: ${tipos}`;
+  const ordem = { "ATENÇÃO": 1, ALERTA: 2, "EMERGÊNCIA": 3 };
+  const grau = base.alertas
+    .map((a) => a.grau)
+    .filter(Boolean)
+    .sort((a, b) => ordem[b] - ordem[a])[0] || "ALERTA";
+  return `${temSevero ? "🔴" : "⚠"} ${grau} — ${base.cidade.nome}/${base.cidade.uf}: ${tipos}`;
 }
 
 module.exports = { renderAlertEmailHtml, assuntoAlerta };

@@ -13,6 +13,7 @@ function integrarWindy(base, mar, qualidadeAr, pacote, fonteBase) {
   };
   const weather=pacote.weather;
   base=merge(base,weather,['condicaoGeral','tempMin','tempMax','umidadeMin','umidadeMax','rajadaMaxKmh','precipitacaoTotalMm'],'',fonteBase);
+  fontesPorCampo.precipitacaoHorariaMaxMm=base.precipitacaoHorariaMaxMm!=null?fonteBase:'Indisponível';
   base.periodos={...base.periodos};
   for(const k of ['manha','tarde','noite']) {
     base.periodos[k]=merge(base.periodos[k],weather?{...weather.periodos[k],fonte:weather.fonte}:null,['direcao','intensidadeVento','rajadaMaxKmh','precipitacaoMm'],`periodos.${k}.`,fonteBase);

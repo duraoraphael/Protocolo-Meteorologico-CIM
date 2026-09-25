@@ -10,6 +10,7 @@
 // de depender do primeiro envio agendado para descobrir que algo está errado.
 
 require("dotenv").config({ quiet: true });
+require("./security/certificados");
 const { verificarConexao, descreverCanal, enderecoRemetente, criarTransportador } = require("./email/transport");
 
 function argumento(nome) {

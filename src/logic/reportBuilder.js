@@ -4,6 +4,7 @@ const { buscarOpenMeteo } = require("../sources/openMeteo");
 const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
 const { buscarMar } = require("../sources/marine");
 const { buscarQualidadeAr } = require("../sources/airQuality");
+const oceanopAreas = require("../config/oceanopAreas");
 const {
   avaliarRiscos,
   recomendacoesDeslocamento,
@@ -59,24 +60,28 @@ function detectarDivergencias(openMeteo, inmet) {
  */
 async function montarRelatorio(cidade) {
   const avisosColeta = [];
+  const falhasApi = {};
   const windyPromise = buscarPacoteWindy(cidade);
   let openMeteo, inmetPrevisao, inmetAvisos;
 
   try {
     openMeteo = await buscarOpenMeteo(cidade.latitude, cidade.longitude);
   } catch (erro) {
+    falhasApi.openMeteo = erro.message;
     avisosColeta.push(`Open-Meteo indisponível no momento da coleta: ${erro.message}`);
   }
 
   try {
     inmetPrevisao = await buscarPrevisaoInmet(cidade.codigoIbge);
   } catch (erro) {
+    falhasApi.inmetPrevisao = erro.message;
     avisosColeta.push(`INMET (previsão) indisponível no momento da coleta: ${erro.message}`);
   }
 
   try {
     inmetAvisos = await buscarAvisosInmet(cidade.codigoIbge);
   } catch (erro) {
+    falhasApi.inmetAvisos = erro.message;
     avisosColeta.push(`INMET (avisos) indisponível no momento da coleta: ${erro.message}`);
   }
 
@@ -88,6 +93,7 @@ async function montarRelatorio(cidade) {
       mar = await buscarMar(ponto.latitude, ponto.longitude);
       if (cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
     } catch (erro) {
+      falhasApi.marine = erro.message;
       avisosColeta.push(`Condições de mar indisponíveis no momento da coleta: ${erro.message}`);
     }
   }
@@ -98,6 +104,7 @@ async function montarRelatorio(cidade) {
   try {
     qualidadeAr = await buscarQualidadeAr(cidade.latitude, cidade.longitude);
   } catch (erro) {
+    falhasApi.airQuality = erro.message;
     avisosColeta.push(`Qualidade do ar / índice UV indisponíveis no momento da coleta: ${erro.message}`);
   }
 
@@ -118,6 +125,7 @@ async function montarRelatorio(cidade) {
     umidadeMin: inmetPrevisao?.periodos?.tarde?.umidadeMin ?? null,
     umidadeMax: inmetPrevisao?.periodos?.manha?.umidadeMax ?? null,
     precipitacaoTotalMm: null,
+    precipitacaoHorariaMaxMm: null,
     probabilidadeChuvaMax: null,
     rajadaMaxKmh: null,
     temTempestadeHoje: false,
@@ -203,6 +211,7 @@ async function montarRelatorio(cidade) {
       periodo: p.periodo,
       probabilidade: p.probabilidadeChuva,
       precipitacaoMm: p.precipitacaoMm,
+      precipitacaoHorariaMaxMm: p.precipitacaoHorariaMaxMm,
       resumoInmet: i?.resumo || null,
     };
   });
@@ -269,6 +278,60 @@ async function montarRelatorio(cidade) {
   // principais em uma linha só.
   const fontes = [...fontesAutomatizadas, ...fontesManuais];
 
+  // Visão completa e explícita da coleta. Antes a tela mostrava somente as
+  // fontes que responderam e uma lista solta de avisos; agora cada integração
+  // aparece mesmo quando está indisponível, não configurada ou não se aplica
+  // à base selecionada.
+  const windyConfigurado = Boolean(process.env.WINDY_API_KEY?.trim());
+  const status = (ok, falha, detalheOk) => ({
+    status: ok ? "operacional" : "indisponivel",
+    detalhe: ok ? detalheOk : falha || "A fonte não devolveu dados nesta coleta.",
+  });
+  const monitoramentoApis = [
+    {
+      id: "windy-weather",
+      nome: "Windy Point — Meteorologia",
+      ...(windyConfigurado
+        ? status(Boolean(windy.weather), windy.falhas?.weather, `${windy.weather?.amostras ?? 0} amostras recebidas`)
+        : { status: "nao_configurada", detalhe: "WINDY_API_KEY não configurada." }),
+    },
+    {
+      id: "windy-air",
+      nome: "Windy Point — Qualidade do ar",
+      ...(windyConfigurado
+        ? status(Boolean(windy.air), windy.falhas?.air, `${windy.air?.amostras ?? 0} amostras recebidas`)
+        : { status: "nao_configurada", detalhe: "WINDY_API_KEY não configurada." }),
+    },
+    {
+      id: "windy-sea",
+      nome: "Windy Point — Ondas",
+      ...(cidade.costeira
+        ? windyConfigurado
+          ? status(Boolean(windy.sea), windy.falhas?.sea, `${windy.sea?.amostras ?? 0} amostras recebidas`)
+          : { status: "nao_configurada", detalhe: "WINDY_API_KEY não configurada." }
+        : { status: "nao_aplicavel", detalhe: "Base não costeira." }),
+    },
+    { id: "open-meteo", nome: "Open-Meteo — Meteorologia", ...status(Boolean(openMeteo), falhasApi.openMeteo, "Previsão e condição atual recebidas") },
+    { id: "inmet-previsao", nome: "INMET — Previsão", ...status(Boolean(inmetPrevisao), falhasApi.inmetPrevisao, "Previsão oficial recebida") },
+    { id: "inmet-avisos", nome: "INMET — Avisos", ...status(Boolean(inmetAvisos), falhasApi.inmetAvisos, `${inmetAvisos?.avisos?.length ?? 0} aviso(s) para a base`) },
+    {
+      id: "open-meteo-marine",
+      nome: "Open-Meteo Marine",
+      ...(cidade.costeira
+        ? status(Boolean(marOpenMeteo), falhasApi.marine, "Condições marítimas recebidas")
+        : { status: "nao_aplicavel", detalhe: "Base não costeira." }),
+    },
+    { id: "open-meteo-air", nome: "Open-Meteo Air Quality", ...status(Boolean(arOpenMeteo), falhasApi.airQuality, "Qualidade do ar e UV recebidos") },
+    {
+      id: "oceanop",
+      nome: "Oceanop / Petrobras",
+      status: oceanopAreas[cidade.chave]?.local ? "sob_demanda" : "nao_configurada",
+      detalhe: oceanopAreas[cidade.chave]?.local
+        ? "Base vinculada; consulta disponível na tela Monitoramento por área."
+        : "Local Oceanop ainda não vinculado a esta base.",
+    },
+  ];
+
   return {
     cidade: { chave: cidade.chave, nome: cidade.nome, uf: cidade.uf },
     nomeArquivoBase: `Informativo_Meteorologico_${slugCidade(cidade.nome)}_${dataNow.toISOString().slice(0, 10)}`,
@@ -292,6 +355,9 @@ async function montarRelatorio(cidade) {
     tempMax: base.tempMax,
     umidadeMin: base.umidadeMin,
     umidadeMax: base.umidadeMax,
+    precipitacaoHorariaMaxMm: base.precipitacaoHorariaMaxMm,
+    precipitacaoTotalMm: base.precipitacaoTotalMm,
+    rajadaMaxKmh: base.rajadaMaxKmh,
     tabelaTemperaturaUmidade,
     ventoPorPeriodo,
     chuvaPorPeriodo,
@@ -306,6 +372,7 @@ async function montarRelatorio(cidade) {
     fontes,
     fontesAutomatizadas,
     fontesManuais,
+    monitoramentoApis,
     geradoEmISO: dataNow.toISOString(),
   };
 }
