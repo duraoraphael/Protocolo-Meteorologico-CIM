@@ -9,6 +9,7 @@
 //   node src/cliAlertas.js --bases=a,b  -> restringe as bases
 
 require("dotenv").config({ quiet: true });
+require("./security/certificados");
 const fs = require("fs");
 const { verificarAlertas, ARQUIVO_ESTADO } = require("./logic/alertWatcher");
 
@@ -43,17 +44,17 @@ function argumento(nome) {
 
   console.log("");
   if (resultado.totalNovos === 0) {
-    console.log("Nenhuma condição grave nova nas bases monitoradas.");
+    console.log("Nenhuma condição de alerta nova nas bases monitoradas.");
   } else {
     console.log(`${resultado.totalNovos} alerta(s) novo(s) em ${resultado.porBase.length} base(s):`);
     console.log("");
     for (const base of resultado.porBase) {
       console.log(`  ${base.cidade.nome} — ${base.cidade.uf}`);
       for (const a of base.alertas) {
-        const marca = a.gravidade === "severo" ? "[SEVERO]" : "[ALTO]  ";
+        const marca = `[${a.grau || (a.gravidade === "severo" ? "SEVERO" : "ALTO")}]`;
         console.log(`    ${marca} ${a.tipo}${a.motivo === "agravou" ? " (AGRAVOU)" : ""}`);
         if (a.detalhe) console.log(`             ${a.detalhe}`);
-        console.log(`             janela: ${a.janela} · fonte: ${a.origem}`);
+        console.log(`             janela: ${a.janela} · critério: ${a.origem}${a.fonteDados ? ` · dado: ${a.fonteDados}` : ""}`);
       }
       console.log("");
     }

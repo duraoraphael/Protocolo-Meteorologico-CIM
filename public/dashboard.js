@@ -13,6 +13,10 @@ const toastEl = document.getElementById("toast");
 
 const REFRESH_MS = 10 * 60 * 1000; // 10 minutos
 
+// Todo texto vindo do servidor (nomes, e-mails, mensagens de erro) passa por
+// este escape antes de ir para innerHTML — evita XSS armazenado (V-01).
+const esc = Dashboard.escape;
+
 let cidadeAtivaChave = null; // preenchido após o primeiro /api/preview
 
 async function carregarLogos() {
@@ -49,7 +53,6 @@ function renderPainel(report) {
   document.getElementById("tempo-atual").innerHTML = Dashboard.currentWeather(report);
   conteudo.innerHTML = Dashboard.home(report);
   cidadeAtivaChave = report.cidade.chave;
-  document.getElementById("resp-nome-base").textContent = `${report.cidade.nome} — ${report.cidade.uf}`;
   if (document.getElementById("detalhes").open) abrirDetalhes(detalheAtivo);
 }
 
@@ -57,11 +60,11 @@ function renderListaDestinatariosPainel(responsaveis) {
   const alvo = document.getElementById("lista-destinatarios-painel");
   if (!alvo) return;
   if (!responsaveis || responsaveis.length === 0) {
-    alvo.innerHTML = `<span style="color:var(--laranja)">Nenhum responsável cadastrado para esta base — o botão 👥 permite cadastrar.</span>`;
+    alvo.innerHTML = `<span class="texto-aviso">Nenhum responsável cadastrado para esta base — o botão 👥 permite cadastrar.</span>`;
     return;
   }
   alvo.innerHTML = `<div class="chips-destinatarios">${responsaveis
-    .map((r) => `<span class="chip-destinatario">${r.nome} — ${r.email}</span>`)
+    .map((r) => `<span class="chip-destinatario">${esc(r.nome)}${r.email ? ` — ${esc(r.email)}` : ""}</span>`)
     .join("")}</div>`;
 }
 
@@ -74,7 +77,7 @@ async function carregarDestinatariosPainel() {
     renderListaDestinatariosPainel(dados.bases[0]?.responsaveis || []);
   } catch (erro) {
     const alvo = document.getElementById("lista-destinatarios-painel");
-    if (alvo) alvo.innerHTML = `<span style="color:var(--vermelho)">Erro ao carregar: ${erro.message}</span>`;
+    if (alvo) alvo.innerHTML = `<span class="texto-erro">Erro ao carregar: ${esc(erro.message)}</span>`;
   }
 }
 
@@ -99,7 +102,7 @@ async function popularSeletorBase() {
   const inicial = escolhidaNaUrl || dados.ativa;
 
   seletorBaseEl.innerHTML = dados.disponiveis
-    .map((c) => `<option value="${c.chave}">${c.nome} — ${c.uf}</option>`)
+    .map((c) => `<option value="${esc(c.chave)}">${esc(c.nome)} — ${esc(c.uf)}</option>`)
     .join("");
   seletorBaseEl.value = inicial;
   return seletorBaseEl.value || dados.ativa;
@@ -219,7 +222,8 @@ botaoConfirmar.addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------
-// Modal de gerenciamento de responsáveis (nome + e-mail) por base
+// Modal de gerenciamento de responsáveis. A pessoa existe uma única vez e
+// pode receber os informativos de uma ou várias bases.
 // ---------------------------------------------------------------------
 const overlayResponsaveis = document.getElementById("overlay-responsaveis");
 const botaoResponsaveis = document.getElementById("botao-responsaveis");
@@ -234,9 +238,12 @@ const respLista = document.getElementById("resp-lista");
 const respForm = document.getElementById("resp-form");
 const respInputNome = document.getElementById("resp-input-nome");
 const respInputEmail = document.getElementById("resp-input-email");
+const respBotaoCadastrar = document.getElementById("resp-botao-cadastrar");
 const respFormMensagem = document.getElementById("resp-form-mensagem");
 
 let senhaDesbloqueada = null; // guardada em memória só durante a sessão do modal aberto
+let basesDisponiveis = [];
+let responsaveisCadastrados = [];
 
 function abrirModalResponsaveis() {
   if (!cidadeAtivaChave) return;
@@ -265,28 +272,40 @@ respInputSenha.addEventListener("keydown", (e) => {
 
 async function renderListaModal() {
   respLista.innerHTML = `<li class="resp-vazio">Carregando…</li>`;
-  const resp = await fetch(`/api/responsaveis?cidade=${encodeURIComponent(cidadeAtivaChave)}`);
+  // E-mails só vêm com a senha (V-06): a leitura pública devolve só nomes.
+  const resp = await fetch("/api/responsaveis/consultar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ senha: senhaDesbloqueada }),
+  });
   const dados = await resp.json();
   if (!dados.ok) throw new Error(dados.erro || "Falha ao carregar responsáveis.");
-  const lista = dados.bases[0]?.responsaveis || [];
+  responsaveisCadastrados = dados.responsaveis || [];
+  basesDisponiveis = dados.basesDisponiveis || [];
 
   respLista.innerHTML =
-    lista.length === 0
-      ? `<li class="resp-vazio">Nenhum responsável cadastrado ainda.</li>`
-      : lista
+    responsaveisCadastrados.length === 0
+      ? `<li class="resp-vazio">Nenhuma pessoa cadastrada ainda.</li>`
+      : responsaveisCadastrados
           .map(
-            (r) => `<li>
-              <span>${r.nome} <span class="resp-email">${r.email}</span></span>
-              <button class="resp-remover" data-email="${r.email}" title="Remover">✕</button>
+            (r) => `<li class="resp-pessoa" data-email="${esc(r.email)}">
+              <div class="resp-cabecalho">
+                <span><strong>${esc(r.nome)}</strong> <span class="resp-email">${esc(r.email)}</span></span>
+                <button type="button" class="resp-remover" title="Excluir responsável">Excluir</button>
+              </div>
+              <fieldset class="resp-bases">
+                <legend>Bases vinculadas</legend>
+                ${basesDisponiveis.map((base) => `<label><input type="checkbox" class="resp-base" value="${esc(base.chave)}"${r.bases?.includes(base.chave) ? " checked" : ""}> ${esc(base.nome)} — ${esc(base.uf)}</label>`).join("")}
+              </fieldset>
+              <button type="button" class="botao-primario resp-salvar">Salvar bases</button>
             </li>`
           )
           .join("");
 
-  respLista.querySelectorAll(".resp-remover").forEach((btn) => {
-    btn.addEventListener("click", () => removerResponsavel(btn.dataset.email));
-  });
-
-  renderListaDestinatariosPainel(lista); // mantém o painel principal sincronizado
+  // mantém o painel principal sincronizado, sem deixar e-mails à mostra na TV
+  renderListaDestinatariosPainel(
+    responsaveisCadastrados.filter((r) => r.bases?.includes(cidadeAtivaChave)).map(({ nome }) => ({ nome }))
+  );
 }
 
 respBotaoDesbloquear.addEventListener("click", async () => {
@@ -309,6 +328,7 @@ respBotaoDesbloquear.addEventListener("click", async () => {
     senhaDesbloqueada = senha;
     respBlocoSenha.classList.add("oculto");
     respBlocoGestao.classList.remove("oculto");
+    respFormMensagem.classList.remove("sucesso");
     respFormMensagem.textContent = "";
     await renderListaModal();
   } catch (erro) {
@@ -324,23 +344,30 @@ respForm.addEventListener("submit", async (e) => {
   const nome = respInputNome.value.trim();
   const email = respInputEmail.value.trim();
   if (!nome || !email) {
+    respFormMensagem.classList.remove("sucesso");
     respFormMensagem.textContent = "Preencha nome e e-mail.";
     return;
   }
+  respFormMensagem.classList.remove("sucesso");
   respFormMensagem.textContent = "";
+  respBotaoCadastrar.disabled = true;
+  respBotaoCadastrar.textContent = "Cadastrando…";
   try {
     const resp = await fetch("/api/responsaveis", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ senha: senhaDesbloqueada, cidade: cidadeAtivaChave, nome, email }),
+      body: JSON.stringify({ senha: senhaDesbloqueada, nome, email }),
     });
     const dados = await resp.json();
     if (!dados.ok) throw new Error(dados.erro || "Falha ao cadastrar responsável.");
     respInputNome.value = "";
     respInputEmail.value = "";
     await renderListaModal();
-    mostrarToast(`${nome} cadastrado(a) para receber o informativo desta base.`, "sucesso");
+    respFormMensagem.classList.add("sucesso");
+    respFormMensagem.textContent = `${nome} foi cadastrado(a). Agora marque e salve as bases dessa pessoa.`;
+    mostrarToast(`${nome} cadastrado(a). Agora selecione e salve as bases.`, "sucesso");
   } catch (erro) {
+    respFormMensagem.classList.remove("sucesso");
     respFormMensagem.textContent = erro.message;
     if (/senha/i.test(erro.message)) {
       // senha incorreta ou expirada: força novo desbloqueio
@@ -348,30 +375,57 @@ respForm.addEventListener("submit", async (e) => {
       respBlocoSenha.classList.remove("oculto");
       senhaDesbloqueada = null;
     }
+  } finally {
+    respBotaoCadastrar.disabled = false;
+    respBotaoCadastrar.textContent = "Cadastrar responsável";
   }
 });
 
+async function salvarBasesResponsavel(item) {
+  const email = item.dataset.email;
+  const bases = [...item.querySelectorAll(".resp-base:checked")].map((campo) => campo.value);
+  respFormMensagem.classList.remove("sucesso");
+  respFormMensagem.textContent = "";
+  try {
+    const resp = await fetch("/api/responsaveis", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ senha: senhaDesbloqueada, email, bases }),
+    });
+    const dados = await resp.json();
+    if (!dados.ok) throw new Error(dados.erro || "Falha ao salvar as bases.");
+    await renderListaModal();
+    mostrarToast(`Bases de ${email} atualizadas.`, "sucesso");
+  } catch (erro) {
+    respFormMensagem.classList.remove("sucesso");
+    respFormMensagem.textContent = erro.message;
+  }
+}
+
 async function removerResponsavel(email) {
+  if (!window.confirm("Excluir este responsável de todas as bases?")) return;
   respFormMensagem.textContent = "";
   try {
     const resp = await fetch("/api/responsaveis", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ senha: senhaDesbloqueada, cidade: cidadeAtivaChave, email }),
+      body: JSON.stringify({ senha: senhaDesbloqueada, email }),
     });
     const dados = await resp.json();
-    if (!dados.ok) throw new Error(dados.erro || "Falha ao remover responsável.");
+    if (!dados.ok) throw new Error(dados.erro || "Falha ao excluir responsável.");
     await renderListaModal();
-    mostrarToast(`${email} removido(a) da lista desta base.`, "sucesso");
+    mostrarToast(`${email} excluído(a).`, "sucesso");
   } catch (erro) {
     respFormMensagem.textContent = erro.message;
-    if (/senha/i.test(erro.message)) {
-      respBlocoGestao.classList.add("oculto");
-      respBlocoSenha.classList.remove("oculto");
-      senhaDesbloqueada = null;
-    }
   }
 }
+
+respLista.addEventListener("click", (e) => {
+  const item = e.target.closest(".resp-pessoa");
+  if (!item) return;
+  if (e.target.closest(".resp-salvar")) salvarBasesResponsavel(item);
+  if (e.target.closest(".resp-remover")) removerResponsavel(item.dataset.email);
+});
 
 // Navigation and detail views keep operational features outside the compact home.
 let detalheAtivo = 'monitoramento';

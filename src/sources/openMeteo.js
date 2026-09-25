@@ -82,6 +82,7 @@ function resumirPeriodo(horas, chave) {
       rajadaMaxKmh: null,
       probabilidadeChuva: null,
       precipitacaoMm: 0,
+      precipitacaoHorariaMaxMm: null,
       tempestade: false,
     };
   }
@@ -100,6 +101,10 @@ function resumirPeriodo(horas, chave) {
     direcoes.reduce((a, b) => a + b, 0) / direcoes.length;
   const probabilidadeChuva = Math.max(...probs);
   const precipitacaoMm = precs.reduce((a, b) => a + b, 0);
+  const precipitacoesValidas = precs.filter(Number.isFinite);
+  const precipitacaoHorariaMaxMm = precipitacoesValidas.length
+    ? Math.max(...precipitacoesValidas)
+    : null;
   const tempestade = codigos.some((c) => CODIGOS_TEMPESTADE.has(c));
 
   return {
@@ -110,6 +115,10 @@ function resumirPeriodo(horas, chave) {
     rajadaMaxKmh: Math.round(rajadaMaxKmh),
     probabilidadeChuva: Math.round(probabilidadeChuva),
     precipitacaoMm: Math.round(precipitacaoMm * 10) / 10,
+    precipitacaoHorariaMaxMm:
+      precipitacaoHorariaMaxMm == null
+        ? null
+        : Math.round(precipitacaoHorariaMaxMm * 10) / 10,
     tempestade,
   };
 }
@@ -171,6 +180,9 @@ async function buscarOpenMeteo(latitude, longitude) {
   // baseados em picos de madrugada que já haviam passado na hora da consulta.
   const precipitacaoTotalMm =
     Math.round(listaPeriodos.reduce((soma, p) => soma + (p.precipitacaoMm || 0), 0) * 10) / 10;
+  const precipitacaoHorariaMaxMm = Math.max(
+    ...listaPeriodos.map((p) => p.precipitacaoHorariaMaxMm ?? 0)
+  );
   const probabilidadeChuvaMax = Math.max(...listaPeriodos.map((p) => p.probabilidadeChuva ?? 0));
   const rajadaMaxKmh = Math.max(...listaPeriodos.map((p) => p.rajadaMaxKmh ?? 0));
   const velocidadeMaxKmh = Math.max(...listaPeriodos.map((p) => p.velocidadeMediaKmh ?? 0));
@@ -192,6 +204,7 @@ async function buscarOpenMeteo(latitude, longitude) {
     umidadeMin: Math.round(Math.min(...umidades)),
     umidadeMax: Math.round(Math.max(...umidades)),
     precipitacaoTotalMm,
+    precipitacaoHorariaMaxMm,
     probabilidadeChuvaMax,
     rajadaMaxKmh,
     velocidadeMaxKmh,

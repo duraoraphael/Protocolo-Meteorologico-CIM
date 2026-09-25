@@ -52,11 +52,17 @@ O envio usa o Gmail via **Senha de App** (não a senha normal da conta):
 ### 2.2 Senha do painel
 
 ```
-DASHBOARD_PASSWORD=Marciana
+DASHBOARD_PASSWORD=<senha forte, mínimo 12 caracteres>
 ```
 
-Essa é a senha digitada na TV para disparar a geração manual do relatório.
-**Troque assim que possível** — é só um valor de teste inicial.
+Essa é a senha digitada na TV para disparar a geração manual do relatório e
+gerenciar responsáveis. **É obrigatória**: sem ela, com menos de 12
+caracteres ou com o antigo valor padrão público, o servidor não inicia.
+Para gerar uma senha aleatória (16+ caracteres recomendados):
+
+```
+node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))"
+```
 
 ### 2.3 Cidade e agendamento
 
@@ -284,7 +290,7 @@ iframe**.
      Puppeteer para o Chrome funcionar sem erros de biblioteca faltando).
 3. No painel do Render, preencha as variáveis de ambiente marcadas como
    secretas: `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `REPORT_RECIPIENTS`,
-   `DASHBOARD_PASSWORD` (troque o valor padrão "Marciana").
+   `DASHBOARD_PASSWORD` (obrigatória, mínimo 12 caracteres).
 4. Ao terminar o deploy, você recebe uma URL pública fixa, por exemplo:
    `https://protocolo-meteorologico-cim.onrender.com`
 
@@ -321,6 +327,12 @@ st.components.v1.iframe(
 )
 ```
 
+> **Cabeçalhos de segurança:** por padrão o painel envia
+> `frame-ancestors 'none'` e `X-Frame-Options: DENY`, que impedem qualquer
+> site de embuti-lo. Para liberar o iframe do Streamlit, defina no ambiente
+> `FRAME_ANCESTORS=https://<sua-app>.streamlit.app` (várias origens separadas
+> por espaço ou vírgula; só `https://`).
+
 Isso mostra o painel completo (visual de TV, cards, tabela, destinatários e
 os botões ⚙ / 👥) dentro da página do Streamlit, como se fosse parte dela —
 inclusive as senhas de gerar relatório e gerenciar responsáveis continuam
@@ -330,6 +342,17 @@ funcionando normalmente ali dentro.
 
 - O arquivo `.env` contém a senha de app do Gmail — nunca o compartilhe nem
   suba para um repositório git (já está no `.gitignore`).
-- Troque `DASHBOARD_PASSWORD` do valor padrão assim que possível.
-- O painel tem um bloqueio simples (5 tentativas de senha erradas = 5 min de
-  bloqueio por IP) para reduzir tentativas de força bruta na rede local.
+- `DASHBOARD_PASSWORD` é obrigatória (mínimo 12 caracteres, sem valor
+  padrão); o servidor recusa iniciar sem ela.
+- Sem senha, `GET /api/responsaveis` devolve só os **nomes**; os e-mails só
+  aparecem no modal 👥 depois de desbloquear (`POST /api/responsaveis/consultar`).
+- PDFs em `/relatorios/<arquivo>.pdf` exigem a senha (o navegador abre uma
+  janela de login; o usuário pode ser qualquer um) ou o link temporário
+  (`urlArquivo`, com `?token=`) devolvido por `/api/gerar-relatorio`, válido
+  por 24 h e só para aquele arquivo. Links deixam de valer se o servidor
+  reiniciar.
+- Tentativas de senha erradas deixam o IP mais lento, sem bloquear: a partir
+  da 3ª falha seguida, cada tentativa desse IP espera 0,5 s, 1 s, 2 s... até
+  30 s. A senha correta sempre entra (no máximo com esse atraso) e zera o
+  contador. Atrás de proxy reverso, configure `TRUST_PROXY` (ver
+  `INSTALACAO_SERVIDOR_PETROBRAS.md`); sem proxy, deixe desligado.

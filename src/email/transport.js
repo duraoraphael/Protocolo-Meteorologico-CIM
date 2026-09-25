@@ -11,9 +11,39 @@
 // modo corporativo sem informar o servidor.
 
 const nodemailer = require("nodemailer");
+const tls = require("node:tls");
+require("../security/certificados");
+
+let avisoTlsEmitido = false;
+
+/**
+ * Validação do certificado TLS do relay (V-11). Sempre ligada, a não ser que
+ * SMTP_TLS_INSEGURO=true — válvula de escape temporária, com aviso no log.
+ * O caminho correto para CA interna é NODE_EXTRA_CA_CERTS (ver
+ * INSTALACAO_SERVIDOR_PETROBRAS.md).
+ */
+function opcoesTlsRelay() {
+  const inseguro = process.env.SMTP_TLS_INSEGURO === "true";
+  if (inseguro && !avisoTlsEmitido) {
+    avisoTlsEmitido = true;
+    console.warn(
+      "[CIM] AVISO DE SEGURANÇA: SMTP_TLS_INSEGURO=true — o certificado do relay SMTP NÃO está sendo validado. " +
+        "Instale a CA interna via NODE_EXTRA_CA_CERTS e remova essa variável."
+    );
+  }
+  if (process.env.SMTP_IGNORAR_TLS === "true" && !avisoTlsEmitido) {
+    avisoTlsEmitido = true;
+    console.warn("[CIM] AVISO DE SEGURANÇA: SMTP_IGNORAR_TLS=true — os e-mails trafegam sem criptografia até o relay.");
+  }
+  return { rejectUnauthorized: !inseguro };
+}
 
 function usandoRelayCorporativo() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_HOST.trim());
+}
+
+function envioEmailAtivo() {
+  return process.env.ENVIO_EMAIL_ATIVO !== "false";
 }
 
 /**
@@ -37,6 +67,14 @@ function enderecoRemetente() {
 }
 
 function criarTransportador() {
+  if (!envioEmailAtivo()) {
+    const erro = new Error(
+      "Envio de e-mails temporariamente desativado por ENVIO_EMAIL_ATIVO=false."
+    );
+    erro.code = "EMAIL_SEND_DISABLED";
+    throw erro;
+  }
+
   if (usandoRelayCorporativo()) {
     const porta = parseInt(process.env.SMTP_PORTA || "25", 10);
 
@@ -48,13 +86,14 @@ function criarTransportador() {
       // o nodemailer tentar autenticar e o servidor recusar.
       secure: false,
       auth: undefined,
-      // Relays internos costumam anunciar STARTTLS com certificado emitido
-      // por CA interna, que não está na lista de confiança do Node. Sem isso
-      // o envio falha com "self signed certificate". Aceitável porque o
-      // tráfego não sai da rede corporativa.
-      tls: { rejectUnauthorized: false },
+      // Certificado do relay SEMPRE validado (V-11). Relays internos usam
+      // certificado da CA corporativa: aponte NODE_EXTRA_CA_CERTS para o
+      // arquivo .pem/.crt dessa CA. SMTP_TLS_INSEGURO=true desliga a
+      // validação (só como paliativo temporário; gera aviso no log).
+      tls: opcoesTlsRelay(),
       // Se o relay não suportar STARTTLS, SMTP_IGNORAR_TLS=true desliga a
-      // tentativa em vez de deixar a conexão falhar.
+      // tentativa em vez de deixar a conexão falhar (sem criptografia — gera
+      // aviso no log; evite).
       ignoreTLS: process.env.SMTP_IGNORAR_TLS === "true",
       connectionTimeout: 20000,
       greetingTimeout: 15000,
@@ -62,7 +101,9 @@ function criarTransportador() {
   }
 
   const usuario = process.env.GMAIL_USER;
-  const senha = process.env.GMAIL_APP_PASSWORD;
+  // O Google exibe senhas de app em quatro grupos separados por espaços.
+  // Esses espaços são apenas visuais e não fazem parte da credencial.
+  const senha = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, "");
   if (!usuario || !senha) {
     throw new Error(
       "Envio de e-mail não configurado. Defina SMTP_HOST (relay corporativo) " +
@@ -71,8 +112,21 @@ function criarTransportador() {
   }
 
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    // STARTTLS (587) é preferido aqui ao SMTPS/465. Alguns antivírus
+    // corporativos interceptam a porta 465 com uma cadeia deliberadamente
+    // não confiável, enquanto 587 apresenta a CA instalada no Windows.
+    port: 587,
+    secure: false,
+    requireTLS: true,
     auth: { user: usuario, pass: senha },
+    tls: {
+      rejectUnauthorized: true,
+      ca:
+        process.platform === "win32" && typeof tls.getCACertificates === "function"
+          ? tls.getCACertificates("default")
+          : undefined,
+    },
   });
 }
 
@@ -100,4 +154,5 @@ module.exports = {
   descreverCanal,
   verificarConexao,
   usandoRelayCorporativo,
+  envioEmailAtivo,
 };

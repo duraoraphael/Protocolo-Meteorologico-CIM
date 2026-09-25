@@ -1,5 +1,13 @@
-﻿require("dotenv").config();
+﻿// O .env só é carregado quando o servidor é executado diretamente
+// (node server.js). Nos testes, que importam criarApp(), o .env real nunca é
+// lido.
+const executadoDiretamente = require.main === module;
+if (executadoDiretamente) require("dotenv").config();
+require("./src/security/certificados");
+
 const express = require("express");
+const http = require("http");
+const https = require("https");
 const path = require("path");
 const fs = require("fs");
 
@@ -13,223 +21,390 @@ const {
 } = require("./src/scheduler");
 const responsaveis = require("./src/config/recipients");
 const { arquivosLogos } = require("./src/config/logos");
-
-const app = express();
-app.use(express.json());
-app.use("/api/windy", require("./src/integrations/windyRoutes"));
-app.use("/api/oceanop", require("./src/integrations/oceanopRoutes"));
-app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
-app.use("/relatorios", express.static(PASTA_SAIDA));
-// Logos (Petrobras + CIM) ficam em Logo/, na raiz do projeto, fora de
-// public/ — servidos em /logo/<arquivo> para uso no painel e no PDF.
-app.use("/logo", express.static(path.join(__dirname, "Logo")));
+const { problemaSenhaConfigurada, criarComparadorSenha } = require("./src/security/senha");
+const { cabecalhosSeguranca } = require("./src/security/cabecalhos");
+const { tratadorDeErros, naoEncontrado } = require("./src/security/erros");
+const { criarLinksRelatorio, senhaDoBasicAuth } = require("./src/security/linksRelatorio");
+const { criarControleTentativas, valorTrustProxy } = require("./src/security/tentativas");
+const { opcoesDeRede, carregarPfx, redirecionarParaHttps } = require("./src/security/https");
 
 // Hospedagens em nuvem (Render, Railway, etc.) definem PORT automaticamente —
 // PORTA continua valendo para rodar local/Windows sem mexer no .env.
 const PORTA = process.env.PORT || process.env.PORTA || 3210;
-const CIDADE_ATIVA = process.env.CIDADE || undefined; // usada como base padrão do seletor
 
-// -----------------------------------------------------------------------
-// Cache curto do "preview" (cards do painel na TV), por base, para não
-// bater nas APIs externas a cada auto-refresh do navegador. Cada base tem
-// sua própria entrada porque o painel agora deixa escolher qual visualizar.
-// -----------------------------------------------------------------------
-const previewCachePorBase = new Map();
-const previewEmAndamento = new Map();
-const PREVIEW_TTL_MS = 10 * 60 * 1000; // 10 minutos
+/**
+ * Monta o app Express com todas as rotas. Não abre porta nem inicia
+ * agendamentos — isso fica em iniciarServidor(). Separado para os testes.
+ */
+function criarApp({
+  senhaPainel = process.env.DASHBOARD_PASSWORD,
+  cidadeAtiva = process.env.CIDADE || undefined,
+  pastaRelatorios = PASTA_SAIDA,
+  trustProxy = process.env.TRUST_PROXY,
+  opcoesTentativas = {},
+} = {}) {
+  const senhaConfere = criarComparadorSenha(senhaPainel);
+  const app = express();
+  // V-08: não anunciar a tecnologia e aplicar cabeçalhos de segurança
+  // (CSP, nosniff, X-Frame-Options, Referrer-Policy) em todas as respostas.
+  app.disable("x-powered-by");
+  // TRUST_PROXY (padrão desligado): só ative atrás de um proxy reverso
+  // (IIS/nginx) para que req.ip seja o IP real do cliente, e não o do proxy.
+  const confiancaProxy = valorTrustProxy(trustProxy);
+  if (confiancaProxy !== false) app.set("trust proxy", confiancaProxy);
+  app.use(cabecalhosSeguranca());
+  app.use(express.json({ limit: "100kb" }));
+  app.use("/api/windy", require("./src/integrations/windyRoutes"));
+  app.use("/api/oceanop", require("./src/integrations/oceanopRoutes"));
+  app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
+  // Logos (Petrobras + CIM) ficam em Logo/, na raiz do projeto, fora de
+  // public/ — servidos em /logo/<arquivo> para uso no painel e no PDF.
+  app.use("/logo", express.static(path.join(__dirname, "Logo")));
 
-async function obterPreview(cidadeChave) {
-  const cidade = getCidade(cidadeChave);
-  const agora = Date.now();
-  const cache = previewCachePorBase.get(cidade.chave);
-  if (cache && agora - cache.timestamp < PREVIEW_TTL_MS) {
-    return cache.dados;
-  }
-  if (previewEmAndamento.has(cidade.chave)) return previewEmAndamento.get(cidade.chave);
-  const tarefa = montarRelatorio(cidade).then(report => {
-    previewCachePorBase.set(cidade.chave, { dados: report, timestamp: Date.now() });
-    return report;
-  }).finally(() => previewEmAndamento.delete(cidade.chave));
-  previewEmAndamento.set(cidade.chave, tarefa);
-  return tarefa;
-}
+  const CIDADE_ATIVA = cidadeAtiva; // usada como base padrão do seletor
 
-app.get("/api/preview", async (req, res) => {
-  try {
-    const report = await obterPreview(req.query.cidade || CIDADE_ATIVA);
-    res.json({ ok: true, report });
-  } catch (erro) {
-    res.status(502).json({ ok: false, erro: erro.message });
-  }
-});
+  // -----------------------------------------------------------------------
+  // Cache curto do "preview" (cards do painel na TV), por base, para não
+  // bater nas APIs externas a cada auto-refresh do navegador. Cada base tem
+  // sua própria entrada porque o painel agora deixa escolher qual visualizar.
+  // -----------------------------------------------------------------------
+  const previewCachePorBase = new Map();
+  const previewEmAndamento = new Map();
+  const PREVIEW_TTL_MS = 10 * 60 * 1000; // 10 minutos
 
-// -----------------------------------------------------------------------
-// Geração + envio sob demanda (botão do painel, protegido por senha).
-// Throttle simples em memória para reduzir tentativas de força bruta na
-// senha, já que o painel fica em rede local da sala de operação.
-// -----------------------------------------------------------------------
-const tentativasPorIp = new Map();
-const JANELA_BLOQUEIO_MS = 5 * 60 * 1000;
-const MAX_TENTATIVAS = 5;
-
-function ipBloqueado(ip) {
-  const registro = tentativasPorIp.get(ip);
-  if (!registro) return false;
-  if (Date.now() - registro.desde > JANELA_BLOQUEIO_MS) {
-    tentativasPorIp.delete(ip);
-    return false;
-  }
-  return registro.contagem >= MAX_TENTATIVAS;
-}
-
-function registrarTentativaFalha(ip) {
-  const registro = tentativasPorIp.get(ip) || { contagem: 0, desde: Date.now() };
-  registro.contagem += 1;
-  tentativasPorIp.set(ip, registro);
-}
-
-function limparTentativas(ip) {
-  tentativasPorIp.delete(ip);
-}
-
-// Valida a senha operacional com o mesmo throttle anti-força-bruta usado
-// pela geração manual do relatório. Retorna { ok, status, erro } — usado por
-// todos os endpoints que alteram estado (gerar relatório, cadastrar/remover
-// responsável).
-function verificarSenha(req) {
-  const ip = req.ip;
-  if (ipBloqueado(ip)) {
-    return {
-      ok: false,
-      status: 429,
-      erro: "Muitas tentativas de senha incorretas. Aguarde alguns minutos e tente novamente.",
-    };
+  // Respostas de erro das rotas (V-10/V-09): só mensagens marcadas como
+  // públicas (fixas, sem dado interno) vão para o cliente; o resto vira uma
+  // mensagem genérica e o detalhe fica só no console do servidor.
+  function responderErro(res, erro, contexto, mensagemGenerica = "Erro interno. Consulte o log do servidor.") {
+    if (erro && erro.publico) {
+      return res.status(erro.status || 400).json({ ok: false, erro: erro.message });
+    }
+    console.error(`[CIM] ${contexto}:`, erro);
+    return res.status(500).json({ ok: false, erro: mensagemGenerica });
   }
 
-  const senhaEsperada = process.env.DASHBOARD_PASSWORD || "Marciana";
-  const { senha } = req.body || {};
-
-  if (senha !== senhaEsperada) {
-    registrarTentativaFalha(ip);
-    return { ok: false, status: 401, erro: "Senha incorreta." };
-  }
-  limparTentativas(ip);
-  return { ok: true };
-}
-
-let geracaoEmAndamento = false;
-
-app.post("/api/gerar-relatorio", async (req, res) => {
-  const checagem = verificarSenha(req);
-  if (!checagem.ok) {
-    return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+  async function obterPreview(cidade) {
+    const agora = Date.now();
+    const cache = previewCachePorBase.get(cidade.chave);
+    if (cache && agora - cache.timestamp < PREVIEW_TTL_MS) {
+      return cache.dados;
+    }
+    if (previewEmAndamento.has(cidade.chave)) return previewEmAndamento.get(cidade.chave);
+    const tarefa = montarRelatorio(cidade).then(report => {
+      previewCachePorBase.set(cidade.chave, { dados: report, timestamp: Date.now() });
+      return report;
+    }).finally(() => previewEmAndamento.delete(cidade.chave));
+    previewEmAndamento.set(cidade.chave, tarefa);
+    return tarefa;
   }
 
-  if (geracaoEmAndamento) {
-    return res.status(409).json({
-      ok: false,
-      erro: "Já existe uma geração de relatório em andamento. Aguarde a conclusão.",
-    });
-  }
-
-  geracaoEmAndamento = true;
-  try {
-    const cidadeChave = req.body?.cidade || CIDADE_ATIVA;
-    const resultado = await executarPipeline({ cidadeChave, enviarEmail: true });
-    // atualiza o cache dessa base na hora, sem esperar o próximo /api/preview
-    previewCachePorBase.set(resultado.report.cidade.chave, { dados: resultado.report, timestamp: Date.now() });
-    res.json({
-      ok: true,
-      arquivo: resultado.arquivoPdf,
-      urlArquivo: `/relatorios/${resultado.arquivoPdf}`,
-      destinatarios: resultado.envio?.destinatarios || [],
-      geradoEmISO: resultado.report.geradoEmISO,
-      avisosColeta: resultado.report.avisosColeta,
-    });
-  } catch (erro) {
-    console.error("[CIM] Erro ao gerar/enviar relatório sob demanda:", erro);
-    res.status(500).json({ ok: false, erro: erro.message });
-  } finally {
-    geracaoEmAndamento = false;
-  }
-});
-
-app.get("/api/logos", (req, res) => {
-  const { petrobras, cim } = arquivosLogos();
-  res.json({
-    ok: true,
-    petrobras: petrobras ? `/logo/${petrobras}` : null,
-    cim: cim ? `/logo/${cim}` : null,
+  app.get("/api/preview", async (req, res) => {
+    let cidade;
+    try {
+      cidade = getCidade(req.query.cidade || CIDADE_ATIVA);
+    } catch (erro) {
+      return res.status(400).json({ ok: false, erro: "Base inválida." });
+    }
+    try {
+      const report = await obterPreview(cidade);
+      res.json({ ok: true, report });
+    } catch (erro) {
+      console.error("[CIM] Erro ao montar o preview:", erro);
+      res.status(502).json({ ok: false, erro: "Não foi possível obter os dados meteorológicos agora." });
+    }
   });
-});
 
-app.get("/api/cidades", (req, res) => {
-  res.json({
-    ativa: CIDADE_ATIVA || require("./src/config/cities").CIDADE_PADRAO,
-    disponiveis: Object.values(CIDADES).map((c) => ({ chave: c.chave, nome: c.nome, uf: c.uf })),
-  });
-});
+  // -----------------------------------------------------------------------
+  // Senha operacional (botão Gerar e enviar, responsáveis, PDFs). V-05:
+  // atraso progressivo por IP em vez de bloqueio — a senha correta nunca é
+  // recusada por causa de erros de outra pessoa no mesmo IP.
+  // -----------------------------------------------------------------------
+  const controleTentativas = criarControleTentativas(opcoesTentativas);
+  app.locals.controleTentativas = controleTentativas;
 
-// -----------------------------------------------------------------------
-// Responsáveis (nome + e-mail) que recebem o informativo de cada base.
-// Leitura é pública (fica à mostra no painel da TV); cadastrar/remover
-// exige a mesma senha operacional do botão de gerar relatório.
-// -----------------------------------------------------------------------
-app.post("/api/verificar-senha", (req, res) => {
-  const checagem = verificarSenha(req);
-  if (!checagem.ok) {
-    return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+  // Retorna { ok, status, erro } — usado por todos os endpoints protegidos.
+  async function verificarSenha(req, senha = req.body?.senha) {
+    return controleTentativas.verificar(req.ip, () => senhaConfere(senha));
   }
-  res.json({ ok: true });
-});
 
-app.get("/api/responsaveis", (req, res) => {
-  try {
-    if (req.query.cidade) {
-      const cidade = getCidade(req.query.cidade);
-      return res.json({
-        ok: true,
-        bases: [{ chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, responsaveis: responsaveis.listarPorCidade(cidade.chave) }],
+  // -----------------------------------------------------------------------
+  // PDFs gerados (V-07). Antes eram servidos por express.static sem
+  // autenticação e com nome previsível. Agora só com:
+  //   - link temporário (?token=...) criado em /api/gerar-relatorio, válido
+  //     por 24 h e só para aquele arquivo; ou
+  //   - a senha operacional via HTTP Basic (o navegador pede a senha; o nome
+  //     de usuário é ignorado), com o mesmo controle de tentativas.
+  // -----------------------------------------------------------------------
+  const linksRelatorio = criarLinksRelatorio();
+  app.locals.linksRelatorio = linksRelatorio;
+  const NOME_PDF_VALIDO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.pdf$/;
+
+  app.get("/relatorios/:arquivo", async (req, res, next) => {
+    const { arquivo } = req.params;
+    if (!NOME_PDF_VALIDO.test(arquivo)) {
+      return res.status(404).json({ ok: false, erro: "Não encontrado." });
+    }
+
+    const token = req.query.token;
+    if (!(typeof token === "string" && linksRelatorio.valido(token, arquivo))) {
+      const senha = senhaDoBasicAuth(req);
+      const checagem = senha === undefined ? { ok: false, status: 401 } : await verificarSenha(req, senha);
+      if (!checagem.ok) {
+        if (checagem.status === 401) {
+          res.setHeader("WWW-Authenticate", 'Basic realm="Relatorios CIM", charset="UTF-8"');
+        }
+        return res.status(checagem.status).json({ ok: false, erro: checagem.erro || "Não autorizado." });
+      }
+    }
+
+    res.sendFile(
+      arquivo,
+      { root: pastaRelatorios, dotfiles: "deny", headers: { "Cache-Control": "private, no-store" } },
+      (erro) => {
+        if (erro && !res.headersSent) next(erro.status === 404 || erro.code === "ENOENT" ? Object.assign(erro, { status: 404 }) : erro);
+      }
+    );
+  });
+
+  let geracaoEmAndamento = false;
+
+  app.post("/api/gerar-relatorio", async (req, res) => {
+    const checagem = await verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+
+    if (geracaoEmAndamento) {
+      return res.status(409).json({
+        ok: false,
+        erro: "Já existe uma geração de relatório em andamento. Aguarde a conclusão.",
       });
     }
-    res.json({ ok: true, bases: responsaveis.listarTodos() });
-  } catch (erro) {
-    res.status(400).json({ ok: false, erro: erro.message });
-  }
-});
 
-app.post("/api/responsaveis", (req, res) => {
-  const checagem = verificarSenha(req);
-  if (!checagem.ok) {
-    return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
-  }
-  try {
-    const { cidade, nome, email } = req.body || {};
-    const lista = responsaveis.adicionar(cidade, nome, email);
-    res.json({ ok: true, responsaveis: lista });
-  } catch (erro) {
-    res.status(400).json({ ok: false, erro: erro.message });
-  }
-});
+    let cidadeChave;
+    try {
+      cidadeChave = getCidade(req.body?.cidade || CIDADE_ATIVA).chave;
+    } catch (erro) {
+      return res.status(400).json({ ok: false, erro: "Base inválida." });
+    }
 
-app.delete("/api/responsaveis", (req, res) => {
-  const checagem = verificarSenha(req);
-  if (!checagem.ok) {
-    return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
-  }
-  try {
-    const { cidade, email } = req.body || {};
-    const lista = responsaveis.remover(cidade, email);
-    res.json({ ok: true, responsaveis: lista });
-  } catch (erro) {
-    res.status(400).json({ ok: false, erro: erro.message });
-  }
-});
+    geracaoEmAndamento = true;
+    try {
+      const resultado = await executarPipeline({ cidadeChave, enviarEmail: true });
+      // atualiza o cache dessa base na hora, sem esperar o próximo /api/preview
+      previewCachePorBase.set(resultado.report.cidade.chave, { dados: resultado.report, timestamp: Date.now() });
+      // Link de download com token aleatório, válido por 24 h (V-07).
+      const link = resultado.arquivoPdf ? linksRelatorio.gerar(resultado.arquivoPdf) : null;
+      res.json({
+        ok: true,
+        arquivo: resultado.arquivoPdf,
+        urlArquivo: link
+          ? `/relatorios/${encodeURIComponent(resultado.arquivoPdf)}?token=${link.token}`
+          : null,
+        linkExpiraEmISO: link ? link.expiraEmISO : null,
+        destinatarios: resultado.envio?.destinatarios || [],
+        geradoEmISO: resultado.report.geradoEmISO,
+        avisosColeta: resultado.report.avisosColeta,
+      });
+    } catch (erro) {
+      console.error("[CIM] Erro ao gerar/enviar relatório sob demanda:", erro);
+      res.status(500).json({ ok: false, erro: "Falha ao gerar ou enviar o relatório. Detalhes no log do servidor." });
+    } finally {
+      geracaoEmAndamento = false;
+    }
+  });
 
-app.listen(PORTA, () => {
-  console.log(`[CIM] Painel disponível em http://localhost:${PORTA}`);
-  iniciarAgendamentoDiario();
-  agendarEnvioUnicoHoje();
-  iniciarMonitorAlertas();
-});
+  app.get("/api/logos", (req, res) => {
+    const { petrobras, cim } = arquivosLogos();
+    res.json({
+      ok: true,
+      petrobras: petrobras ? `/logo/${petrobras}` : null,
+      cim: cim ? `/logo/${cim}` : null,
+    });
+  });
+
+  app.get("/api/cidades", (req, res) => {
+    res.json({
+      ativa: CIDADE_ATIVA || require("./src/config/cities").CIDADE_PADRAO,
+      disponiveis: Object.values(CIDADES).map((c) => ({ chave: c.chave, nome: c.nome, uf: c.uf })),
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Responsáveis (nome + e-mail) que recebem o informativo de cada base.
+  // Leitura pública devolve SÓ OS NOMES (ficam à mostra no painel da TV).
+  // E-mails (dado pessoal, V-06) só com a senha operacional, via
+  // POST /api/responsaveis/consultar; cadastrar/remover também exige senha.
+  // -----------------------------------------------------------------------
+  const somenteNomes = (lista) => lista.map((r) => ({ nome: r?.nome }));
+
+  function basesResponsaveis(cidadeChave, { comEmail }) {
+    const formatar = comEmail ? (l) => l : somenteNomes;
+    if (cidadeChave) {
+      const cidade = getCidade(cidadeChave);
+      return [{ chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, responsaveis: formatar(responsaveis.listarPorCidade(cidade.chave)) }];
+    }
+    return responsaveis.listarTodos().map((b) => ({ ...b, responsaveis: formatar(b.responsaveis) }));
+  }
+  app.post("/api/verificar-senha", async (req, res) => {
+    const checagem = await verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+    res.json({ ok: true });
+  });
+
+  app.get("/api/responsaveis", (req, res) => {
+    try {
+      res.json({ ok: true, bases: basesResponsaveis(req.query.cidade, { comEmail: false }) });
+    } catch (erro) {
+      responderErro(res, erro, "Erro ao listar responsáveis");
+    }
+  });
+
+  app.post("/api/responsaveis/consultar", async (req, res) => {
+    const checagem = await verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+    try {
+      res.json({
+        ok: true,
+        bases: basesResponsaveis(req.body?.cidade, { comEmail: true }),
+        responsaveis: responsaveis.listarResponsaveis(),
+        basesDisponiveis: Object.values(CIDADES).map(({ chave, nome, uf }) => ({ chave, nome, uf })),
+      });
+    } catch (erro) {
+      responderErro(res, erro, "Erro ao consultar responsáveis");
+    }
+  });
+
+  app.post("/api/responsaveis", async (req, res) => {
+    const checagem = await verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+    try {
+      const { cidade, nome, email } = req.body || {};
+      if (cidade) {
+        const lista = responsaveis.adicionar(cidade, nome, email);
+        return res.json({ ok: true, responsaveis: lista });
+      }
+      const pessoa = responsaveis.cadastrarResponsavel(nome, email);
+      res.json({ ok: true, responsavel: pessoa });
+    } catch (erro) {
+      responderErro(res, erro, "Erro ao cadastrar responsável");
+    }
+  });
+
+  app.put("/api/responsaveis", async (req, res) => {
+    const checagem = await verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+    try {
+      const pessoa = responsaveis.atualizarBases(req.body?.email, req.body?.bases);
+      res.json({ ok: true, responsavel: pessoa });
+    } catch (erro) {
+      responderErro(res, erro, "Erro ao vincular bases ao responsável");
+    }
+  });
+
+  app.delete("/api/responsaveis", async (req, res) => {
+    const checagem = await verificarSenha(req);
+    if (!checagem.ok) {
+      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+    }
+    try {
+      const { cidade, email } = req.body || {};
+      if (cidade) {
+        const lista = responsaveis.remover(cidade, email);
+        return res.json({ ok: true, responsaveis: lista });
+      }
+      const lista = responsaveis.removerResponsavel(email);
+      res.json({ ok: true, responsaveis: lista });
+    } catch (erro) {
+      responderErro(res, erro, "Erro ao remover responsável");
+    }
+  });
+
+  // V-09: 404 em JSON para rotas desconhecidas e handler final que nunca
+  // expõe stack trace (JSON malformado, corpo grande demais etc.).
+  app.use(naoEncontrado);
+  app.use(tratadorDeErros);
+
+  return app;
+}
+
+function iniciarServidor() {
+  // V-02: sem senha forte definida no ambiente, o painel não sobe.
+  const problema = problemaSenhaConfigurada(process.env.DASHBOARD_PASSWORD);
+  if (problema) {
+    console.error(
+      `[CIM] ${problema} O servidor não foi iniciado. Defina no .env ou no ambiente ` +
+        "uma DASHBOARD_PASSWORD com pelo menos 12 caracteres (recomendado: 16+ aleatórios)."
+    );
+    process.exit(1);
+  }
+
+  const rede = opcoesDeRede(process.env);
+  if (rede.modo === "erro") {
+    console.error(`[CIM] ${rede.erro} O servidor não foi iniciado.`);
+    process.exit(1);
+  }
+
+  const app = criarApp();
+  let agendamentosIniciados = false;
+  const iniciarAgendamentos = () => {
+    if (agendamentosIniciados) return;
+    agendamentosIniciados = true;
+    iniciarAgendamentoDiario();
+    agendarEnvioUnicoHoje();
+    iniciarMonitorAlertas();
+  };
+  const hostLog = rede.host || "localhost";
+
+  if (rede.modo === "https") {
+    // V-03: HTTPS com o certificado .pfx da CA corporativa + HSTS
+    // (cabecalhos.js envia Strict-Transport-Security em req.secure).
+    const { pfx, erro } = carregarPfx(rede.caminhoPfx);
+    if (erro) {
+      console.error(`[CIM] ${erro} O servidor não foi iniciado.`);
+      process.exit(1);
+    }
+    let servidorHttps;
+    try {
+      servidorHttps = https.createServer({ pfx, passphrase: rede.senhaPfx, minVersion: "TLSv1.2" }, app);
+    } catch (erroPfx) {
+      console.error("[CIM] Certificado .pfx inválido ou HTTPS_PFX_SENHA incorreta. O servidor não foi iniciado.");
+      process.exit(1);
+    }
+    servidorHttps.listen(rede.portaHttps, rede.host, () => {
+      console.log(`[CIM] Painel disponível em https://${hostLog}:${rede.portaHttps}`);
+      iniciarAgendamentos();
+    });
+    // HTTP na porta antiga só redireciona para HTTPS (link da TV continua valendo).
+    http
+      .createServer(redirecionarParaHttps(rede.portaHttps, (process.env.HTTPS_HOST_PUBLICO || "").trim() || undefined))
+      .listen(PORTA, rede.host, () => {
+        console.log(`[CIM] http://${hostLog}:${PORTA} redireciona para HTTPS.`);
+      });
+    return;
+  }
+
+  app.listen(PORTA, rede.host, () => {
+    console.log(`[CIM] Painel disponível em http://${hostLog}:${PORTA}`);
+    if (process.env.NODE_ENV === "production" && valorTrustProxy(process.env.TRUST_PROXY) === false) {
+      console.warn(
+        "[CIM] AVISO: servindo só HTTP. Configure HTTPS_PFX_PATH/HTTPS_PFX_SENHA ou publique atrás de um " +
+          "proxy reverso com TLS (ver INSTALACAO_SERVIDOR_PETROBRAS.md)."
+      );
+    }
+    iniciarAgendamentos();
+  });
+}
+
+if (executadoDiretamente) iniciarServidor();
+
+module.exports = { criarApp, iniciarServidor };
 

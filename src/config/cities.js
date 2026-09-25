@@ -193,14 +193,25 @@ const CIDADES = {
 // Cidade usada por padrão quando a env CIDADE não é definida.
 const CIDADE_PADRAO = "rio_de_janeiro";
 
-function getCidade(chave) {
-  const c = CIDADES[chave || CIDADE_PADRAO];
-  if (!c) {
-    throw new Error(
-      `Cidade "${chave}" não cadastrada em src/config/cities.js. Cidades disponíveis: ${Object.keys(CIDADES).join(", ")}`
-    );
-  }
-  return c;
+// Chaves de base válidas: só letras minúsculas e "_", 2 a 40 caracteres, e
+// que existam como propriedade PRÓPRIA de CIDADES (V-10). Object.hasOwn
+// impede que "constructor", "__proto__", "toString" etc. passem pela
+// validação por serem herdadas do protótipo.
+const CHAVE_BASE_REGEX = /^[a-z_]{2,40}$/;
+
+function baseExiste(chave) {
+  return typeof chave === "string" && CHAVE_BASE_REGEX.test(chave) && Object.hasOwn(CIDADES, chave);
 }
 
-module.exports = { CIDADES, CIDADE_PADRAO, getCidade };
+/** Erro com mensagem genérica, seguro para devolver ao cliente (HTTP 400). */
+function erroBaseInvalida() {
+  return Object.assign(new Error("Base inválida."), { status: 400, publico: true, code: "BASE_INVALIDA" });
+}
+
+function getCidade(chave) {
+  const efetiva = chave === undefined || chave === null || chave === "" ? CIDADE_PADRAO : chave;
+  if (!baseExiste(efetiva)) throw erroBaseInvalida();
+  return CIDADES[efetiva];
+}
+
+module.exports = { CIDADES, CIDADE_PADRAO, getCidade, baseExiste, erroBaseInvalida };

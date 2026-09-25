@@ -10,9 +10,9 @@
 // Duas regras guiam o desenho, ambas para não virar spam (alerta que é
 // ignorado não protege ninguém):
 //
-// 1. SÓ O QUE É GRAVE. Chuva moderada e vento de 45 km/h são assunto do
-//    informativo diário, não de um e-mail fora de hora. Aqui entram apenas
-//    condições que mudam decisão operacional na hora.
+// 1. SÓ O QUE EXIGE AÇÃO. Chuva intensa e rajadas entram a partir do grau de
+//    ATENÇÃO definido nos critérios INMET; as demais categorias preservam os
+//    limiares graves já existentes.
 //
 // 2. SÓ O QUE É NOVO. Cada alerta tem uma "assinatura"; o que já foi avisado
 //    fica registrado em data/alertas-notificados.json e não é repetido. Se a
@@ -23,6 +23,11 @@ const path = require("path");
 const { CIDADES, getCidade } = require("../config/cities");
 const { montarRelatorio } = require("./reportBuilder");
 const { LIMIARES } = require("./riskEngine");
+const {
+  classificarChuva,
+  classificarRajada,
+  recomendacoes,
+} = require("./inmetAlertRules");
 
 const ARQUIVO_ESTADO = path.join(__dirname, "..", "..", "data", "alertas-notificados.json");
 
@@ -65,7 +70,12 @@ function limparExpirados(estado) {
 // ---------------------------------------------------------------------------
 
 // Peso usado para decidir se um alerta "piorou" em relação ao já notificado.
-const GRAVIDADE = { alto: 2, severo: 3 };
+const GRAVIDADE = { atencao: 1, alto: 2, severo: 3 };
+const GRAVIDADE_POR_GRAU = {
+  "ATENÇÃO": "atencao",
+  ALERTA: "alto",
+  "EMERGÊNCIA": "severo",
+};
 
 function normalizarTexto(t) {
   return (t || "")
@@ -74,6 +84,43 @@ function normalizarTexto(t) {
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function maximoNumerico(valores) {
+  const validos = valores.filter(Number.isFinite);
+  return validos.length ? Math.max(...validos) : null;
+}
+
+function somaNumerica(valores) {
+  const validos = valores.filter(Number.isFinite);
+  return validos.length
+    ? Math.round(validos.reduce((soma, valor) => soma + valor, 0) * 10) / 10
+    : null;
+}
+
+function fontesDoDado(report, campos) {
+  return [...new Set(
+    campos
+      .map((campo) => report.fontesPorCampo?.[campo])
+      .filter((fonte) => fonte && fonte !== "Indisponível")
+  )].join(" / ") || "Fonte numérica indisponível";
+}
+
+function consolidarPorFenomeno(achados) {
+  const porAssinatura = new Map();
+  for (const alerta of achados) {
+    const atual = porAssinatura.get(alerta.assinatura);
+    if (!atual) {
+      porAssinatura.set(alerta.assinatura, alerta);
+      continue;
+    }
+    const nivelAtual = GRAVIDADE[atual.gravidade] ?? 0;
+    const nivelNovo = GRAVIDADE[alerta.gravidade] ?? 0;
+    if (nivelNovo > nivelAtual || (nivelNovo === nivelAtual && alerta.valores && !atual.valores)) {
+      porAssinatura.set(alerta.assinatura, alerta);
+    }
+  }
+  return [...porAssinatura.values()];
 }
 
 /**
@@ -92,16 +139,27 @@ function detectarAlertasGraves(report) {
     const ehPerigo = sev.includes("perigo") && !sev.includes("potencial");
     if (!ehGrandePerigo && !ehPerigo) continue;
 
+    const descricaoNormalizada = normalizarTexto(aviso.descricao);
+    const fenomeno = /chuva|alagamento/.test(descricaoNormalizada)
+      ? "chuva"
+      : /vento|rajada|ventania/.test(descricaoNormalizada)
+        ? "vento"
+        : null;
+    const grau = ehGrandePerigo ? "EMERGÊNCIA" : "ALERTA";
+
     achados.push({
       origem: "INMET",
-      tipo: aviso.descricao || "Aviso meteorológico",
-      gravidade: ehGrandePerigo ? "severo" : "alto",
+      tipo: fenomeno === "chuva" ? "Chuva intensa" : fenomeno === "vento" ? "Vento" : aviso.descricao || "Aviso meteorológico",
+      grau,
+      gravidade: GRAVIDADE_POR_GRAU[grau],
       severidadeTexto: aviso.severidade,
       detalhe: (aviso.riscos || [])[0] || "",
       janela: `${aviso.inicio} até ${aviso.fim}`,
+      naturezaDado: "Aviso oficial",
+      recomendacoes: fenomeno ? recomendacoes(fenomeno, grau) : [],
       // A assinatura ignora acentuação/caixa para que o mesmo aviso reemitido
       // com grafia levemente diferente não vire alerta novo.
-      assinatura: `inmet:${normalizarTexto(aviso.descricao)}:${aviso.inicio}`,
+      assinatura: fenomeno || `inmet:${descricaoNormalizada}:${aviso.inicio}`,
     });
   }
 
@@ -117,35 +175,56 @@ function detectarAlertasGraves(report) {
     });
   }
 
-  // 3. Limiares numéricos severos. Usam os mesmos valores do motor diário,
-  // então monitor e informativo nunca se contradizem.
-  const rajada = Math.max(
-    ...(report.ventoPorPeriodo || []).map((p) => p.rajadaMaxKmh ?? 0),
-    0
-  );
-  if (rajada >= LIMIARES.ventoForteKmh) {
+  // 3. Chuva intensa e rajada: critérios INMET centralizados. Os valores são
+  // previsões numéricas e mantêm a fonte real registrada no relatório.
+  const rajada = Number.isFinite(report.rajadaMaxKmh)
+    ? report.rajadaMaxKmh
+    : maximoNumerico((report.ventoPorPeriodo || []).map((p) => p.rajadaMaxKmh));
+  const grauVento = classificarRajada(rajada);
+  if (grauVento !== "NORMAL") {
+    const periodoRajada = (report.ventoPorPeriodo || []).find((p) => p.rajadaMaxKmh === rajada);
     achados.push({
-      origem: "Previsão",
-      tipo: "Vento forte",
-      gravidade: "alto",
-      detalhe: `Rajadas de até ${rajada} km/h previstas`,
-      janela: "próximas horas",
-      // Faixas de 10 km/h: sem isso, uma variação de 61 para 62 km/h geraria
-      // um alerta novo a cada verificação.
-      assinatura: `vento:${Math.floor(rajada / 10) * 10}`,
+      origem: "INMET",
+      fonteDados: fontesDoDado(report, ["rajadaMaxKmh"]),
+      naturezaDado: "Previsão",
+      tipo: "Vento",
+      grau: grauVento,
+      gravidade: GRAVIDADE_POR_GRAU[grauVento],
+      detalhe: `Rajada máxima prevista: ${rajada} km/h`,
+      valores: { rajadaKmh: rajada },
+      unidade: "km/h",
+      janela: periodoRajada?.periodo || "próximas horas",
+      recomendacoes: recomendacoes("vento", grauVento),
+      assinatura: "vento",
     });
   }
 
   const chuva = report.chuvaPorPeriodo || [];
-  const acumulado = chuva.reduce((s, p) => s + (p.precipitacaoMm || 0), 0);
-  if (acumulado >= LIMIARES.chuvaIntensaMm) {
+  const intensidadeHoraria = Number.isFinite(report.precipitacaoHorariaMaxMm)
+    ? report.precipitacaoHorariaMaxMm
+    : maximoNumerico(chuva.map((p) => p.precipitacaoHorariaMaxMm));
+  const acumulado = Number.isFinite(report.precipitacaoTotalMm)
+    ? report.precipitacaoTotalMm
+    : somaNumerica(chuva.map((p) => p.precipitacaoMm));
+  const classificacaoChuva = classificarChuva(intensidadeHoraria, acumulado);
+  if (classificacaoChuva.grau !== "NORMAL") {
+    const detalhes = [];
+    if (intensidadeHoraria != null) detalhes.push(`Intensidade horária máxima prevista: ${intensidadeHoraria} mm/h`);
+    if (acumulado != null) detalhes.push(`Acumulado diário previsto: ${acumulado} mm`);
+    const periodoChuva = chuva.find((p) => p.precipitacaoHorariaMaxMm === intensidadeHoraria);
     achados.push({
-      origem: "Previsão",
+      origem: "INMET",
+      fonteDados: fontesDoDado(report, ["precipitacaoHorariaMaxMm", "precipitacaoTotalMm"]),
+      naturezaDado: "Previsão",
       tipo: "Chuva intensa",
-      gravidade: "alto",
-      detalhe: `Acumulado previsto de ${Math.round(acumulado * 10) / 10} mm`,
-      janela: "restante do dia",
-      assinatura: `chuva:${Math.floor(acumulado / 10) * 10}`,
+      grau: classificacaoChuva.grau,
+      gravidade: GRAVIDADE_POR_GRAU[classificacaoChuva.grau],
+      detalhe: detalhes.join(" · "),
+      valores: { intensidadeHorariaMmH: intensidadeHoraria, acumuladoDiarioMm: acumulado },
+      unidade: "mm/h e mm/dia",
+      janela: periodoChuva?.periodo || "restante do dia",
+      recomendacoes: recomendacoes("chuva", classificacaoChuva.grau),
+      assinatura: "chuva",
     });
   }
 
@@ -182,7 +261,7 @@ function detectarAlertasGraves(report) {
     });
   }
 
-  return achados;
+  return consolidarPorFenomeno(achados);
 }
 
 /**
@@ -276,6 +355,7 @@ async function verificarAlertas({ registrar = true } = {}) {
 module.exports = {
   verificarAlertas,
   detectarAlertasGraves,
+  filtrarNovidades,
   carregarEstado,
   salvarEstado,
   ARQUIVO_ESTADO,

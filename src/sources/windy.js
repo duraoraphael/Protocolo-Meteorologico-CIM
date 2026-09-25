@@ -102,10 +102,10 @@ function criarCliente({fetchImpl=(...a)=>fetch(...a),timeoutMs=15000,clock=Date.
 }
 const consultar=criarCliente();
 async function buscarPacoteWindy(cidade) {
-  const avisos=[];if(!process.env.WINDY_API_KEY?.trim()) return {avisos:['Windy não configurado (WINDY_API_KEY); usando as fontes disponíveis.']};
+  const avisos=[],falhas={};if(!process.env.WINDY_API_KEY?.trim()) return {avisos:['Windy não configurado (WINDY_API_KEY); usando as fontes disponíveis.'],falhas};
   const ponto=cidade.pontoMar||cidade;
   const groups=[['weather',cidade],['air',cidade],...(cidade.costeira?[['sea',ponto]]:[])];
-  const data=await Promise.all(groups.map(async([group,p])=>{try{return [group,await consultar(p.latitude,p.longitude,group)];}catch(e){avisos.push(e.message);return [group,null];}}));
-  return {...Object.fromEntries(data),avisos};
+  const data=await Promise.all(groups.map(async([group,p])=>{try{return [group,await consultar(p.latitude,p.longitude,group)];}catch(e){avisos.push(e.message);falhas[group]=e.message;return [group,null];}}));
+  return {...Object.fromEntries(data),avisos,falhas};
 }
 module.exports={buscarPacoteWindy,criarCliente,normalizeWindyPointForecast,converter,vetor,cardinal,circular,chuva,temChave:()=>Boolean(process.env.WINDY_API_KEY?.trim()),buscarWindy:(a,b)=>consultar(a,b,'weather'),buscarMarWindy:(a,b)=>consultar(a,b,'sea')};
