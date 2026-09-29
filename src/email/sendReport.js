@@ -48,7 +48,13 @@ async function enviarRelatorioPorEmail(report, pdfBuffer) {
     ],
   });
 
-  return { messageId: info.messageId, destinatarios };
+  return {
+    messageId: info.messageId,
+    destinatarios,
+    respostaSmtp: info.response || null,
+    aceitos: Array.isArray(info.accepted) ? info.accepted.length : null,
+    rejeitados: Array.isArray(info.rejected) ? info.rejected.length : null,
+  };
 }
 
 module.exports = { enviarRelatorioPorEmail, listaDestinatarios };

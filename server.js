@@ -42,6 +42,7 @@ function criarApp({
   pastaRelatorios = PASTA_SAIDA,
   trustProxy = process.env.TRUST_PROXY,
   opcoesTentativas = {},
+  executarPipelineRelatorio = executarPipeline,
 } = {}) {
   const senhaConfere = criarComparadorSenha(senhaPainel);
   const app = express();
@@ -169,15 +170,27 @@ function criarApp({
   let geracaoEmAndamento = false;
 
   app.post("/api/gerar-relatorio", async (req, res) => {
+    console.log("[RELATORIO] Iniciando geração");
+    console.log("[RELATORIO] Validando autorização");
     const checagem = await verificarSenha(req);
     if (!checagem.ok) {
-      return res.status(checagem.status).json({ ok: false, erro: checagem.erro });
+      console.warn("[RELATORIO] Autorização recusada");
+      return res.status(checagem.status).json({
+        ok: false,
+        stage: "authorization",
+        message: checagem.erro,
+        erro: checagem.erro,
+      });
     }
+    console.log("[RELATORIO] Autorização validada");
 
     if (geracaoEmAndamento) {
+      const mensagem = "Já existe uma geração de relatório em andamento. Aguarde a conclusão.";
       return res.status(409).json({
         ok: false,
-        erro: "Já existe uma geração de relatório em andamento. Aguarde a conclusão.",
+        stage: "processing",
+        message: mensagem,
+        erro: mensagem,
       });
     }
 
@@ -190,13 +203,14 @@ function criarApp({
 
     geracaoEmAndamento = true;
     try {
-      const resultado = await executarPipeline({ cidadeChave, enviarEmail: true });
+      const resultado = await executarPipelineRelatorio({ cidadeChave, enviarEmail: true });
       // atualiza o cache dessa base na hora, sem esperar o próximo /api/preview
       previewCachePorBase.set(resultado.report.cidade.chave, { dados: resultado.report, timestamp: Date.now() });
       // Link de download com token aleatório, válido por 24 h (V-07).
       const link = resultado.arquivoPdf ? linksRelatorio.gerar(resultado.arquivoPdf) : null;
       res.json({
         ok: true,
+        message: "Relatório gerado e enviado com sucesso.",
         arquivo: resultado.arquivoPdf,
         urlArquivo: link
           ? `/relatorios/${encodeURIComponent(resultado.arquivoPdf)}?token=${link.token}`
@@ -206,9 +220,19 @@ function criarApp({
         geradoEmISO: resultado.report.geradoEmISO,
         avisosColeta: resultado.report.avisosColeta,
       });
+      console.log("[RELATORIO] Fluxo concluído com sucesso");
     } catch (erro) {
-      console.error("[CIM] Erro ao gerar/enviar relatório sob demanda:", erro);
-      res.status(500).json({ ok: false, erro: "Falha ao gerar ou enviar o relatório. Detalhes no log do servidor." });
+      const stage = erro?.etapa || "unknown";
+      const message = erro?.mensagemPublica || "Não foi possível concluir o envio do relatório.";
+      const status = stage === "weather" || stage === "email" ? 502 : 500;
+      console.error("[RELATORIO][ERRO][ROTA]", {
+        mensagem: erro?.message || String(erro),
+        stack: erro?.stack,
+        funcao: "POST /api/gerar-relatorio",
+        etapa: stage,
+        erroOriginal: erro?.cause || erro,
+      });
+      res.status(status).json({ ok: false, stage, message, erro: message });
     } finally {
       geracaoEmAndamento = false;
     }

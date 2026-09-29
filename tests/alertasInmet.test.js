@@ -7,7 +7,7 @@ const {
   classificarChuva,
   classificarRajada,
 } = require("../src/logic/inmetAlertRules");
-const { detectarAlertasGraves, filtrarNovidades } = require("../src/logic/alertWatcher");
+const { detectarAlertasGraves, filtrarNovidades, marcarAlertasEnviados } = require("../src/logic/alertWatcher");
 const { renderAlertEmailHtml, assuntoAlerta } = require("../src/render/alertEmailTemplate");
 
 function conferirFronteiras(classificar, casos) {
@@ -139,6 +139,35 @@ test("deduplicação ignora variação no mesmo grau e reavisa quando agrava", (
   assert.equal(agravado[0].motivo, "agravou");
 });
 
+test("mudança de gatilho comunica agravamento, redução e retorno ao normal uma vez", () => {
+  const base = "rio_de_janeiro";
+  const estado = {};
+  const alerta = (grau, gravidade) => ({ assinatura: "vento", tipo: "Vento", grau, gravidade, origem: "INMET", fonteDados: "Open-Meteo" });
+  const enviar = (achados) => {
+    const novidades = filtrarNovidades(base, achados, estado);
+    if (novidades.length) marcarAlertasEnviados({ alertas: novidades }, { carregar: () => estado, salvar: () => {} });
+    return novidades;
+  };
+  assert.equal(enviar([alerta("ATENÇÃO", "atencao")]).length, 1);
+  assert.equal(enviar([alerta("ATENÇÃO", "atencao")]).length, 0);
+  assert.equal(enviar([alerta("ALERTA", "alto")])[0].motivo, "agravou");
+  assert.equal(enviar([alerta("EMERGÊNCIA", "severo")])[0].motivo, "agravou");
+  assert.equal(enviar([alerta("EMERGÊNCIA", "severo")]).length, 0);
+  assert.equal(enviar([alerta("ALERTA", "alto")])[0].motivo, "reduziu");
+  assert.equal(enviar([alerta("ATENÇÃO", "atencao")])[0].motivo, "reduziu");
+  assert.equal(enviar([])[0].grau, "NORMAL");
+  assert.equal(enviar([]).length, 0);
+  assert.equal(enviar([alerta("ATENÇÃO", "atencao")]).length, 1);
+});
+
+test("estado de alerta só muda ao confirmar explicitamente o envio", () => {
+  const estado = {};
+  const [alerta] = filtrarNovidades("macae", [{ assinatura: "chuva", tipo: "Chuva", grau: "ALERTA", gravidade: "alto" }], estado);
+  assert.deepEqual(estado, {});
+  marcarAlertasEnviados({ alertas: [alerta] }, { carregar: () => estado, salvar: () => {} });
+  assert.equal(estado["macae|chuva"].grau, "ALERTA");
+});
+
 test("e-mail apresenta fenômeno, grau, fontes, valores e recomendações", () => {
   const alerta = detectarAlertasGraves(relatorioBase()).find((a) => a.assinatura === "chuva");
   const base = {
@@ -156,9 +185,53 @@ test("e-mail apresenta fenômeno, grau, fontes, valores e recomendações", () =
   const html = renderAlertEmailHtml(base);
 
   assert.match(html, /ALERTA — CHUVA INTENSA/);
-  assert.match(html, /Fonte do critério: INMET/);
-  assert.match(html, /Fonte do dado: Open-Meteo/);
+  assert.doesNotMatch(html, /Fonte do critério/);
+  assert.match(html, /Fonte de dados: Open-Meteo/);
   assert.match(html, /Intensidade horária máxima prevista: 25 mm\/h/);
-  assert.match(html, /Recomendações:/);
+  assert.match(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
   assert.match(assuntoAlerta(base), /ALERTA — Rio de Janeiro\/RJ: Chuva intensa/);
+});
+
+test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem duplicar", () => {
+  const report = relatorioBase();
+  report.avisosInmet = [{
+    descricao: "Tempestade",
+    severidade: "Perigo",
+    inicio: "14:00",
+    fim: "18:00",
+    riscos: ["Chuva entre 30 e 60 mm/h.", "Ventos intensos de 60 a 100 km/h."],
+  }];
+  const oficial = detectarAlertasGraves(report).find((a) => a.naturezaDado === "Aviso oficial");
+  assert.equal(oficial.fonteDados, "INMET");
+  const html = renderAlertEmailHtml({
+    cidade: { nome: "Rio de Janeiro", uf: "RJ" },
+    report: { dataFormatadaCurta: "28/09/2026", horaConsulta: "15:00", ventoPorPeriodo: [] },
+    alertas: [oficial],
+  });
+  assert.match(html, /Aviso oficial INMET/);
+  assert.match(html, /Motivo do aviso:.*Chuva entre 30 e 60 mm\/h\. Ventos intensos de 60 a 100 km\/h\./);
+  assert.match(html, /Fonte de dados: INMET/);
+  assert.equal((html.match(/Chuva entre 30 e 60 mm\/h/g) || []).length, 1);
+});
+
+test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {
+  const cores = [
+    ["NORMAL", "normal", "#FBC02D"],
+    ["ATENÇÃO", "atencao", "#F57C00"],
+    ["ALERTA", "alto", "#D32F2F"],
+    ["EMERGÊNCIA", "severo", "#B71C1C"],
+  ];
+  for (const [grau, gravidade, cor] of cores) {
+    const html = renderAlertEmailHtml({
+      cidade: { nome: "Rio de Janeiro", uf: "RJ" },
+      report: { dataFormatadaCurta: "28/09/2026", horaConsulta: "15:00", ventoPorPeriodo: [], condicaoGeral: "Nublado" },
+      alertas: [{ tipo: "Vento", grau, gravidade, janela: "Tarde", fonteDados: "Open-Meteo" }],
+    });
+    assert.match(html, new RegExp(cor));
+    assert.match(html, /CIM/);
+    assert.match(html, /Centro integrado de monitoramento/);
+    assert.match(html, /compartilhado/);
+    assert.match(html, /Fonte de dados: Open-Meteo/);
+    assert.doesNotMatch(html, /Fonte do critério|Fonte do dado/);
+  }
 });

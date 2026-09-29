@@ -50,7 +50,7 @@ function linhaBase(base, chuvaMaxRef, rajadaMaxRef) {
           <strong>${esc(base.cidade.nome)}</strong>
           <span style="color:#888;font-size:11px;">${esc(base.cidade.uf)}</span>
           <div style="color:#777;font-size:11px;margin-top:1px;">
-            ${base.tempMinSemana}–${base.tempMaxSemana}°C · ${base.chuvaTotalSemana} mm · rajada ${base.rajadaMaxSemana} km/h${base.ondaMaxSemana ? ` · onda ${base.ondaMaxSemana} m` : ""}
+            ${base.tempMinSemana}–${base.tempMaxSemana}°C · ${base.chuvaTotalSemana} mm · rajada prevista ${base.rajadaMaxSemana} km/h${base.ondaMaxSemana ? ` · onda ${base.ondaMaxSemana} m` : ""}
           </div>
         </td>
         <td width="130" align="right" valign="middle">

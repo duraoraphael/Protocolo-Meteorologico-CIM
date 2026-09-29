@@ -97,7 +97,79 @@ function classificarChuva(intensidadeHorariaMmH, acumuladoDiarioMm) {
 }
 
 function recomendacoes(fenomeno, grau) {
-  return [...(RECOMENDACOES[fenomeno]?.[grau] || [])];
+  const niveis = ["ATENÇÃO", "ALERTA", "EMERGÊNCIA"];
+  const indice = niveis.indexOf(grau);
+  if (indice < 0) return [];
+  return niveis.slice(0, indice + 1).flatMap((nivel) => RECOMENDACOES[fenomeno]?.[nivel] || []);
+}
+
+/**
+ * Classifica, em uma única passagem, os gatilhos numéricos usados pelo
+ * informativo e pelo monitor de alertas. Os limites continuam definidos
+ * somente em LIMITES_ALERTA_INMET.
+ */
+function classificarCondicoesMeteorologicas({
+  rajadaKmh = null,
+  chuvaHorariaMmH = null,
+  chuvaDiariaMm = null,
+} = {}) {
+  const grauVento = classificarRajada(rajadaKmh);
+  const classificacaoChuva = classificarChuva(chuvaHorariaMmH, chuvaDiariaMm);
+  const eventos = [];
+
+  if (grauVento !== "NORMAL") {
+    const detalhe = `Rajada prevista: ${rajadaKmh} km/h`;
+    eventos.push({
+      assinatura: "vento",
+      fenomeno: "vento",
+      tipo: "Vento",
+      titulo: `${grauVento} — VENTO`,
+      grau: grauVento,
+      detalhe,
+      descricao: detalhe,
+      valores: { rajadaKmh },
+      unidade: "km/h",
+      recomendacoes: recomendacoes("vento", grauVento),
+    });
+  }
+
+  if (classificacaoChuva.grau !== "NORMAL") {
+    const detalhes = [];
+    if (Number.isFinite(chuvaHorariaMmH)) {
+      detalhes.push(`Intensidade horária máxima prevista: ${chuvaHorariaMmH} mm/h`);
+    }
+    if (Number.isFinite(chuvaDiariaMm)) {
+      detalhes.push(`Acumulado diário previsto: ${chuvaDiariaMm} mm`);
+    }
+    const detalhe = detalhes.join(" · ");
+    eventos.push({
+      assinatura: "chuva",
+      fenomeno: "chuva",
+      tipo: "Chuva intensa",
+      titulo: `${classificacaoChuva.grau} — CHUVA INTENSA`,
+      grau: classificacaoChuva.grau,
+      detalhe,
+      descricao: detalhe,
+      valores: {
+        intensidadeHorariaMmH: chuvaHorariaMmH,
+        acumuladoDiarioMm: chuvaDiariaMm,
+      },
+      unidade: "mm/h e mm/dia",
+      recomendacoes: recomendacoes("chuva", classificacaoChuva.grau),
+    });
+  }
+
+  eventos.sort((a, b) => GRAUS[b.grau] - GRAUS[a.grau]);
+  return {
+    grau: maiorGrau(grauVento, classificacaoChuva.grau),
+    vento: { grau: grauVento, rajadaKmh },
+    chuva: {
+      ...classificacaoChuva,
+      intensidadeHorariaMmH: chuvaHorariaMmH,
+      acumuladoDiarioMm: chuvaDiariaMm,
+    },
+    eventos,
+  };
 }
 
 module.exports = {
@@ -109,4 +181,5 @@ module.exports = {
   classificarRajada,
   maiorGrau,
   recomendacoes,
+  classificarCondicoesMeteorologicas,
 };

@@ -21,7 +21,10 @@ async function gerarPdfBuffer(report) {
   try {
     // V-12: sem JavaScript e sem rede (só data: e about:).
     await prepararPaginaIsolada(page);
-    await page.setContent(renderPdfHtml(report), { waitUntil: "networkidle0" });
+    await page.setContent(renderPdfHtml(report), {
+      waitUntil: "load",
+      timeout: 60000,
+    });
     const buffer = await page.pdf({
       format: "A4",
       printBackground: true,

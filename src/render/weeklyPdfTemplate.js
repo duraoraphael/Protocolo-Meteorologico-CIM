@@ -67,7 +67,7 @@ function tabelaDiasBase(base) {
     <thead>
       <tr>
         <th>Dia</th><th>Condição</th><th>Mín/Máx</th><th>Chuva</th>
-        <th>Rajada</th><th>UV</th>${temMar ? "<th>Onda</th>" : ""}<th>Situação</th>
+        <th>Rajada prevista</th><th>UV</th>${temMar ? "<th>Onda</th>" : ""}<th>Situação</th>
       </tr>
     </thead>
     <tbody>
@@ -100,7 +100,7 @@ function secaoBase(base, indice) {
         <div class="base-resumo">
           ${base.tempMinSemana}°C a ${base.tempMaxSemana}°C &nbsp;·&nbsp;
           ${base.chuvaTotalSemana} mm na semana &nbsp;·&nbsp;
-          rajada máx. ${base.rajadaMaxSemana} km/h &nbsp;·&nbsp;
+          rajada prevista ${base.rajadaMaxSemana} km/h &nbsp;·&nbsp;
           UV máx. ${base.uvMaxSemana}
           ${base.ondaMaxSemana ? ` &nbsp;·&nbsp; onda máx. ${base.ondaMaxSemana} m` : ""}
         </div>

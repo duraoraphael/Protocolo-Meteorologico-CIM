@@ -5,8 +5,10 @@
 // acrescentamos as autoridades já confiadas pelo sistema operacional.
 const tls = require("node:tls");
 const dns = require("node:dns");
+const { Agent, setGlobalDispatcher } = require("undici");
 
 let configurado = false;
+const TIMEOUT_CONEXAO_HTTP_MS = 30000;
 
 function preferirIpv4NoWindows() {
   if (process.platform !== "win32") return false;
@@ -29,7 +31,21 @@ function configurarCertificadosDoSistema() {
   return true;
 }
 
+// O fetch nativo do Node encerra a conexão em 10 s, mesmo quando a chamada
+// possui um AbortSignal mais longo. Em redes corporativas, o handshake TLS
+// pode ultrapassar esse limite. Mantemos os timeouts totais de cada fonte e
+// aumentamos apenas o prazo de estabelecimento da conexão HTTPS.
+function configurarClienteHttp() {
+  setGlobalDispatcher(new Agent({ connectTimeout: TIMEOUT_CONEXAO_HTTP_MS }));
+}
+
 preferirIpv4NoWindows();
 configurarCertificadosDoSistema();
+configurarClienteHttp();
 
-module.exports = { configurarCertificadosDoSistema, preferirIpv4NoWindows };
+module.exports = {
+  TIMEOUT_CONEXAO_HTTP_MS,
+  configurarCertificadosDoSistema,
+  configurarClienteHttp,
+  preferirIpv4NoWindows,
+};

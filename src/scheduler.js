@@ -1,12 +1,16 @@
 const cron = require("node-cron");
 const { executarPipeline } = require("./pipeline");
 const { CIDADES } = require("./config/cities");
+const { dataBrasilia, lerEstado, gravarEstado, resumo } = require("./logic/scheduledReport");
+const {
+  relatorioDiarioAtivo,
+  envioUnicoAgendadoAtivo,
+  alertasAutomaticosAtivos,
+} = require("./config/email");
 
 /**
- * Quais bases recebem o envio automático diário. Por padrão, TODAS as
- * cadastradas em src/config/cities.js (cada uma para seus próprios
- * responsáveis — ver src/config/recipients.js). Para restringir a um
- * subconjunto, defina no .env:
+ * Restrição opcional do envio único de teste. O agendamento 05h/15h percorre
+ * sempre todas as bases cadastradas em src/config/cities.js.
  *   BASES_ENVIO_DIARIO=rio_de_janeiro,salvador
  */
 function basesParaEnvioDiario() {
@@ -24,49 +28,73 @@ function basesParaEnvioDiario() {
     });
 }
 
-/**
- * Agenda o envio automático diário do informativo para cada base cadastrada.
- * Controlado por env:
- *   HORA_ENVIO_DIARIO=06:00   (HH:mm, horário de Brasília)
- *   ENVIO_AUTOMATICO_DIARIO=false   (desliga o agendamento; padrão: ligado)
- *   BASES_ENVIO_DIARIO=chave1,chave2   (opcional; padrão: todas as bases)
- */
-function iniciarAgendamentoDiario(onResultado) {
+let processamentoAgendado = false;
+
+async function executarHorarioAgendado(horario, {
+  executar = executarPipeline,
+  onResultado,
+  bases = Object.keys(CIDADES),
+  carregar = lerEstado,
+  salvar = gravarEstado,
+  data = dataBrasilia(),
+} = {}) {
+  if (processamentoAgendado) {
+    console.warn(`[AGENDADOR] ${horario}: execução anterior ainda em andamento; ciclo sobreposto ignorado.`);
+    return;
+  }
+  processamentoAgendado = true;
+  console.log(`[AGENDADOR] ${horario} iniciado (${data}).`);
+  try {
+    const estado = carregar();
+    for (const cidadeChave of bases) {
+      const nome = CIDADES[cidadeChave]?.nome || cidadeChave;
+      const chave = `${data}|${cidadeChave}|${horario}`;
+      if (estado[chave]) {
+        console.log(`[AGENDADOR] ${nome}: envio das ${horario} já confirmado; ignorado.`);
+        continue;
+      }
+      console.log(`[AGENDADOR] ${nome}: iniciando coleta (${horario}).`);
+      try {
+        const resultado = await executar({
+          cidadeChave,
+          enviarEmail: true,
+          horarioAgendado: horario,
+          comparacaoAnterior: horario === "15:00" ? estado[`${data}|${cidadeChave}|05:00`]?.resumo || null : null,
+        });
+        if (!resultado.envio) throw new Error("SMTP não confirmou o envio do relatório.");
+        estado[chave] = { enviadoEmISO: new Date().toISOString(), resumo: resumo(resultado.report) };
+        salvar(estado);
+        console.log(`[AGENDADOR] ${nome}: relatório gerado e e-mail enviado com sucesso (${horario}).`);
+        onResultado?.(null, resultado);
+      } catch (erro) {
+        console.error(`[AGENDADOR] ${nome}: falha às ${horario}: ${erro.message}`);
+        onResultado?.(erro, null);
+      }
+    }
+  } catch (erro) {
+    console.error(`[AGENDADOR] ${horario}: não foi possível ler o estado dos envios: ${erro.message}`);
+    onResultado?.(erro, null);
+  } finally {
+    processamentoAgendado = false;
+    console.log(`[AGENDADOR] ${horario} finalizado.`);
+  }
+}
+
+/** Agenda os dois relatórios diários para todas as bases em Brasília. */
+function iniciarAgendamentoDiario(onResultado, agendar = cron.schedule) {
+  if (!relatorioDiarioAtivo()) {
+    console.log("[CIM] Agendamento diário desativado em src/config/email.js.");
+    return null;
+  }
   if (process.env.ENVIO_AUTOMATICO_DIARIO === "false") {
     console.log("[CIM] Agendamento diário desativado via ENVIO_AUTOMATICO_DIARIO=false.");
     return null;
   }
 
-  const horario = process.env.HORA_ENVIO_DIARIO || "06:00";
-  const [hora, minuto] = horario.split(":").map((v) => parseInt(v, 10));
-  if (Number.isNaN(hora) || Number.isNaN(minuto)) {
-    console.warn(`[CIM] HORA_ENVIO_DIARIO inválida ("${horario}"), usando 06:00.`);
-  }
-  const expressao = `${Number.isNaN(minuto) ? 0 : minuto} ${Number.isNaN(hora) ? 6 : hora} * * *`;
-
-  const tarefa = cron.schedule(
-    expressao,
-    async () => {
-      const bases = basesParaEnvioDiario();
-      console.log(`[CIM] Disparando envio automático diário agendado (${horario}) para: ${bases.join(", ")}...`);
-      for (const cidadeChave of bases) {
-        try {
-          const resultado = await executarPipeline({ cidadeChave, enviarEmail: true });
-          console.log(`[CIM] Envio automático concluído (${cidadeChave}): ${resultado.arquivoPdf}`);
-          onResultado?.(null, resultado);
-        } catch (erro) {
-          console.error(`[CIM] Falha no envio automático diário (${cidadeChave}):`, erro.message);
-          onResultado?.(erro, null);
-        }
-      }
-    },
-    { timezone: "America/Sao_Paulo" }
-  );
-
-  console.log(
-    `[CIM] Envio automático diário agendado para ${horario} (America/Sao_Paulo), bases: ${basesParaEnvioDiario().join(", ")}.`
-  );
-  return tarefa;
+  const manha = agendar("0 5 * * *", () => executarHorarioAgendado("05:00", { onResultado }), { timezone: "America/Sao_Paulo" });
+  const tarde = agendar("0 15 * * *", () => executarHorarioAgendado("15:00", { onResultado }), { timezone: "America/Sao_Paulo" });
+  console.log(`[AGENDADOR] 05:00 e 15:00 (America/Sao_Paulo), ${Object.keys(CIDADES).length} bases cadastradas.`);
+  return { manha, tarde };
 }
 
 /**
@@ -80,6 +108,10 @@ function iniciarAgendamentoDiario(onResultado) {
 function agendarEnvioUnicoHoje(onResultado) {
   const horario = process.env.ENVIO_UNICO_HOJE;
   if (!horario) return null;
+  if (!envioUnicoAgendadoAtivo()) {
+    console.log("[CIM] Envio único desativado em src/config/email.js.");
+    return null;
+  }
 
   const [hora, minuto] = horario.split(":").map((v) => parseInt(v, 10));
   if (Number.isNaN(hora) || Number.isNaN(minuto)) {
@@ -135,6 +167,10 @@ function agendarEnvioUnicoHoje(onResultado) {
  * só ruído. Eventos da madrugada aparecem no informativo das 07:30.
  */
 function iniciarMonitorAlertas(onResultado) {
+  if (!alertasAutomaticosAtivos()) {
+    console.log("[CIM] Monitor de alertas desativado em src/config/email.js.");
+    return null;
+  }
   if (process.env.MONITOR_ALERTAS === "false") {
     console.log("[CIM] Monitor de alertas desativado via MONITOR_ALERTAS=false.");
     return null;
@@ -163,10 +199,13 @@ function iniciarMonitorAlertas(onResultado) {
       }
 
       try {
-        const { verificarAlertas } = require("./logic/alertWatcher");
+        const { verificarAlertas, marcarAlertasEnviados } = require("./logic/alertWatcher");
         const { enviarAlertaPorEmail } = require("./email/sendAlert");
 
         const resultado = await verificarAlertas();
+        for (const falha of resultado.falhas) {
+          console.error(`[AGENDADOR] Alerta — ${falha.nome}: falha na coleta: ${falha.erro}`);
+        }
         if (resultado.totalNovos === 0) {
           console.log(`[CIM] Monitor: nenhuma condição nova (${resultado.verificadoEm}).`);
           return;
@@ -178,6 +217,7 @@ function iniciarMonitorAlertas(onResultado) {
         for (const base of resultado.porBase) {
           try {
             const envio = await enviarAlertaPorEmail(base);
+            marcarAlertasEnviados(base);
             console.log(
               `[CIM] Alerta enviado (${base.chave}): ${base.alertas.map((a) => a.tipo).join(", ")} -> ${envio.destinatarios.length} destinatário(s).`
             );
@@ -201,4 +241,4 @@ function iniciarMonitorAlertas(onResultado) {
   return tarefa;
 }
 
-module.exports = { iniciarAgendamentoDiario, agendarEnvioUnicoHoje, iniciarMonitorAlertas };
+module.exports = { iniciarAgendamentoDiario, executarHorarioAgendado, agendarEnvioUnicoHoje, iniciarMonitorAlertas };

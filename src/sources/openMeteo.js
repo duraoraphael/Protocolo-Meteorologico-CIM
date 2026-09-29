@@ -58,18 +58,19 @@ function classificarIntensidadeVento(kmh) {
 
 // Divide as horas do dia corrente em três períodos operacionais.
 const PERIODOS = {
-  manha: { label: "Manhã", horaInicio: 6, horaFim: 12 },
+  manha: { label: "Manhã", horaInicio: 5, horaFim: 12 },
   tarde: { label: "Tarde", horaInicio: 12, horaFim: 18 },
   noite: { label: "Noite", horaInicio: 18, horaFim: 24 },
 };
 
-function resumirPeriodo(horas, chave) {
+function resumirPeriodo(horas, chave, { dataReferencia = null, inicioHora = 6 } = {}) {
   const { horaInicio, horaFim } = PERIODOS[chave];
   const idxs = horas.time
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => {
-      const h = new Date(t).getHours();
-      return h >= horaInicio && h < horaFim;
+      const h = dataReferencia ? Number(t.slice(11, 13)) : new Date(t).getHours();
+      return (!dataReferencia || t.slice(0, 10) === dataReferencia) &&
+        h >= Math.max(horaInicio, inicioHora) && h < horaFim;
     })
     .map(({ i }) => i);
 
@@ -123,7 +124,7 @@ function resumirPeriodo(horas, chave) {
   };
 }
 
-async function buscarOpenMeteo(latitude, longitude) {
+async function buscarOpenMeteo(latitude, longitude, { inicioHora = 6, diasPrevisao = 1 } = {}) {
   const params = new URLSearchParams({
     latitude: String(latitude),
     longitude: String(longitude),
@@ -133,7 +134,7 @@ async function buscarOpenMeteo(latitude, longitude) {
     daily:
       "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code",
     timezone: "America/Sao_Paulo",
-    forecast_days: "1",
+    forecast_days: String(diasPrevisao),
   });
 
   const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
@@ -162,11 +163,20 @@ async function buscarOpenMeteo(latitude, longitude) {
   const json = await resposta.json();
   const horas = json.hourly;
   const dia = json.daily;
+  const dataReferencia = dia.time[0];
+  const relatorioAgendado = inicioHora !== 6 || diasPrevisao !== 1;
+  const indicesJanela = horas.time.map((instante, i) => ({ instante, i }))
+    .filter(({ instante }) => instante.slice(0, 10) === dataReferencia && Number(instante.slice(11, 13)) >= inicioHora)
+    .map(({ i }) => i);
+  if (relatorioAgendado && !indicesJanela.length) throw new Error("Open-Meteo não retornou horas para a janela solicitada.");
+  const valoresJanela = (campo) => indicesJanela.map((i) => horas[campo]?.[i]).filter(Number.isFinite);
+  const minimoJanela = (campo) => valoresJanela(campo).length ? Math.min(...valoresJanela(campo)) : null;
+  const maximoJanela = (campo) => valoresJanela(campo).length ? Math.max(...valoresJanela(campo)) : null;
 
   const periodos = {
-    manha: resumirPeriodo(horas, "manha"),
-    tarde: resumirPeriodo(horas, "tarde"),
-    noite: resumirPeriodo(horas, "noite"),
+    manha: resumirPeriodo(horas, "manha", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
+    tarde: resumirPeriodo(horas, "tarde", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
+    noite: resumirPeriodo(horas, "noite", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
   };
 
   const umidades = horas.relative_humidity_2m;
@@ -191,7 +201,9 @@ async function buscarOpenMeteo(latitude, longitude) {
     fonte: "Open-Meteo",
     url,
     dataReferencia: dia.time[0],
-    condicaoGeral: descreverCodigo(dia.weather_code[0]),
+    condicaoGeral: inicioHora === 6
+      ? descreverCodigo(dia.weather_code[0])
+      : descreverCodigo(horas.weather_code[indicesJanela[0]]),
     atual: json.current ? {
       temperaturaC: json.current.temperature_2m ?? null,
       codigo: json.current.weather_code ?? null,
@@ -199,10 +211,10 @@ async function buscarOpenMeteo(latitude, longitude) {
       dia: json.current.is_day === 1,
       horario: json.current.time,
     } : null,
-    tempMin: Math.round(dia.temperature_2m_min[0]),
-    tempMax: Math.round(dia.temperature_2m_max[0]),
-    umidadeMin: Math.round(Math.min(...umidades)),
-    umidadeMax: Math.round(Math.max(...umidades)),
+    tempMin: inicioHora === 6 ? Math.round(dia.temperature_2m_min[0]) : minimoJanela("temperature_2m"),
+    tempMax: inicioHora === 6 ? Math.round(dia.temperature_2m_max[0]) : maximoJanela("temperature_2m"),
+    umidadeMin: inicioHora === 6 ? Math.round(Math.min(...umidades)) : minimoJanela("relative_humidity_2m"),
+    umidadeMax: inicioHora === 6 ? Math.round(Math.max(...umidades)) : maximoJanela("relative_humidity_2m"),
     precipitacaoTotalMm,
     precipitacaoHorariaMaxMm,
     probabilidadeChuvaMax,
@@ -210,6 +222,14 @@ async function buscarOpenMeteo(latitude, longitude) {
     velocidadeMaxKmh,
     temTempestadeHoje,
     periodos,
+    previsaoDias: dia.time.map((data, i) => ({
+      data,
+      condicao: descreverCodigo(dia.weather_code[i]),
+      tempMin: dia.temperature_2m_min[i],
+      tempMax: dia.temperature_2m_max[i],
+      chuvaMm: dia.precipitation_sum[i],
+      rajadaKmh: dia.wind_gusts_10m_max[i],
+    })),
   };
 }
 

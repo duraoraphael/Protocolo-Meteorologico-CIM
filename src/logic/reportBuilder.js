@@ -58,14 +58,18 @@ function detectarDivergencias(openMeteo, inmet) {
  * em src/config/cities.js. Não lança em caso de falha parcial de uma fonte —
  * cada fonte que falhar é sinalizada em `avisosColeta` e o restante segue.
  */
-async function montarRelatorio(cidade) {
+async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
   const avisosColeta = [];
   const falhasApi = {};
   const windyPromise = buscarPacoteWindy(cidade);
   let openMeteo, inmetPrevisao, inmetAvisos;
 
   try {
-    openMeteo = await buscarOpenMeteo(cidade.latitude, cidade.longitude);
+    openMeteo = await buscarOpenMeteo(
+      cidade.latitude,
+      cidade.longitude,
+      horarioAgendado ? { inicioHora: horarioAgendado === "15:00" ? 15 : 5, diasPrevisao: horarioAgendado === "15:00" ? 2 : 4 } : undefined
+    );
   } catch (erro) {
     falhasApi.openMeteo = erro.message;
     avisosColeta.push(`Open-Meteo indisponível no momento da coleta: ${erro.message}`);
@@ -110,6 +114,9 @@ async function montarRelatorio(cidade) {
 
   const windy = await windyPromise;
   avisosColeta.push(...windy.avisos);
+  if (horarioAgendado && !openMeteo) {
+    throw new Error("Previsão horária e dos dias seguintes indisponível para a janela do relatório agendado.");
+  }
   if (!openMeteo && !inmetPrevisao && windy.weather?.tempMax == null) {
     throw new Error(
       "Nenhuma fonte meteorológica respondeu (Windy, Open-Meteo e INMET indisponíveis). Verifique a conexão com a internet e tente novamente."
@@ -144,14 +151,29 @@ async function montarRelatorio(cidade) {
   const arOpenMeteo = qualidadeAr;
   const integrado = integrarWindy(base, mar, qualidadeAr, windy, openMeteo ? 'Open-Meteo' : inmetPrevisao ? 'INMET' : 'Indisponível');
   ({ base, mar, qualidadeAr } = integrado);
+  if (horarioAgendado) {
+    // O Windy resume o dia inteiro; nesta versão só a série horária filtrada
+    // da Open-Meteo representa corretamente 05/15h até a meia-noite.
+    for (const campo of ["condicaoGeral", "tempMin", "tempMax", "umidadeMin", "umidadeMax", "rajadaMaxKmh", "precipitacaoTotalMm", "precipitacaoHorariaMaxMm", "probabilidadeChuvaMax", "temTempestadeHoje"]) {
+      base[campo] = openMeteo[campo];
+      integrado.fontesPorCampo[campo] = "Open-Meteo";
+    }
+    base.periodos = openMeteo.periodos;
+    for (const chave of ["manha", "tarde", "noite"]) {
+      for (const campo of ["rajadaMaxKmh", "precipitacaoMm", "probabilidadeChuva", "precipitacaoHorariaMaxMm"]) {
+        integrado.fontesPorCampo[`periodos.${chave}.${campo}`] = "Open-Meteo";
+      }
+    }
+  }
   if (mar && cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
   const avisosInmet = inmetAvisos?.avisos || [];
 
-  const { eventoMaisRelevante, categoriasAtivas } = avaliarRiscos({
+  const { eventoMaisRelevante, categoriasAtivas, severidade } = avaliarRiscos({
     tempMax: base.tempMax,
     umidadeMin: base.umidadeMin,
     rajadaMaxKmh: base.rajadaMaxKmh,
     probabilidadeChuvaMax: base.probabilidadeChuvaMax,
+    precipitacaoHorariaMaxMm: base.precipitacaoHorariaMaxMm,
     precipitacaoTotalMm: base.precipitacaoTotalMm,
     temTempestadeHoje: base.temTempestadeHoje,
     periodos: base.periodos,
@@ -172,7 +194,7 @@ async function montarRelatorio(cidade) {
 
   const dataNow = agora();
   const tabelaTemperaturaUmidade = [];
-  if (windy.weather) tabelaTemperaturaUmidade.push({ fonte: windy.weather.fonte, tempMin: windy.weather.tempMin, tempMax: windy.weather.tempMax, umidadeMin: windy.weather.umidadeMin, umidadeMax: windy.weather.umidadeMax });
+  if (windy.weather && !horarioAgendado) tabelaTemperaturaUmidade.push({ fonte: windy.weather.fonte, tempMin: windy.weather.tempMin, tempMax: windy.weather.tempMax, umidadeMin: windy.weather.umidadeMin, umidadeMax: windy.weather.umidadeMax });
   if (openMeteo) {
     tabelaTemperaturaUmidade.push({
       fonte: "Open-Meteo",
@@ -192,7 +214,8 @@ async function montarRelatorio(cidade) {
     });
   }
 
-  const ventoPorPeriodo = ["manha", "tarde", "noite"].map((k) => {
+  const chavesPeriodo = horarioAgendado === "15:00" ? ["tarde", "noite"] : ["manha", "tarde", "noite"];
+  const ventoPorPeriodo = chavesPeriodo.map((k) => {
     const p = base.periodos[k];
     const i = inmetPrevisao?.periodos[k];
     return {
@@ -204,7 +227,7 @@ async function montarRelatorio(cidade) {
     };
   });
 
-  const chuvaPorPeriodo = ["manha", "tarde", "noite"].map((k) => {
+  const chuvaPorPeriodo = chavesPeriodo.map((k) => {
     const p = base.periodos[k];
     const i = inmetPrevisao?.periodos[k];
     return {
@@ -287,6 +310,42 @@ async function montarRelatorio(cidade) {
     status: ok ? "operacional" : "indisponivel",
     detalhe: ok ? detalheOk : falha || "A fonte não devolveu dados nesta coleta.",
   });
+
+  for (const evento of severidade.eventos) {
+    if (evento.tipo === "raios" && evento.fonteDados?.startsWith("Previsão horária")) {
+      evento.fonteDados = openMeteo?.temTempestadeHoje
+        ? "Open-Meteo — código de trovoada"
+        : windy.weather?.temTempestadeHoje
+          ? `${windy.weather.fonte} — código de trovoada`
+          : evento.fonteDados;
+    }
+    if (evento.fonteDados) continue;
+    if (evento.tipo === "avisoInmet") evento.fonteDados = "INMET — aviso oficial";
+    else if (evento.assinatura === "vento") evento.fonteDados = integrado.fontesPorCampo.rajadaMaxKmh;
+    else if (evento.assinatura === "chuva") evento.fonteDados = [
+      integrado.fontesPorCampo.precipitacaoHorariaMaxMm,
+      integrado.fontesPorCampo.precipitacaoTotalMm,
+    ].filter(Boolean).join(" / ");
+    else {
+      const campo = {
+        calorExtremo: "tempMax",
+        baixaUmidade: "umidadeMin",
+        marGrosso: "mar.alturaMaxDiaM",
+        marModerado: "mar.alturaMaxDiaM",
+        uvAlto: "ar.uvMax",
+        qualidadeArRuim: "ar.pm25Medio",
+      }[evento.tipo];
+      const fonte = integrado.fontesPorCampo[campo];
+      if (fonte && fonte !== "Indisponível") evento.fonteDados = fonte;
+      else if ({
+        calorExtremo: /calor/i,
+        baixaUmidade: /baixa umidade/i,
+        marGrosso: /ressaca|agitação marítima/i,
+      }[evento.tipo]?.test(avisosInmet.map((aviso) => aviso.descricao).join(" "))) {
+        evento.fonteDados = "INMET — aviso oficial";
+      }
+    }
+  }
   const monitoramentoApis = [
     {
       id: "windy-weather",
@@ -364,6 +423,7 @@ async function montarRelatorio(cidade) {
     mar,
     qualidadeAr,
     eventoMaisRelevante,
+    severidade,
     avisosInmet,
     divergencias,
     avisosColeta,
@@ -374,6 +434,15 @@ async function montarRelatorio(cidade) {
     fontesManuais,
     monitoramentoApis,
     geradoEmISO: dataNow.toISOString(),
+    horarioAgendado,
+    periodoCoberto: horarioAgendado === "05:00"
+      ? "Hoje, das 05:00 até 00:00, mais os três dias seguintes"
+      : horarioAgendado === "15:00"
+        ? "Hoje, das 15:00 até 00:00, mais o dia seguinte"
+        : null,
+    previsaoDias: horarioAgendado ? openMeteo.previsaoDias.map((dia, i) => i === 0
+      ? { ...dia, chuvaMm: base.precipitacaoTotalMm, rajadaKmh: base.rajadaMaxKmh, periodo: horarioAgendado === "15:00" ? "Hoje (15:00–00:00)" : "Hoje (05:00–00:00)" }
+      : { ...dia, periodo: i === 1 ? "Amanhã" : `Dia +${i}` }) : null,
   };
 }
 

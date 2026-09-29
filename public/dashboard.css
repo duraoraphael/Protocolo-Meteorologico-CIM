@@ -101,18 +101,25 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .conteudo { padding:14px var(--page-gutter) 18px; display:grid; gap:14px; }
 .carregando,.erro { padding:45px 15px; color:var(--text-secondary); text-align:center; }
 .erro { color:var(--red-alert); }
-.faixa-evento { --severity:var(--yellow-petro); display:flex; align-items:center; gap:16px; border:1px solid color-mix(in srgb,var(--severity) 65%,transparent); border-left:5px solid var(--severity); border-radius:10px; padding:15px 20px; background:linear-gradient(90deg,rgba(68,55,12,.60),rgba(24,45,28,.82)); }
+.faixa-evento { --severity:var(--yellow-petro); display:flex; align-items:flex-start; gap:18px; border:1px solid color-mix(in srgb,var(--severity) 65%,transparent); border-left:5px solid var(--severity); border-radius:10px; padding:20px 22px; background:linear-gradient(90deg,rgba(68,55,12,.60),rgba(24,45,28,.82)); }
 .faixa-evento>.icon { color:var(--severity); width:31px; height:31px; }
 .faixa-evento .texto { flex:1; min-width:0; }
-.faixa-evento h2 { font-size:12px; letter-spacing:.07em; text-transform:uppercase; margin:0 0 5px; color:var(--severity); }
-.faixa-evento p { font-size:13px; margin:0; line-height:1.45; color:#deE6dd; }
-.nivel-informativo { --severity:var(--cyan-weather); background:linear-gradient(90deg,#10372d,#10291f); }
-.nivel-perigo { --severity:var(--orange-alert); }
-.nivel-extremo { --severity:var(--red-alert); background:linear-gradient(90deg,#3a2119,#202d20); }
+.faixa-evento h2 { font-size:14px; letter-spacing:.07em; text-transform:uppercase; margin:0 0 14px; line-height:1.4; color:var(--severity); }
+.faixa-evento p { font-size:13px; margin:0 0 10px; line-height:1.65; color:#deE6dd; }
+.nivel-normal { --severity:var(--yellow-petro); }
+.nivel-atencao { --severity:var(--orange-alert); background:linear-gradient(90deg,#3a2b19,#202d20); }
+.nivel-alerta,.nivel-emergencia { --severity:var(--red-alert); background:linear-gradient(90deg,#3a2119,#202d20); }
+.status-recomendacao,.status-secundario { display:block; margin-top:16px; font-size:12px; line-height:1.65; color:#c9d9d2; }
+.status-recomendacao strong { display:inline-block; margin-bottom:5px; }
+.status-secundario { border-top:1px solid rgba(201,217,210,.2); padding-top:14px; }
+.status-aviso { display:grid; gap:7px; margin-top:18px; padding-top:15px; border-top:1px solid rgba(201,217,210,.2); color:#deE6dd; font-size:12px; line-height:1.6; }
+.status-aviso strong { color:var(--severity); }
 .collection-note { display:block; margin-top:5px; color:var(--yellow-petro); font-size:11px; }
 .text-link { background:none; border:0; padding:5px 0; color:var(--yellow-petro); font-size:11px; white-space:nowrap; }
 .text-link:hover { color:#fff0a3; }
-.grid-cards { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:12px; }
+.grid-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.metric-group { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; min-width:0; }
+.metric-group + .metric-group { border-left:1px solid var(--border-medium); padding-left:20px; }
 .card { min-width:0; min-height:130px; border:1px solid var(--border-soft); background:linear-gradient(145deg,rgba(4,48,39,.96),rgba(3,37,31,.96)); border-radius:9px; padding:14px 14px; }
 .card:hover { border-color:rgba(74,200,160,.38); transform:translateY(-1px); }
 .metric-heading { display:flex; align-items:center; gap:9px; min-height:29px; }
@@ -145,11 +152,12 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .details-dialog .text-link { display:none; }
 .aviso-item { padding:12px; border-left:3px solid var(--yellow-petro); background:var(--bg-main); margin-bottom:8px; }
 @media (max-width:1399px) {
-  .grid-cards { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .grid-cards { grid-template-columns:1fr; }
+  .metric-group + .metric-group { border-left:0; padding-left:0; border-top:1px solid var(--border-medium); padding-top:14px; }
   .top-navigation { gap:24px; }.navigation-links { gap:20px; }.logo-petrobras { width:175px; }
 }
 @media (max-width:1099px) {
-  .grid-cards { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .metric-group { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .tables-grid { grid-template-columns:1fr; }
   .top-navigation { flex-wrap:wrap; gap:12px; position:relative; }
   .menu-toggle { display:block; order:3; background:transparent; border:1px solid var(--border-medium); border-radius:6px; color:var(--text-primary); font-size:24px; padding:4px 10px; }
@@ -169,13 +177,13 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
   .hero-weather { width:100%; display:grid; grid-template-columns:1fr 1fr; text-align:left; gap:0 16px; align-items:center; }
   .current-weather { grid-column:2; grid-row:1 / span 4; padding:12px; }
   .relogio { font-size:32px; }.ultima-atualizacao { margin:5px 0; }.current-reading strong { font-size:28px; }.current-reading>.icon { width:26px; height:26px; }.current-reading { gap:8px; }
-  .grid-cards { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .grid-cards,.metric-group { gap:10px; }
   .card { padding:13px; }.valor { font-size:26px; }
   .faixa-evento { flex-wrap:wrap; padding:14px; gap:12px; }.faixa-evento .texto { flex-basis:75%; }.faixa-evento .text-link { margin-left:43px; }
   .tabela-periodos { min-width:520px; }.section-heading h2 { font-size:13px; }.secao-periodos { padding:13px; }
   .logo-petrobras { width:135px; height:36px; }
 }
-@media (max-width:370px) { .grid-cards { grid-template-columns:1fr; }.hero-weather { grid-template-columns:1fr; }.current-weather { grid-column:1; grid-row:auto; margin-top:16px; }.logo-petrobras { width:115px; } }
+@media (max-width:370px) { .metric-group { grid-template-columns:1fr; }.hero-weather { grid-template-columns:1fr; }.current-weather { grid-column:1; grid-row:auto; margin-top:16px; }.logo-petrobras { width:115px; } }
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; scroll-behavior:auto !important; } }
 .overlay {
   position: fixed;

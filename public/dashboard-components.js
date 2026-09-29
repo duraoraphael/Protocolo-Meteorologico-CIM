@@ -31,15 +31,19 @@ const Dashboard = (() => {
     const aq = r.qualidadeAr;
     const fields = r.fontesPorCampo || {};
     const sources = (...keys) => [...new Set(keys.map(k=>fields[k]).filter(Boolean))].join(' · ');
-    return `<section class="grid-cards" aria-label="Indicadores meteorológicos">${[
-      metric('Condição geral', escape(r.condicaoGeral), fields.condicaoGeral?.startsWith('Windy') ? 'Previsão no horário de referência' : 'Previsão para o dia', 'cloud', 'condition', sources('condicaoGeral')),
+    const grupoCondicoes = [
       metric('Temperatura', pair(r.tempMin, r.tempMax, '°'), 'Mínima / máxima · °C', 'thermometer', '', sources('tempMin','tempMax')),
       metric('Umidade relativa', pair(r.umidadeMin, r.umidadeMax, '%'), 'Mínima / máxima prevista', 'drop', '', sources('umidadeMin','umidadeMax')),
-      metric('Rajada de vento máx.', unit(gusts.length ? Math.max(...gusts) : null, ' <small>km/h</small>'), 'Pico previsto no dia', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
-      metric('Índice UV máx.', escape(aq?.uvMax), aq?.uvClassificacao?.nivel || 'Dado indisponível', 'sun', `uv-${['baixo','moderado','alto','muito_alto','extremo'].includes(aq?.uvClassificacao?.categoria) ? aq.uvClassificacao.categoria : 'ausente'}`, sources('ar.uvMax')),
       metric('Qualidade do ar (PM2,5)', escape(aq?.pm25Classificacao?.nivel), aq?.pm25Medio == null ? 'Dado indisponível' : `${aq.pm25Medio} µg/m³ · ${aq.pm25Periodo || 'média diária'}`, 'leaf', 'air', sources('ar.pm25Medio')),
+      metric('Rajada prevista', unit(gusts.length ? Math.max(...gusts) : null, ' <small>km/h</small>'), 'Pico previsto no dia', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
+    ];
+    const grupoPrevisao = [
+      metric('Condição geral', escape(r.condicaoGeral), fields.condicaoGeral?.startsWith('Windy') ? 'Previsão no horário de referência' : 'Previsão para o dia', 'cloud', 'condition', sources('condicaoGeral')),
+      metric('Chuva acumulada', unit(r.precipitacaoTotalMm, ' <small>mm</small>'), 'Acumulado previsto no dia', 'drop', '', sources('precipitacaoTotalMm')),
+      metric('Índice UV máx.', escape(aq?.uvMax), aq?.uvClassificacao?.nivel || 'Dado indisponível', 'sun', `uv-${['baixo','moderado','alto','muito_alto','extremo'].includes(aq?.uvClassificacao?.categoria) ? aq.uvClassificacao.categoria : 'ausente'}`, sources('ar.uvMax')),
       metric('Mar — altura máx. de onda', unit(r.mar?.alturaMaxDiaM, ' <small>m</small>'), r.mar?.estadoMarDia || 'Sem dados marítimos para esta base', 'waves', '', sources('mar.alturaMaxDiaM')),
-    ].join('')}</section>`;
+    ];
+    return `<section class="grid-cards" aria-label="Indicadores meteorológicos"><div class="metric-group" aria-label="Temperatura, umidade, ar e vento">${grupoCondicoes.join('')}</div><div class="metric-group" aria-label="Condição geral, chuva, UV e ondas">${grupoPrevisao.join('')}</div></section>`;
   }
   function table(title, name, headers, rows, detail) {
     return `<section class="secao-periodos"><div class="section-heading"><h2>${icon(name)}${title}</h2><button class="text-link" data-detail="${detail}">Ver mais <span aria-hidden="true">→</span></button></div><div class="table-scroll" tabindex="0" role="region" aria-label="${title}"><table class="tabela-periodos"><caption class="sr-only">${title}</caption><thead><tr>${headers.map(h => `<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map(row => `<tr>${row.map((v, i) => i === 0 ? `<th scope="row">${v}</th>` : `<td>${v}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}" class="empty-table">Dados indisponíveis para esta base.</td></tr>`}</tbody></table></div></section>`;
@@ -48,15 +52,31 @@ const Dashboard = (() => {
     return table('Condições de mar por período', 'waves', ['Período', 'Estado do mar', 'Altura máx.', 'Período de onda', 'Direção', 'Marulho'], (r.mar?.periodos || []).map(p => [escape(p.periodo), escape(p.estadoMar), unit(p.alturaMaxM,' m'), unit(p.periodoOndaS,' s'), escape(p.direcaoOnda), unit(p.marulhoMaxM,' m')]), 'mar');
   }
   function windRain(r) {
-    return table('Vento e chuva por período', 'wind', ['Período', 'Vento', 'Rajada', 'Chance de chuva', 'Acumulado'], (r.ventoPorPeriodo || []).map(v => {
+    return table('Vento e chuva por período', 'wind', ['Período', 'Vento', 'Rajada prevista', 'Chance de chuva', 'Acumulado'], (r.ventoPorPeriodo || []).map(v => {
       const c = r.chuvaPorPeriodo?.find(p => p.periodo === v.periodo);
       return [escape(v.periodo), `${escape(v.direcao)} · ${escape(v.intensidade)}`, unit(v.rajadaMaxKmh,' km/h'), unit(c?.probabilidade,'%'), unit(c?.precipitacaoMm,' mm')];
     }), 'vento');
   }
   function priority(r) {
-    const e = r.eventoMaisRelevante;
-    const severity = e?.nivel >= 5 ? 'extremo' : e?.nivel >= 3 ? 'perigo' : e?.nivel >= 2 ? 'atencao' : 'informativo';
-    return `<section class="faixa-evento nivel-${severity}" aria-label="Evento mais relevante do dia">${icon('alert')}<div class="texto"><h2>Evento mais relevante do dia</h2><p>${e ? `${escape(e.descricao)} — janela prevista: ${escape(e.janela)}` : r.avisosColeta?.length ? 'Coleta parcial: consulte a disponibilidade das fontes antes de avaliar as condições.' : 'Sem evento extremo identificado nas fontes consultadas.'}</p>${r.avisosColeta?.length ? '<span class="collection-note">Coleta parcial · consulte os detalhes das fontes</span>' : ''}</div><button class="text-link" data-detail="monitoramento">Ver detalhes <span aria-hidden="true">→</span></button></section>`;
+    const grau = r.severidade?.grau || r.eventoMaisRelevante?.grau || 'NORMAL';
+    const classe = {'NORMAL':'normal','ATENÇÃO':'atencao','ALERTA':'alerta','EMERGÊNCIA':'emergencia'}[grau] || 'normal';
+    const eventos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
+    const principal = eventos[0];
+    const titulo = principal?.titulo || 'CONDIÇÃO NORMAL';
+    const texto = principal
+      ? escape(principal.descricao)
+      : r.avisosColeta?.length
+        ? 'Coleta parcial: consulte a disponibilidade das fontes antes de avaliar as condições.'
+        : 'Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.';
+    const recomendacao = principal?.recomendacoes?.[0]
+      ? `<span class="status-recomendacao"><strong>Recomendações - Protocolo Meteorológico do COMPARTILHADO</strong><br>${escape(principal.recomendacoes[0])}</span>`
+      : '';
+    const demais = eventos.slice(1).map(e => `<span class="status-secundario"><strong>${escape(e.titulo)}</strong><br>${escape(e.detalhe || e.descricao)}<br>Janela prevista: ${escape(e.janela)}<br>Fonte de dados: ${escape(e.fonteDados || (e.tipo === 'avisoInmet' ? 'INMET — aviso oficial' : 'Consulte as fontes por campo'))}</span>`).join('');
+    const janela = principal ? `<p>Janela prevista: ${escape(principal.janela)}</p>` : '';
+    const fonte = principal ? `<p>Fonte de dados: ${escape(principal.fonteDados || (principal.tipo === 'avisoInmet' ? 'INMET — aviso oficial' : 'Consulte as fontes por campo'))}</p>` : '';
+    const aviso = r.avisosInmet?.[0];
+    const avisoOficial = aviso ? `<div class="status-aviso"><strong>Aviso oficial INMET: ${escape(aviso.descricao)} — ${escape(aviso.severidade)}</strong>${aviso.riscos?.length ? `<span>Motivo do aviso: ${escape(aviso.riscos.filter(Boolean).join(' '))}</span>` : ''}<span>Fonte de dados: INMET</span></div>` : '';
+    return `<section class="faixa-evento nivel-${classe}" aria-label="Status meteorológico: ${escape(grau)}">${icon('alert')}<div class="texto"><h2>${escape(titulo)}</h2><p>${texto}</p>${janela}${fonte}${recomendacao}${demais}${avisoOficial}${r.avisosColeta?.length ? '<span class="collection-note">Coleta parcial · consulte os detalhes das fontes</span>' : ''}</div><button class="text-link" data-detail="monitoramento">Ver detalhes <span aria-hidden="true">→</span></button></section>`;
   }
   function currentWeather(r) {
     const a = r.atual;
@@ -69,14 +89,18 @@ const Dashboard = (() => {
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;
     if (type === 'vento') return `${windRain(r)}<h3>Referências INMET</h3>${(r.ventoPorPeriodo || []).map(p => `<p>${escape(p.periodo)}: ${escape(p.referenciaInmet)}</p>`).join('')}`;
     const fieldLabel = campo => {
-      const labels={condicaoGeral:'Condição geral',atual:'Condições do horário atual',tempMin:'Temperatura mínima',tempMax:'Temperatura máxima',umidadeMin:'Umidade mínima',umidadeMax:'Umidade máxima',rajadaMaxKmh:'Rajada máxima',precipitacaoTotalMm:'Chuva total do dia',direcao:'Direção do vento',intensidadeVento:'Vento',precipitacaoMm:'Chuva acumulada',probabilidadeChuva:'Chance de chuva',alturaMaxDiaM:'Altura máxima de onda',temperaturaMarC:'Temperatura da água',pm25Medio:'PM2,5',uvMax:'Índice UV',aqiUsMax:'Índice de qualidade do ar (US)'};
+      const labels={condicaoGeral:'Condição geral',atual:'Condições do horário atual',tempMin:'Temperatura mínima',tempMax:'Temperatura máxima',umidadeMin:'Umidade mínima',umidadeMax:'Umidade máxima',rajadaMaxKmh:'Rajada prevista',precipitacaoTotalMm:'Chuva total do dia',direcao:'Direção do vento',intensidadeVento:'Vento',precipitacaoMm:'Chuva acumulada',probabilidadeChuva:'Chance de chuva',alturaMaxDiaM:'Altura máxima de onda',temperaturaMarC:'Temperatura da água',pm25Medio:'PM2,5',uvMax:'Índice UV',aqiUsMax:'Índice de qualidade do ar (US)'};
       const parts=campo.split('.'), key=parts.at(-1), periods={manha:'Manhã',tarde:'Tarde',noite:'Noite'};
       return labels[key] ? (periods[parts[1]] ? periods[parts[1]]+' · ' : '')+labels[key] : null;
     };
     const list = (items) => `<ul>${items.map(x => `<li>${escape(x)}</li>`).join('')}</ul>`;
     const statusLabels = {operacional:'Operacional',indisponivel:'Indisponível',nao_configurada:'Não configurada',nao_aplicavel:'Não se aplica',sob_demanda:'Sob demanda'};
     const apiCards = (r.monitoramentoApis || []).map(api => `<article class="api-status api-${escape(api.status)}"><div><strong>${escape(api.nome)}</strong><span>${escape(statusLabels[api.status] || api.status)}</span></div><p>${escape(api.detalhe)}</p>${api.id === 'oceanop' ? `<a href="areas.html?cidade=${encodeURIComponent(r.cidade.chave)}">Abrir monitoramento Oceanop</a>` : ''}</article>`).join('');
-    return `<h3>Status de todas as APIs</h3><p class="api-status-note">Última coleta desta base: ${escape(r.horaConsulta)} (Brasília).</p><div class="api-monitor-grid">${apiCards || '<p>Status das APIs indisponível nesta versão do relatório.</p>'}</div><h3>Evento do dia</h3><p>${escape(r.eventoMaisRelevante?.descricao || 'Sem evento extremo identificado nas fontes consultadas.')}</p><h3>Avisos oficiais INMET</h3>${r.avisosInmet?.length ? r.avisosInmet.map(a => `<article class="aviso-item"><strong>${escape(a.severidade)}</strong><p>${escape(a.descricao)}</p><small>Vigência: ${escape(a.inicio)} até ${escape(a.fim)}</small></article>`).join('') : '<p>Nenhum aviso retornado pela fonte.</p>'}${r.avisosColeta?.length ? `<h3>Falhas e avisos da coleta</h3>${list(r.avisosColeta)}` : ''}${r.divergencias?.length ? `<h3>Divergências entre fontes</h3>${list(r.divergencias)}` : ''}<h3>Destinatários desta base</h3><div id="lista-destinatarios-painel">Carregando…</div><h3>Fonte por campo</h3>${list(Object.entries(r.fontesPorCampo || {}).filter(([campo]) => fieldLabel(campo)).map(([campo,fonte]) => `${fieldLabel(campo)}: ${fonte}`))}<h3>Fontes automatizadas que responderam</h3>${list((r.fontesAutomatizadas || []).map(f => `${f.nome}: ${f.uso}`))}`;
+    const eventos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
+    const resumoEventos = eventos.length
+      ? eventos.map(e => `<article class="aviso-item"><strong>${escape(e.titulo)}</strong><p>${escape(e.descricao)}</p><p>Janela prevista: ${escape(e.janela)}</p><p>Fonte de dados: ${escape(e.fonteDados || (e.tipo === 'avisoInmet' ? 'INMET — aviso oficial' : 'Consulte as fontes por campo'))}</p>${e.recomendacoes?.length ? `<h4>Recomendações - Protocolo Meteorológico do COMPARTILHADO</h4>${list(e.recomendacoes)}` : ''}</article>`).join('')
+      : '<p>Condição normal no período analisado.</p>';
+    return `<h3>Status de todas as APIs</h3><p class="api-status-note">Última coleta desta base: ${escape(r.horaConsulta)} (Brasília).</p><div class="api-monitor-grid">${apiCards || '<p>Status das APIs indisponível nesta versão do relatório.</p>'}</div><h3>Eventos do dia</h3>${resumoEventos}<h3>Avisos oficiais INMET</h3>${r.avisosInmet?.length ? r.avisosInmet.map(a => `<article class="aviso-item"><strong>Aviso oficial INMET: ${escape(a.descricao)} — ${escape(a.severidade)}</strong><p>Vigência: ${escape(a.inicio)} até ${escape(a.fim)}</p><p>Fonte de dados: INMET</p>${a.riscos?.length ? `<p><strong>Motivo do aviso:</strong> ${escape(a.riscos.filter(Boolean).join(' '))}</p>` : ''}</article>`).join('') : '<p>Nenhum aviso retornado pela fonte.</p>'}${r.avisosColeta?.length ? `<h3>Falhas e avisos da coleta</h3>${list(r.avisosColeta)}` : ''}${r.divergencias?.length ? `<h3>Divergências entre fontes</h3>${list(r.divergencias)}` : ''}<h3>Destinatários desta base</h3><div id="lista-destinatarios-painel">Carregando…</div><h3>Fonte por campo</h3>${list(Object.entries(r.fontesPorCampo || {}).filter(([campo]) => fieldLabel(campo)).map(([campo,fonte]) => `${fieldLabel(campo)}: ${fonte}`))}<h3>Fontes automatizadas que responderam</h3>${list((r.fontesAutomatizadas || []).map(f => `${f.nome}: ${f.uso}`))}`;
   }
   return { escape, icon, currentWeather, details, home: r => `${priority(r)}${metrics(r)}<div class="tables-grid">${marine(r)}${windRain(r)}</div>` };
 })();

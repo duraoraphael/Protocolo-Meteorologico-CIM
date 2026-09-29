@@ -11,7 +11,7 @@
 require("dotenv").config({ quiet: true });
 require("./security/certificados");
 const fs = require("fs");
-const { verificarAlertas, ARQUIVO_ESTADO } = require("./logic/alertWatcher");
+const { verificarAlertas, marcarAlertasEnviados, ARQUIVO_ESTADO } = require("./logic/alertWatcher");
 
 function argumento(nome) {
   const p = process.argv.find((a) => a.startsWith(`--${nome}=`));
@@ -38,9 +38,8 @@ function argumento(nome) {
     `[CIM] Verificando alertas${enviar ? " (MODO ENVIO)" : " (simulação — nada será enviado)"}...`
   );
 
-  // Em simulação não registramos nada, para que o teste não "consuma" o
-  // alerta e impeça o envio real logo depois.
-  const resultado = await verificarAlertas({ registrar: enviar });
+  // A verificação nunca altera o estado; o registro acontece após o SMTP.
+  const resultado = await verificarAlertas();
 
   console.log("");
   if (resultado.totalNovos === 0) {
@@ -71,6 +70,7 @@ function argumento(nome) {
     for (const base of resultado.porBase) {
       try {
         const envio = await enviarAlertaPorEmail(base);
+        marcarAlertasEnviados(base);
         console.log(`[CIM] Alerta enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`);
       } catch (erro) {
         console.error(`[CIM] Falha ao enviar (${base.chave}): ${erro.message}`);

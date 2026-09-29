@@ -37,6 +37,12 @@ function rajadaMaximaTexto(r) {
   return valores.length ? `${Math.max(...valores)} km/h` : "—";
 }
 
+function chuvaAcumuladaTexto(r) {
+  return Number.isFinite(r.precipitacaoTotalMm)
+    ? `${esc(r.precipitacaoTotalMm)} mm`
+    : "—";
+}
+
 function corSeveridade(severidade = "") {
   const s = severidade.toLowerCase();
   if (s.includes("grande perigo")) return "#7B241C";
@@ -45,9 +51,52 @@ function corSeveridade(severidade = "") {
   return brand.verde;
 }
 
+function blocoSeveridadeEmail(r) {
+  const grau = r.severidade?.grau || r.eventoMaisRelevante?.grau || "NORMAL";
+  const visual = brand.statusVisual(grau);
+  const eventos = (r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []))
+    .filter((evento, indice) => indice === 0 || evento.tipo !== "avisoInmet");
+  const estilo = `border:1.5px solid ${visual.cor};background:${visual.fundo};border-radius:4px;padding:20px 22px;font-size:13px;line-height:1.55;color:${brand.cinzaTexto};`;
+
+  if (grau === "NORMAL" || eventos.length === 0) {
+    return `<div style="${estilo}">
+      <strong style="color:${visual.cor};">CONDIÇÃO NORMAL</strong><br/>
+      Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.
+    </div>`;
+  }
+
+  const principal = eventos[0];
+  const icone = grau === "ATENÇÃO" ? "⚠" : "🚨";
+  const recomendacoesPrincipal = principal.recomendacoes?.length
+    ? `<div style="margin-top:20px;"><strong>Recomendações - Protocolo Meteorológico do COMPARTILHADO</strong><ul style="margin:10px 0 0 20px;padding:0;">${linhasLista(principal.recomendacoes, principal.recomendacoes.length)}</ul></div>`
+    : "";
+  const demais = eventos.slice(1).map((evento) => `
+    <div style="border-top:1px solid ${brand.cinzaBorda};margin-top:20px;padding-top:18px;">
+      <strong style="display:block;margin-bottom:10px;">${esc(evento.titulo)}</strong>
+      <div style="margin-bottom:10px;">${esc(evento.descricao)}</div>
+      <div style="margin-bottom:10px;"><em>Janela prevista:</em> ${esc(evento.janela)}</div>
+      <div>Fonte de dados: ${esc(evento.fonteDados || (evento.tipo === "avisoInmet" ? "INMET — aviso oficial" : "Consulte as fontes por campo"))}</div>
+      ${evento.recomendacoes?.length ? `<div style="margin-top:16px;"><strong>Recomendações - Protocolo Meteorológico do COMPARTILHADO</strong><ul style="margin:10px 0 0 20px;padding:0;">${linhasLista(evento.recomendacoes, evento.recomendacoes.length)}</ul></div>` : ""}
+    </div>`).join("");
+
+  return `<div style="${estilo}">
+    <strong style="color:${visual.cor};font-size:18px;display:block;margin-bottom:14px;">${icone} ${esc(principal.titulo)}</strong>
+    <div style="margin-bottom:12px;">${esc(principal.descricao)}</div>
+    <div style="margin-bottom:12px;"><em>Janela prevista:</em> ${esc(principal.janela)}</div>
+    <div>Fonte de dados: ${esc(principal.fonteDados || (principal.tipo === "avisoInmet" ? "INMET — aviso oficial" : "Consulte as fontes por campo"))}</div>
+    ${recomendacoesPrincipal}
+    ${demais}
+  </div>`;
+}
+
 function renderEmailHtml(r) {
-  const evento = r.eventoMaisRelevante;
   const avisoMaisGrave = r.avisosInmet?.[0];
+  const resumoAgendado = r.periodoCoberto
+    ? `<tr><td style="padding:12px 28px;color:${brand.cinzaTexto};font-size:13px;"><strong>Período coberto:</strong> ${esc(r.periodoCoberto)}.<br/><strong>Previsão:</strong> ${(r.previsaoDias || []).map((dia) => `${esc(dia.periodo)} (${esc(dia.data)}): ${dia.chuvaMm == null ? "—" : `${esc(dia.chuvaMm)} mm`} de chuva; rajada prevista ${dia.rajadaKmh == null ? "—" : `${esc(dia.rajadaKmh)} km/h`}`).join("<br/>")}</td></tr>`
+    : "";
+  const mudancasAgendadas = r.mudancasDia
+    ? `<tr><td style="padding:12px 28px;color:${brand.cinzaTexto};font-size:13px;"><strong>Mudanças desde o relatório das 05:00:</strong><ul style="margin:8px 0 0 18px;padding:0;">${linhasLista(r.mudancasDia, r.mudancasDia.length)}</ul></td></tr>`
+    : "";
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -65,61 +114,39 @@ function renderEmailHtml(r) {
         <tr><td style="padding:20px 28px 4px 28px;color:${brand.cinzaTexto};font-size:13px;">
           <strong>Hora da consulta:</strong> ${esc(r.horaConsulta)} (Horário de Brasília) &nbsp;·&nbsp; <strong>Condição geral:</strong> ${esc(r.condicaoGeral)}
         </td></tr>
+        ${resumoAgendado}
+        ${mudancasAgendadas}
 
         <tr><td style="padding:10px 20px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eee;border-radius:4px;">
             <tr>
               ${celulaMetrica("Temp. mín/máx", parOuTraco(r.tempMin, r.tempMax, "°", "°C"))}
               ${celulaMetrica("Umidade mín/máx", parOuTraco(r.umidadeMin, r.umidadeMax, "%", "%"))}
-              ${celulaMetrica("Rajada máx.", rajadaMaximaTexto(r))}
+              ${celulaMetrica("Rajada prevista", rajadaMaximaTexto(r))}
             </tr>
             <tr>
               ${celulaMetrica("Índice UV", r.qualidadeAr?.uvMax != null ? `${r.qualidadeAr.uvMax} <span style="font-size:12px;font-weight:normal;">(${esc(r.qualidadeAr.uvClassificacao.nivel)})</span>` : "—")}
               ${celulaMetrica("Ar (PM2,5)", r.qualidadeAr?.pm25Medio != null ? `<span style="font-size:15px;">${esc(r.qualidadeAr.pm25Classificacao.nivel)}</span>` : "—")}
-              ${celulaMetrica("Mar — onda máx.", r.mar?.alturaMaxDiaM != null ? `${r.mar.alturaMaxDiaM} m` : "—")}
+              ${celulaMetrica("Chuva acumulada", chuvaAcumuladaTexto(r))}
             </tr>
           </table>
         </td></tr>
 
         <tr><td style="padding:14px 28px 4px 28px;">
-          <div style="border:1.5px solid ${brand.amarelo};background:#fffdf2;border-radius:4px;padding:12px 16px;font-size:13px;color:${brand.cinzaTexto};">
-            <strong>⚠ Evento mais relevante do dia</strong><br/>
-            ${evento ? esc(evento.descricao) + `<br/><em>Janela prevista:</em> ${esc(evento.janela)}` : "Não foi identificado evento climático extremo para a data, com base nas fontes automatizadas consultadas."}
-          </div>
+          ${blocoSeveridadeEmail(r)}
         </td></tr>
 
         ${
           avisoMaisGrave
             ? `<tr><td style="padding:10px 28px 4px 28px;">
-          <div style="border-left:4px solid ${corSeveridade(avisoMaisGrave.severidade)};background:#fff8f0;padding:10px 14px;font-size:12.5px;color:${brand.cinzaTexto};">
+          <div style="border-left:4px solid ${corSeveridade(avisoMaisGrave.severidade)};background:#fff8f0;padding:16px 18px;font-size:12.5px;line-height:1.55;color:${brand.cinzaTexto};">
             <strong>Aviso oficial INMET:</strong> ${esc(avisoMaisGrave.descricao)} — <span style="color:${corSeveridade(avisoMaisGrave.severidade)};font-weight:bold;">${esc(avisoMaisGrave.severidade)}</span>
+            <div style="margin-top:10px;">Fonte de dados: INMET</div>
+            ${avisoMaisGrave.riscos?.length ? `<div style="margin-top:10px;"><strong>Motivo do aviso:</strong> ${esc(avisoMaisGrave.riscos.filter(Boolean).join(" "))}</div>` : ""}
           </div>
         </td></tr>`
             : ""
         }
-
-        <tr><td style="padding:18px 28px 0 28px;">
-          <div style="color:${brand.verde};font-weight:bold;font-size:14px;border-bottom:2px solid ${brand.verde};padding-bottom:4px;">Deslocamento — destaques</div>
-          <div style="font-size:12.5px;color:${brand.cinzaTexto};margin-top:8px;">
-            <strong>Pedestres:</strong>
-            <ul style="margin:4px 0 10px 18px;padding:0;">${linhasLista(r.deslocamento.pedestres, 2)}</ul>
-            <strong>Condutores:</strong>
-            <ul style="margin:4px 0 10px 18px;padding:0;">${linhasLista(r.deslocamento.condutores, 2)}</ul>
-          </div>
-        </td></tr>
-
-        <tr><td style="padding:6px 28px 0 28px;">
-          <div style="color:${brand.verde};font-weight:bold;font-size:14px;border-bottom:2px solid ${brand.verde};padding-bottom:4px;">Edificação — destaques</div>
-          <div style="font-size:12.5px;color:${brand.cinzaTexto};margin-top:8px;">
-            ${r.edificacao
-              .slice(0, 2)
-              .map(
-                (s) =>
-                  `<strong>${esc(s.titulo)}:</strong><ul style="margin:4px 0 10px 18px;padding:0;">${linhasLista(s.itens, 2)}</ul>`
-              )
-              .join("")}
-          </div>
-        </td></tr>
 
         <tr><td style="padding:10px 28px 20px 28px;">
           <div style="background:#f4f7f5;border-radius:4px;padding:12px 16px;font-size:12px;color:#555;">

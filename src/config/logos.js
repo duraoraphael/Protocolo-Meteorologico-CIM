@@ -59,4 +59,8 @@ function logosComoDataUri() {
   return { petrobras: comoDataUri(petrobras), cim: comoDataUri(cim) };
 }
 
-module.exports = { PASTA_LOGO, arquivosLogos, logosComoDataUri };
+function logoPdfComoDataUri() {
+  return comoDataUri(encontrarArquivo(/^logo[_ -]?pdf\./i));
+}
+
+module.exports = { PASTA_LOGO, arquivosLogos, logosComoDataUri, logoPdfComoDataUri };

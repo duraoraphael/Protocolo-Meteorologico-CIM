@@ -195,8 +195,16 @@ botaoConfirmar.addEventListener("click", async () => {
     return;
   }
   botaoConfirmar.disabled = true;
-  botaoConfirmar.textContent = "Gerando…";
-  modalMensagem.textContent = "";
+  botaoConfirmar.textContent = "Gerando relatório…";
+  modalMensagem.textContent = "Atualizando os dados meteorológicos…";
+  const avisoPdf = setTimeout(() => {
+    botaoConfirmar.textContent = "Gerando PDF…";
+    modalMensagem.textContent = "Gerando o PDF completo…";
+  }, 1500);
+  const avisoEnvio = setTimeout(() => {
+    botaoConfirmar.textContent = "Enviando relatório…";
+    modalMensagem.textContent = "Anexando o PDF e enviando o relatório…";
+  }, 5000);
 
   try {
     const resp = await fetch("/api/gerar-relatorio", {
@@ -205,17 +213,18 @@ botaoConfirmar.addEventListener("click", async () => {
       body: JSON.stringify({ senha, cidade: seletorBaseEl.value }),
     });
     const dados = await resp.json();
-    if (!dados.ok) throw new Error(dados.erro || "Falha ao gerar relatório.");
+    if (!dados.ok) {
+      throw new Error(dados.message || dados.erro || "Não foi possível concluir o envio do relatório.");
+    }
 
     fecharModal();
-    mostrarToast(
-      `Relatório gerado e enviado para: ${dados.destinatarios.join(", ")}.`,
-      "sucesso"
-    );
+    mostrarToast(dados.message || "Relatório gerado e enviado com sucesso.", "sucesso");
     carregarPreview();
   } catch (erro) {
-    modalMensagem.textContent = erro.message;
+    modalMensagem.textContent = erro.message || "Não foi possível concluir o envio do relatório.";
   } finally {
+    clearTimeout(avisoPdf);
+    clearTimeout(avisoEnvio);
     botaoConfirmar.disabled = false;
     botaoConfirmar.textContent = "Gerar e Enviar";
   }

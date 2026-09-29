@@ -1,7 +1,6 @@
-// Monitor de vigilância: detecta agravamento do tempo FORA do horário do
-// informativo diário e avisa só quando aparece algo novo.
+// Monitor de vigilância: comunica mudanças de gatilho por base e fenômeno.
 //
-// Por que existe: o informativo das 07:30 é uma fotografia. Se um aviso de
+// Por que existe: o informativo agendado é uma fotografia. Se um aviso de
 // tempestade do INMET surgir às 14h, ninguém é notificado — o painel mostra,
 // mas só enxerga quem estiver olhando para a TV. Este monitor cobre
 // exatamente o item do protocolo original sobre "variações meteorológicas
@@ -14,9 +13,8 @@
 //    ATENÇÃO definido nos critérios INMET; as demais categorias preservam os
 //    limiares graves já existentes.
 //
-// 2. SÓ O QUE É NOVO. Cada alerta tem uma "assinatura"; o que já foi avisado
-//    fica registrado em data/alertas-notificados.json e não é repetido. Se a
-//    severidade AUMENTAR (atenção -> perigo), aí sim avisa de novo.
+// 2. SÓ MUDANÇAS. Cada fenômeno tem uma assinatura; o último grau confirmado
+//    pelo SMTP fica em data/alertas-notificados.json. Grau inalterado não reenvia.
 
 const fs = require("fs");
 const path = require("path");
@@ -24,16 +22,10 @@ const { CIDADES, getCidade } = require("../config/cities");
 const { montarRelatorio } = require("./reportBuilder");
 const { LIMIARES } = require("./riskEngine");
 const {
-  classificarChuva,
-  classificarRajada,
-  recomendacoes,
+  classificarCondicoesMeteorologicas,
 } = require("./inmetAlertRules");
 
 const ARQUIVO_ESTADO = path.join(__dirname, "..", "..", "data", "alertas-notificados.json");
-
-// Um alerta notificado deixa de ser considerado "já avisado" depois disso,
-// para que um evento que persista por muitas horas volte a ser lembrado.
-const VALIDADE_HORAS = 12;
 
 // ---------------------------------------------------------------------------
 // Estado (o que já foi avisado)
@@ -45,23 +37,20 @@ function carregarEstado() {
     return dados && typeof dados === "object" ? dados : {};
   } catch (erro) {
     if (erro.code === "ENOENT") return {};
-    console.warn(`[CIM] Estado de alertas ilegível (${erro.message}); recomeçando do zero.`);
-    return {};
+    throw new Error(`Estado de alertas ilegível; envio suspenso para evitar duplicidade: ${erro.message}`, { cause: erro });
   }
 }
 
 function salvarEstado(estado) {
   fs.mkdirSync(path.dirname(ARQUIVO_ESTADO), { recursive: true });
-  fs.writeFileSync(ARQUIVO_ESTADO, JSON.stringify(estado, null, 2), "utf-8");
+  const temporario = `${ARQUIVO_ESTADO}.${process.pid}.tmp`;
+  fs.writeFileSync(temporario, JSON.stringify(estado, null, 2), "utf-8");
+  fs.renameSync(temporario, ARQUIVO_ESTADO);
 }
 
 function limparExpirados(estado) {
-  const limite = Date.now() - VALIDADE_HORAS * 3600 * 1000;
-  for (const [chave, registro] of Object.entries(estado)) {
-    if (!registro?.emISO || new Date(registro.emISO).getTime() < limite) {
-      delete estado[chave];
-    }
-  }
+  // O nível enviado não expira por tempo: persistência do mesmo gatilho não
+  // autoriza reenvio após 12 horas. Uma nova transição o substitui.
   return estado;
 }
 
@@ -120,7 +109,11 @@ function consolidarPorFenomeno(achados) {
       porAssinatura.set(alerta.assinatura, alerta);
     }
   }
-  return [...porAssinatura.values()];
+  const grauPorGravidade = { atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" };
+  return [...porAssinatura.values()].map((alerta) => ({
+    ...alerta,
+    grau: alerta.grau || grauPorGravidade[alerta.gravidade],
+  }));
 }
 
 /**
@@ -153,13 +146,14 @@ function detectarAlertasGraves(report) {
       grau,
       gravidade: GRAVIDADE_POR_GRAU[grau],
       severidadeTexto: aviso.severidade,
-      detalhe: (aviso.riscos || [])[0] || "",
+      detalhe: (aviso.riscos || []).filter(Boolean).join(" "),
       janela: `${aviso.inicio} até ${aviso.fim}`,
       naturezaDado: "Aviso oficial",
+      fonteDados: "INMET",
       recomendacoes: fenomeno ? recomendacoes(fenomeno, grau) : [],
       // A assinatura ignora acentuação/caixa para que o mesmo aviso reemitido
       // com grafia levemente diferente não vire alerta novo.
-      assinatura: fenomeno || `inmet:${descricaoNormalizada}:${aviso.inicio}`,
+      assinatura: fenomeno || `inmet:${descricaoNormalizada}`,
     });
   }
 
@@ -167,6 +161,7 @@ function detectarAlertasGraves(report) {
   if (report.eventoMaisRelevante?.tipo === "raios") {
     achados.push({
       origem: "Previsão",
+      fonteDados: report.eventoMaisRelevante.fonteDados || "Previsão meteorológica",
       tipo: "Tempestade com raios",
       gravidade: "severo",
       detalhe: report.eventoMaisRelevante.descricao,
@@ -180,25 +175,6 @@ function detectarAlertasGraves(report) {
   const rajada = Number.isFinite(report.rajadaMaxKmh)
     ? report.rajadaMaxKmh
     : maximoNumerico((report.ventoPorPeriodo || []).map((p) => p.rajadaMaxKmh));
-  const grauVento = classificarRajada(rajada);
-  if (grauVento !== "NORMAL") {
-    const periodoRajada = (report.ventoPorPeriodo || []).find((p) => p.rajadaMaxKmh === rajada);
-    achados.push({
-      origem: "INMET",
-      fonteDados: fontesDoDado(report, ["rajadaMaxKmh"]),
-      naturezaDado: "Previsão",
-      tipo: "Vento",
-      grau: grauVento,
-      gravidade: GRAVIDADE_POR_GRAU[grauVento],
-      detalhe: `Rajada máxima prevista: ${rajada} km/h`,
-      valores: { rajadaKmh: rajada },
-      unidade: "km/h",
-      janela: periodoRajada?.periodo || "próximas horas",
-      recomendacoes: recomendacoes("vento", grauVento),
-      assinatura: "vento",
-    });
-  }
-
   const chuva = report.chuvaPorPeriodo || [];
   const intensidadeHoraria = Number.isFinite(report.precipitacaoHorariaMaxMm)
     ? report.precipitacaoHorariaMaxMm
@@ -206,68 +182,80 @@ function detectarAlertasGraves(report) {
   const acumulado = Number.isFinite(report.precipitacaoTotalMm)
     ? report.precipitacaoTotalMm
     : somaNumerica(chuva.map((p) => p.precipitacaoMm));
-  const classificacaoChuva = classificarChuva(intensidadeHoraria, acumulado);
-  if (classificacaoChuva.grau !== "NORMAL") {
-    const detalhes = [];
-    if (intensidadeHoraria != null) detalhes.push(`Intensidade horária máxima prevista: ${intensidadeHoraria} mm/h`);
-    if (acumulado != null) detalhes.push(`Acumulado diário previsto: ${acumulado} mm`);
-    const periodoChuva = chuva.find((p) => p.precipitacaoHorariaMaxMm === intensidadeHoraria);
+
+  const eventosProtocolo = classificarCondicoesMeteorologicas({
+    rajadaKmh: rajada,
+    chuvaHorariaMmH: intensidadeHoraria,
+    chuvaDiariaMm: acumulado,
+  }).eventos;
+
+  for (const evento of eventosProtocolo) {
+    const chuvaIntensa = evento.assinatura === "chuva";
+    const periodo = chuvaIntensa
+      ? chuva.find((p) => p.precipitacaoHorariaMaxMm === intensidadeHoraria)?.periodo
+      : (report.ventoPorPeriodo || []).find((p) => p.rajadaMaxKmh === rajada)?.periodo;
     achados.push({
       origem: "INMET",
-      fonteDados: fontesDoDado(report, ["precipitacaoHorariaMaxMm", "precipitacaoTotalMm"]),
+      fonteDados: fontesDoDado(
+        report,
+        chuvaIntensa
+          ? ["precipitacaoHorariaMaxMm", "precipitacaoTotalMm"]
+          : ["rajadaMaxKmh"]
+      ),
       naturezaDado: "Previsão",
-      tipo: "Chuva intensa",
-      grau: classificacaoChuva.grau,
-      gravidade: GRAVIDADE_POR_GRAU[classificacaoChuva.grau],
-      detalhe: detalhes.join(" · "),
-      valores: { intensidadeHorariaMmH: intensidadeHoraria, acumuladoDiarioMm: acumulado },
-      unidade: "mm/h e mm/dia",
-      janela: periodoChuva?.periodo || "restante do dia",
-      recomendacoes: recomendacoes("chuva", classificacaoChuva.grau),
-      assinatura: "chuva",
+      tipo: evento.tipo,
+      grau: evento.grau,
+      gravidade: GRAVIDADE_POR_GRAU[evento.grau],
+      detalhe: evento.detalhe,
+      valores: evento.valores,
+      unidade: evento.unidade,
+      janela: periodo || (chuvaIntensa ? "restante do dia" : "próximas horas"),
+      recomendacoes: evento.recomendacoes,
+      assinatura: evento.assinatura,
     });
   }
 
   if (report.mar?.alturaMaxDiaM != null && report.mar.alturaMaxDiaM >= LIMIARES.marGrossoM) {
     achados.push({
       origem: "Previsão",
+      fonteDados: report.fontesPorCampo?.["mar.alturaMaxDiaM"] || "Previsão marítima",
       tipo: "Mar grosso",
       gravidade: "alto",
       detalhe: `Ondas de até ${report.mar.alturaMaxDiaM} m (${report.mar.estadoMarDia})`,
       janela: "próximas horas",
-      assinatura: `mar:${Math.floor(report.mar.alturaMaxDiaM * 2) / 2}`,
+      assinatura: "mar",
     });
   }
 
   if (report.tempMax != null && report.tempMax >= LIMIARES.calorExtremoC) {
     achados.push({
       origem: "Previsão",
+      fonteDados: report.fontesPorCampo?.tempMax || "Previsão meteorológica",
       tipo: "Calor extremo",
       gravidade: "alto",
       detalhe: `Máxima prevista de ${report.tempMax}°C`,
       janela: "tarde",
-      assinatura: `calor:${report.tempMax}`,
+      assinatura: "calor",
     });
   }
 
   if (report.qualidadeAr?.uvMax != null && report.qualidadeAr.uvMax >= LIMIARES.uvExtremo) {
     achados.push({
       origem: "Previsão",
+      fonteDados: report.fontesPorCampo?.["ar.uvMax"] || "Previsão de UV",
       tipo: "Índice UV extremo",
       gravidade: "alto",
       detalhe: `Índice UV de ${report.qualidadeAr.uvMax}`,
       janela: report.qualidadeAr.horaPicoUv ? `pico ~${report.qualidadeAr.horaPicoUv}` : "meio do dia",
-      assinatura: `uv:${Math.floor(report.qualidadeAr.uvMax)}`,
+      assinatura: "uv",
     });
   }
 
   return consolidarPorFenomeno(achados);
 }
 
-/**
- * Filtra o que ainda não foi avisado (ou piorou desde o último aviso).
- */
-function filtrarNovidades(chaveBase, achados, estado) {
+/** Filtra somente transições do último grau enviado por fenômeno. */
+function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => true) {
   const novos = [];
   for (const a of achados) {
     const chave = `${chaveBase}|${a.assinatura}`;
@@ -278,15 +266,49 @@ function filtrarNovidades(chaveBase, achados, estado) {
       continue;
     }
 
-    // Reavisar quando o evento se agrava (ex.: passou de Perigo para Grande
-    // Perigo) — não avisar de novo quando apenas persiste igual.
     const antes = GRAVIDADE[jaAvisado.gravidade] ?? 0;
     const agora = GRAVIDADE[a.gravidade] ?? 0;
-    if (agora > antes) {
-      novos.push({ ...a, chaveEstado: chave, motivo: "agravou" });
+    if (agora !== antes) {
+      novos.push({ ...a, chaveEstado: chave, motivo: agora > antes ? "agravou" : "reduziu", grauAnterior: jaAvisado.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[jaAvisado.gravidade] });
     }
   }
+  for (const [chave, anterior] of Object.entries(estado)) {
+    if (!chave.startsWith(`${chaveBase}|`) || achados.some((a) => chave === `${chaveBase}|${a.assinatura}`)) continue;
+    const assinatura = chave.slice(chaveBase.length + 1);
+    if (!dadosDisponiveis(assinatura) || (GRAVIDADE[anterior.gravidade] ?? 0) === 0) continue;
+    novos.push({
+      chaveEstado: chave,
+      assinatura,
+      tipo: anterior.tipo || assinatura,
+      grau: "NORMAL",
+      gravidade: "normal",
+      motivo: "normalizou",
+      grauAnterior: anterior.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[anterior.gravidade],
+      detalhe: `O gatilho de ${anterior.tipo || assinatura} retornou ao nível NORMAL.`,
+      janela: "verificação atual",
+      origem: anterior.origem || "Monitor CIM",
+      fonteDados: anterior.fonteDados || null,
+      recomendacoes: [],
+    });
+  }
   return novos;
+}
+
+function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salvarEstado } = {}) {
+  const estado = carregar();
+  const emISO = new Date().toISOString();
+  for (const alerta of base.alertas) {
+    estado[alerta.chaveEstado] = {
+      gravidade: alerta.gravidade,
+      grau: alerta.grau,
+      tipo: alerta.tipo,
+      origem: alerta.origem,
+      fonteDados: alerta.fonteDados,
+      janela: alerta.janela,
+      emISO,
+    };
+  }
+  salvar(estado);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,12 +333,9 @@ function basesMonitoradas() {
 /**
  * Verifica todas as bases monitoradas e devolve os alertas novos.
  *
- * @param {object} opcoes
- * @param {boolean} [opcoes.registrar=true] grava os alertas como "já
- *   avisados". Use false para simular sem afetar o estado.
  * @returns {Promise<{porBase: Array, totalNovos: number, falhas: Array}>}
  */
-async function verificarAlertas({ registrar = true } = {}) {
+async function verificarAlertas() {
   const estado = limparExpirados(carregarEstado());
   const porBase = [];
   const falhas = [];
@@ -326,23 +345,28 @@ async function verificarAlertas({ registrar = true } = {}) {
     try {
       const report = await montarRelatorio(cidade);
       const graves = detectarAlertasGraves(report);
-      const novos = filtrarNovidades(chave, graves, estado);
+      const dadosDisponiveis = (assinatura) => {
+        if (assinatura === "vento") return Number.isFinite(report.rajadaMaxKmh);
+        if (assinatura === "chuva") return Number.isFinite(report.precipitacaoHorariaMaxMm) || Number.isFinite(report.precipitacaoTotalMm);
+        if (assinatura.startsWith("inmet:")) return report.monitoramentoApis?.some((api) => api.id === "inmet-avisos" && api.status === "operacional");
+        if (assinatura === "mar") return Number.isFinite(report.mar?.alturaMaxDiaM);
+        if (assinatura === "calor") return Number.isFinite(report.tempMax);
+        if (assinatura === "uv") return Number.isFinite(report.qualidadeAr?.uvMax);
+        if (assinatura === "raios") return report.monitoramentoApis?.some((api) =>
+          ["open-meteo", "windy-weather", "inmet-avisos"].includes(api.id) && api.status === "operacional");
+        return true;
+      };
+      const novos = filtrarNovidades(chave, graves, estado, dadosDisponiveis);
 
       if (novos.length) {
         porBase.push({ chave, cidade, report, alertas: novos });
-        if (registrar) {
-          const emISO = new Date().toISOString();
-          for (const a of novos) {
-            estado[a.chaveEstado] = { gravidade: a.gravidade, tipo: a.tipo, emISO };
-          }
-        }
+      } else {
+        console.log(`[AGENDADOR] ${cidade.nome}: gatilhos sem mudança; nenhum alerta enviado.`);
       }
     } catch (erro) {
       falhas.push({ chave, nome: cidade.nome, erro: erro.message });
     }
   }
-
-  if (registrar) salvarEstado(estado);
 
   return {
     porBase,
@@ -356,6 +380,7 @@ module.exports = {
   verificarAlertas,
   detectarAlertasGraves,
   filtrarNovidades,
+  marcarAlertasEnviados,
   carregarEstado,
   salvarEstado,
   ARQUIVO_ESTADO,
