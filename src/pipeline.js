@@ -95,7 +95,7 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   let report;
   console.log("[RELATORIO] Buscando dados meteorológicos");
   try {
-    report = await montarRelatorio(cidade, { horarioAgendado });
+    report = await montarRelatorio(cidade, { horarioAgendado, atualizarClimaSaude: true });
   } catch (erro) {
     throw erroDaEtapa("weather", "COLETA_DADOS", "montarRelatorio", erro);
   }

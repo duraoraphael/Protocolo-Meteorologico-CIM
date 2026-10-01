@@ -3,7 +3,7 @@
 // HTTPS_PFX_PATH + HTTPS_PFX_SENHA definidas -> sobe https.createServer com o
 // certificado .pfx (CA corporativa) em HTTPS_PORTA (padrão 3443) e mantém
 // um listener HTTP em PORTA (padrão 3210) que só redireciona para HTTPS —
-// assim o link antigo da TV (http://servidor:3210) continua funcionando.
+// assim o link da TV (http://servidor:3210) continua funcionando.
 // Só uma das duas definida -> erro de configuração (o servidor não sobe em
 // HTTP achando que está protegido).
 //

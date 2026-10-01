@@ -1,0 +1,118 @@
+[Windy] { grupo: 'weather', modelo: 'gfs', status: null }
+[Windy] { grupo: 'air', modelo: 'cams', status: null }
+[Windy] { grupo: 'sea', modelo: 'gfsWave', status: null }
+[INMET-AVISOS][ERRO] {
+  type: 'timeout',
+  code: 'ETIMEDOUT',
+  httpStatus: null,
+  message: 'INMET (avisos): tempo de resposta esgotado (15s)',
+  cause: {
+    name: 'TimeoutError',
+    code: 23,
+    message: 'The operation was aborted due to timeout'
+  },
+  tentativa: '1/3',
+  tempoMs: 15004,
+  stack: 'ExternalSourceError: INMET (avisos): tempo de resposta esgotado (15s)\n' +
+    '    at criarErro (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\httpJsonClient.js:56:16)\n' +
+    '    at erroNormalizado (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\httpJsonClient.js:78:10)\n' +
+    '    at buscarJsonComRetentativa (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\httpJsonClient.js:213:20)\n' +
+    '    at async buscarAvisosInmet (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\inmet.js:275:16)\n' +
+    '    at async montarRelatorio (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\logic\\reportBuilder.js:102:19)'
+}
+[OPEN-METEO-MARINE][ERRO] {
+  type: 'timeout',
+  code: 'ETIMEDOUT',
+  httpStatus: null,
+  message: 'Open-Meteo Marine: tempo de resposta esgotado (15s)',
+  cause: {
+    name: 'TimeoutError',
+    code: 23,
+    message: 'The operation was aborted due to timeout'
+  },
+  tentativa: '1/3',
+  tempoMs: 15005,
+  stack: 'ExternalSourceError: Open-Meteo Marine: tempo de resposta esgotado (15s)\n' +
+    '    at criarErro (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\httpJsonClient.js:56:16)\n' +
+    '    at erroNormalizado (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\httpJsonClient.js:78:10)\n' +
+    '    at buscarJsonComRetentativa (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\httpJsonClient.js:213:20)\n' +
+    '    at async buscarMar (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\marine.js:124:16)\n' +
+    '    at async buscarMarComFallback (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\sources\\marine.js:200:23)\n' +
+    '    at async montarRelatorio (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\logic\\reportBuilder.js:114:29)'
+}
+[Windy] { grupo: 'sea', modelo: 'gfsWave', status: 200 }
+[Windy] { grupo: 'weather', modelo: 'gfs', status: 200 }
+[Windy] { grupo: 'air', modelo: 'cams', status: 200 }
+[CIM] Chromium não iniciou; tentando novamente: Protocol error (Target.setAutoAttach): Target closed
+[RELATORIO][ERRO][GERACAO_PDF] {
+  mensagem: 'Protocol error (Target.setAutoAttach): Target closed',
+  stack: 'TargetCloseError: Protocol error (Target.setAutoAttach): Target closed\n' +
+    '    at CallbackRegistry.clear (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:88:36)\n' +
+    '    at #onClose (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Connection.js:215:25)\n' +
+    '    at WebSocket.<anonymous> (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/node/NodeWebSocketTransport.js:45:30)\n' +
+    '    at callListener (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\node_modules\\ws\\lib\\event-target.js:290:14)\n' +
+    '    at WebSocket.onClose (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\node_modules\\ws\\lib\\event-target.js:220:9)\n' +
+    '    at WebSocket.emit (node:events:508:28)\n' +
+    '    at WebSocket.emitClose (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\node_modules\\ws\\lib\\websocket.js:279:10)\n' +
+    '    at Receiver.receiverOnFinish (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\node_modules\\ws\\lib\\websocket.js:1228:20)\n' +
+    '    at Receiver.emit (node:events:508:28)\n' +
+    '    at finish (node:internal/streams/writable:953:10)',
+  funcao: 'gerarPdfBuffer',
+  etapa: 'pdf',
+  erroOriginal: TargetCloseError: Protocol error (Target.setAutoAttach): Target closed
+      at CallbackRegistry.clear (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:88:36)
+      at #onClose (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Connection.js:215:25)
+      at WebSocket.<anonymous> (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/node/NodeWebSocketTransport.js:45:30)
+      at callListener (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\event-target.js:290:14)
+      at WebSocket.onClose (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\event-target.js:220:9)
+      at WebSocket.emit (node:events:508:28)
+      at WebSocket.emitClose (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\websocket.js:279:10)
+      at Receiver.receiverOnFinish (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\websocket.js:1228:20)
+      at Receiver.emit (node:events:508:28)
+      at finish (node:internal/streams/writable:953:10) {
+    cause: ProtocolError
+        at <instance_members_initializer> (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:108:14)
+        at new Callback (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:112:16)
+        at CallbackRegistry.create (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:27:26)
+        at Connection._rawSend (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Connection.js:125:26)
+        at Connection.send (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Connection.js:112:21)
+        at TargetManager.initialize (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/TargetManager.js:102:32)
+        at async CdpBrowser._attach (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Browser.js:98:9)
+        at async CdpBrowser._create (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Browser.js:40:9)
+        at async ChromeLauncher.launch (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/node/BrowserLauncher.js:168:31)
+        at async ChromeLauncher.launch (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/node/ChromeLauncher.js:39:16)
+  }
+}
+[RELATORIO][ERRO][ROTA] {
+  mensagem: 'Protocol error (Target.setAutoAttach): Target closed',
+  stack: 'ErroPipelineRelatorio: Protocol error (Target.setAutoAttach): Target closed\n' +
+    '    at erroDaEtapa (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\pipeline.js:35:10)\n' +
+    '    at executarPipeline (C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\src\\pipeline.js:116:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async C:\\Users\\durao\\Documents\\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\\server.js:206:25',
+  funcao: 'POST /api/gerar-relatorio',
+  etapa: 'pdf',
+  erroOriginal: TargetCloseError: Protocol error (Target.setAutoAttach): Target closed
+      at CallbackRegistry.clear (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:88:36)
+      at #onClose (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Connection.js:215:25)
+      at WebSocket.<anonymous> (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/node/NodeWebSocketTransport.js:45:30)
+      at callListener (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\event-target.js:290:14)
+      at WebSocket.onClose (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\event-target.js:220:9)
+      at WebSocket.emit (node:events:508:28)
+      at WebSocket.emitClose (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\websocket.js:279:10)
+      at Receiver.receiverOnFinish (C:\Users\durao\Documents\Protocolo-Meteorologico-CIM_2026-09-17 (1)(2)\node_modules\ws\lib\websocket.js:1228:20)
+      at Receiver.emit (node:events:508:28)
+      at finish (node:internal/streams/writable:953:10) {
+    cause: ProtocolError
+        at <instance_members_initializer> (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:108:14)
+        at new Callback (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:112:16)
+        at CallbackRegistry.create (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/common/CallbackRegistry.js:27:26)
+        at Connection._rawSend (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Connection.js:125:26)
+        at Connection.send (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Connection.js:112:21)
+        at TargetManager.initialize (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/TargetManager.js:102:32)
+        at async CdpBrowser._attach (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Browser.js:98:9)
+        at async CdpBrowser._create (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/cdp/Browser.js:40:9)
+        at async ChromeLauncher.launch (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/node/BrowserLauncher.js:168:31)
+        at async ChromeLauncher.launch (file:///C:/Users/durao/Documents/Protocolo-Meteorologico-CIM_2026-09-17%20(1)(2)/node_modules/puppeteer-core/lib/puppeteer/node/ChromeLauncher.js:39:16)
+  }
+}

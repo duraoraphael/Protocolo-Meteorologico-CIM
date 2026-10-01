@@ -1,0 +1,4 @@
+◇ injected env (10) from .env // tip: ⌘ suppress logs { quiet: true }
+[CIM] Painel disponível em http://localhost:3211
+[CIM] Agendamento diário desativado via ENVIO_AUTOMATICO_DIARIO=false.
+[CIM] Monitor de alertas desativado via MONITOR_ALERTAS=false.

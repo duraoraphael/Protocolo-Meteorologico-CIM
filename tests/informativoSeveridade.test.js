@@ -112,9 +112,9 @@ test("rajada de 36 km/h aparece como ATENÇÃO laranja em tela, PDF e e-mail", (
   assert.equal(report.eventoMaisRelevante.titulo, "ATENÇÃO — VENTO");
   assert.deepEqual(report.eventoMaisRelevante.recomendacoes, ["Manter o monitoramento durante o dia."]);
   assert.match(pdf, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
-  assert.match(pdf, /class="severidade-grau"/);
-  assert.match(pdf, /font-size: 18pt/);
-  assert.match(pdf, /class="severidade-fenomeno">VENTO/);
+  assert.match(pdf, /class="evento-titulo"[^>]*>.*ATENÇÃO — VENTO/);
+  assert.match(pdf, /font-size: 15pt/);
+  assert.match(pdf, /padding: 18px 20px/);
 
   for (const html of [pdf, email]) {
     assert.match(html, /ATENÇÃO — VENTO/);
@@ -144,9 +144,9 @@ test("vento e chuva simultâneos permanecem visíveis com a maior severidade", (
 
 test("estados NORMAL, ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saídas", () => {
   const casos = [
-    { rajadaMaxKmh: 25, grau: "NORMAL", cor: "#FBC02D", classe: "nivel-normal", titulo: "CONDIÇÃO NORMAL" },
-    { rajadaMaxKmh: 45, grau: "ALERTA", cor: "#D32F2F", classe: "nivel-alerta", titulo: "ALERTA — VENTO" },
-    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", cor: "#B71C1C", classe: "nivel-emergencia", titulo: "EMERGÊNCIA — VENTO" },
+    { rajadaMaxKmh: 25, grau: "NORMAL", corPdf: "#2E7D32", corEmail: "#2E7D32", classe: "nivel-normal", titulo: "CONDIÇÃO NORMAL" },
+    { rajadaMaxKmh: 45, grau: "ALERTA", corPdf: "#D32F2F", corEmail: "#D32F2F", classe: "nivel-alerta", titulo: "ALERTA — VENTO" },
+    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", corPdf: "#B71C1C", corEmail: "#B71C1C", classe: "nivel-emergencia", titulo: "EMERGÊNCIA — VENTO" },
   ];
 
   for (const caso of casos) {
@@ -158,15 +158,15 @@ test("estados NORMAL, ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saíd
     assert.equal(report.severidade.grau, caso.grau);
     assert.match(pdf, new RegExp(caso.titulo));
     assert.match(email, new RegExp(caso.titulo));
-    assert.match(pdf, new RegExp(caso.cor));
-    assert.match(email, new RegExp(caso.cor));
+    assert.match(pdf, new RegExp(caso.corPdf));
+    assert.match(email, new RegExp(caso.corEmail));
     assert.match(tela, new RegExp(caso.classe));
     assert.match(tela, new RegExp(caso.titulo));
     if (caso.grau !== "NORMAL") {
-      assert.match(pdf, /class="severidade-grau"/);
-      assert.match(pdf, /font-size: 18pt/);
+      assert.match(pdf, /class="evento-titulo"/);
+      assert.match(pdf, /font-size: 15pt/);
       assert.match(pdf, /font-weight: 700/);
-      assert.match(pdf, /margin: 2px 0 16px 0/);
+      assert.match(pdf, /margin: 0 0 12px 0/);
     }
   }
 });
@@ -195,8 +195,8 @@ test("trovoada exige evidência específica, e seções de segurança ficam só 
   const report = relatorioRenderizado({ rajadaKmh: 46, chuvaHorariaMmH: 0, chuvaDiariaMm: 0 });
   const pdf = renderPdfHtml(report);
   const email = renderEmailHtml(report);
-  assert.match(pdf, /Centro integrado de monitoramento/);
-  assert.match(pdf, /compartilhado/);
+  assert.match(pdf, /Centro Integrado de Monitoramento/);
+  assert.match(pdf, /COMPARTILHADO/);
   assert.match(pdf, /Fonte de dados:/);
   assert.match(pdf, /Deslocamento/);
   assert.match(pdf, /Edificação/);
@@ -226,11 +226,13 @@ test("rajada, fonte, recomendações e motivo oficial são consistentes em tela,
   }
   for (const html of [detalhes, pdf, email]) {
     assert.match(html, /Motivo do aviso:.*Chuva entre 20 e 30 mm\/h\. Ventos intensos entre 40 e 60 km\/h\./);
-    assert.match(html, /Fonte de dados: INMET/);
   }
+  assert.match(detalhes, /Fonte de dados: INMET/);
+  assert.match(pdf, /Fonte de dados:<\/strong> INMET/);
+  assert.match(email, /Fonte: INMET/);
   assert.match(pdf, /class="header-logo-cim"/);
-  assert.match(pdf, /alt="CIM — Centro integrado de monitoramento compartilhado"/);
-  assert.match(pdf, /padding: 20px 22px/);
+  assert.match(pdf, /alt="CIM — Centro Integrado de Monitoramento COMPARTILHADO"/);
+  assert.match(pdf, /padding: 18px 20px/);
   assert.doesNotMatch(tela + detalhes + email, /Deslocamento|Edificação/);
   assert.match(pdf, /Deslocamento/);
   assert.match(pdf, /Edificação/);
@@ -250,6 +252,21 @@ test("indicadores exibem oito cards em dois grupos de quatro com chuva acumulada
   assert.match(tela, /Chuva acumulada/);
   assert.match(tela, /12\.4 <small>mm<\/small>/);
   assert.match(tela, /Rajada prevista/);
+});
+
+test("card da tela exibe somente a classificação dinâmica da qualidade do ar", () => {
+  const report = relatorioRenderizado({ rajadaKmh: 30, chuvaHorariaMmH: 0, chuvaDiariaMm: 0 });
+  report.qualidadeAr = {
+    pm25Medio: 31.7,
+    pm25Periodo: "média diária",
+    pm25Classificacao: { nivel: "Ruim" },
+  };
+  report.fontesPorCampo = { "ar.pm25Medio": "Open-Meteo Air Quality" };
+  const tela = carregarPainel().executar("Dashboard.home")(report);
+  assert.match(tela, /Qualidade do ar/);
+  assert.match(tela, /class="valor">Ruim</);
+  assert.doesNotMatch(tela, /Qualidade do ar \(PM2,5\)|31\.7 µg\/m³/);
+  assert.match(tela, /Open-Meteo Air Quality/);
 });
 
 test("cabeçalho do PDF alinha CIM, título/data e Petrobras em três colunas", () => {

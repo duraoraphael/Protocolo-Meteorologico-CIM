@@ -168,6 +168,50 @@ test("estado de alerta só muda ao confirmar explicitamente o envio", () => {
   assert.equal(estado["macae|chuva"].grau, "ALERTA");
 });
 
+test("avisos oficiais usam assinatura própria e acompanham todo o ciclo de severidade", () => {
+  const chaveBase = "rio_de_janeiro";
+  const estado = {};
+  const detectar = (severidade) => detectarAlertasGraves({
+    ...relatorioBase(),
+    avisosInmet: [{
+      descricao: "Chuvas Intensas", severidade,
+      inicio: "30/09/2026 10:00", fim: "30/09/2026 20:00",
+      riscos: ["Chuva intensa."], instrucoes: ["Busque abrigo."],
+    }],
+  }).find((alerta) => alerta.assinatura === "inmet:chuva");
+  const confirmar = (alertas) => marcarAlertasEnviados(
+    { alertas },
+    { carregar: () => estado, salvar: () => {} }
+  );
+  const transicao = (severidade) => {
+    const novidades = filtrarNovidades(chaveBase, [detectar(severidade)], estado, () => true);
+    if (novidades.length) confirmar(novidades);
+    return novidades;
+  };
+
+  let [mudanca] = transicao("Perigo Potencial");
+  assert.equal(mudanca.grauAnterior, "NORMAL");
+  assert.equal(mudanca.grau, "ATENÇÃO");
+  assert.equal(mudanca.assinatura, "inmet:chuva");
+  assert.equal(filtrarNovidades(chaveBase, [detectar("Perigo Potencial")], estado).length, 0);
+
+  [mudanca] = transicao("Perigo");
+  assert.deepEqual([mudanca.grauAnterior, mudanca.grau, mudanca.motivo], ["ATENÇÃO", "ALERTA", "agravou"]);
+  [mudanca] = transicao("Grande Perigo");
+  assert.deepEqual([mudanca.grauAnterior, mudanca.grau, mudanca.motivo], ["ALERTA", "EMERGÊNCIA", "agravou"]);
+  [mudanca] = transicao("Perigo");
+  assert.deepEqual([mudanca.grauAnterior, mudanca.grau, mudanca.motivo], ["EMERGÊNCIA", "ALERTA", "reduziu"]);
+  [mudanca] = transicao("Perigo Potencial");
+  assert.deepEqual([mudanca.grauAnterior, mudanca.grau, mudanca.motivo], ["ALERTA", "ATENÇÃO", "reduziu"]);
+
+  assert.equal(filtrarNovidades(chaveBase, [], estado, () => false).length, 0, "falha da API não normaliza");
+  [mudanca] = filtrarNovidades(chaveBase, [], estado, () => true);
+  assert.deepEqual([mudanca.grauAnterior, mudanca.grau, mudanca.motivo], ["ATENÇÃO", "NORMAL", "normalizou"]);
+  assert.match(mudanca.detalhe, /não consta mais entre os avisos ativos do INMET/);
+  confirmar([mudanca]);
+  assert.equal(filtrarNovidades(chaveBase, [], estado, () => true).length, 0);
+});
+
 test("e-mail apresenta fenômeno, grau, fontes, valores e recomendações", () => {
   const alerta = detectarAlertasGraves(relatorioBase()).find((a) => a.assinatura === "chuva");
   const base = {
@@ -200,6 +244,7 @@ test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem
     inicio: "14:00",
     fim: "18:00",
     riscos: ["Chuva entre 30 e 60 mm/h.", "Ventos intensos de 60 a 100 km/h."],
+    instrucoes: ["Busque abrigo."],
   }];
   const oficial = detectarAlertasGraves(report).find((a) => a.naturezaDado === "Aviso oficial");
   assert.equal(oficial.fonteDados, "INMET");
@@ -208,15 +253,40 @@ test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem
     report: { dataFormatadaCurta: "28/09/2026", horaConsulta: "15:00", ventoPorPeriodo: [] },
     alertas: [oficial],
   });
-  assert.match(html, /Aviso oficial INMET/);
+  assert.match(html, /MUDANÇA DE AVISO OFICIAL INMET — TEMPESTADE/);
+  assert.match(html, /Classificação: NOVO ALERTA/);
+  assert.match(html, /Instruções oficiais:/);
   assert.match(html, /Motivo do aviso:.*Chuva entre 30 e 60 mm\/h\. Ventos intensos de 60 a 100 km\/h\./);
   assert.match(html, /Fonte de dados: INMET/);
   assert.equal((html.match(/Chuva entre 30 e 60 mm\/h/g) || []).length, 1);
 });
 
+test("normalização oficial usa título, transição, motivo e cor verde padronizados", () => {
+  const html = renderAlertEmailHtml({
+    cidade: { nome: "Rio de Janeiro", uf: "RJ" },
+    report: { dataFormatadaCurta: "30/09/2026", horaConsulta: "15:00", ventoPorPeriodo: [] },
+    alertas: [{
+      tipo: "Chuvas Intensas",
+      assinatura: "inmet:chuva",
+      naturezaDado: "Aviso oficial",
+      fonteDados: "INMET",
+      grauAnterior: "ALERTA",
+      grau: "NORMAL",
+      gravidade: "normal",
+      motivo: "normalizou",
+      detalhe: "O aviso oficial não consta mais entre os avisos ativos do INMET para esta base.",
+    }],
+  });
+
+  assert.match(html, /NORMALIZAÇÃO DE AVISO OFICIAL INMET — CHUVAS INTENSAS/);
+  assert.match(html, /ALERTA.*→.*NORMAL/s);
+  assert.match(html, /O aviso oficial não consta mais entre os avisos ativos do INMET para esta base\./);
+  assert.match(html, /#2E7D32/);
+});
+
 test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {
   const cores = [
-    ["NORMAL", "normal", "#FBC02D"],
+    ["NORMAL", "normal", "#2E7D32"],
     ["ATENÇÃO", "atencao", "#F57C00"],
     ["ALERTA", "alto", "#D32F2F"],
     ["EMERGÊNCIA", "severo", "#B71C1C"],
@@ -229,8 +299,9 @@ test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {
     });
     assert.match(html, new RegExp(cor));
     assert.match(html, /CIM/);
-    assert.match(html, /Centro integrado de monitoramento/);
-    assert.match(html, /compartilhado/);
+    assert.match(html, /Centro Integrado<br>de Monitoramento/);
+    assert.match(html, /COMPARTILHADO/);
+    assert.match(html, /background:#006527/);
     assert.match(html, /Fonte de dados: Open-Meteo/);
     assert.doesNotMatch(html, /Fonte do critério|Fonte do dado/);
   }

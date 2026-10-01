@@ -28,7 +28,7 @@ function encontrarArquivo(padrao) {
 
 function arquivosLogos() {
   return {
-    petrobras: encontrarArquivo(/petrobras/i),
+    petrobras: encontrarArquivo(/^Petrobras_horizontal_logo\.svg\.png$/i) || encontrarArquivo(/petrobras/i),
     cim: encontrarArquivo(/\bcim\b|centro.?integrado/i),
   };
 }
@@ -60,7 +60,9 @@ function logosComoDataUri() {
 }
 
 function logoPdfComoDataUri() {
-  return comoDataUri(encontrarArquivo(/^logo[_ -]?pdf\./i));
+  return comoDataUri(
+    encontrarArquivo(/^Logo_PDF\.png$/i) || encontrarArquivo(/^logo[_ -]?pdf\.(?:png|jpe?g|webp)$/i)
+  );
 }
 
 module.exports = { PASTA_LOGO, arquivosLogos, logosComoDataUri, logoPdfComoDataUri };

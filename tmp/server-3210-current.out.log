@@ -1,0 +1,4 @@
+◇ injected env (9) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[CIM] Painel disponível em http://localhost:3210
+[CIM] Agendamento diário desativado via ENVIO_AUTOMATICO_DIARIO=false.
+[CIM] Monitor de alertas desativado via MONITOR_ALERTAS=false.

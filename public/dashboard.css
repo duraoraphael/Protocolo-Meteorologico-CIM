@@ -419,6 +419,10 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .api-operacional span { color: var(--verde-claro, #67d391); }
 .api-indisponivel { border-left-color: var(--vermelho); }
 .api-indisponivel span { color: var(--vermelho); }
+.api-degradado { border-left-color: #e6b800; }
+.api-degradado span { color: #f2cf45; }
+.api-armazenado { border-left-color: #9a9270; }
+.api-armazenado span { color: #c9bd86; }
 .api-nao_configurada { border-left-color: var(--laranja); }
 .api-nao_configurada span { color: var(--laranja); }
 .api-sob_demanda { border-left-color: #58a6ff; }

@@ -143,7 +143,7 @@ function avaliarRiscos(consolidado) {
   }
 
   // Condições de mar (apenas bases costeiras — `mar` vem nulo nas demais).
-  if (mar?.alturaMaxDiaM != null) {
+  if (!mar?.desatualizado && mar?.alturaMaxDiaM != null) {
     if (mar.alturaMaxDiaM >= LIMIARES.marGrossoM || textoAvisos(avisosInmet, /ressaca|agitação marítima/i)) {
       candidatos.push({
         tipo: "marGrosso",

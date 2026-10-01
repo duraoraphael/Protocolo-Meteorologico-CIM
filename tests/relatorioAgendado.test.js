@@ -1,6 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buscarOpenMeteo } = require("../src/sources/openMeteo");
+const {
+  buscarOpenMeteo,
+  OPEN_METEO_TIMEOUT_MS,
+  OPEN_METEO_TENTATIVAS,
+} = require("../src/sources/openMeteo");
 const { renderPdfHtml } = require("../src/render/pdfTemplate");
 const { renderEmailHtml } = require("../src/render/emailTemplate");
 
@@ -58,7 +62,47 @@ test("previsão das 05h cobre 05:00–00:00 e quatro dias; 15h começa às 15:00
   }
 });
 
-test("PDF e e-mail das 15h mostram janela, dias e comparação", () => {
+test("Open-Meteo usa 15 segundos e repete falhas transitórias de rede", async () => {
+  const chamadas = [];
+  const esperas = [];
+  const fetchImpl = async (url, opcoes) => {
+    chamadas.push({ url, opcoes });
+    if (chamadas.length < OPEN_METEO_TENTATIVAS) {
+      const nome = chamadas.length === 1 ? "TypeError" : "TimeoutError";
+      throw Object.assign(new Error("falha transitória de teste"), { name: nome });
+    }
+    return { ok: true, json: async () => dadosOpenMeteo() };
+  };
+
+  const resultado = await buscarOpenMeteo(-22.9, -43.2, {
+    fetchImpl,
+    esperarFn: async (ms) => { esperas.push(ms); },
+  });
+
+  assert.equal(OPEN_METEO_TIMEOUT_MS, 15000);
+  assert.equal(chamadas.length, 3);
+  assert.deepEqual(esperas, [2000, 4000]);
+  assert.equal(resultado.fonte, "Open-Meteo");
+  assert.ok(chamadas.every(({ opcoes }) => opcoes.signal instanceof AbortSignal));
+});
+
+test("Open-Meteo informa esgotamento depois de três timeouts", async () => {
+  let chamadas = 0;
+  await assert.rejects(
+    buscarOpenMeteo(-22.9, -43.2, {
+      timeoutMs: 25,
+      fetchImpl: async () => {
+        chamadas += 1;
+        throw Object.assign(new Error("timeout de teste"), { name: "TimeoutError" });
+      },
+      esperarFn: async () => {},
+    }),
+    /tempo de resposta esgotado \(0\.025s\) após 3 tentativas/
+  );
+  assert.equal(chamadas, OPEN_METEO_TENTATIVAS);
+});
+
+test("PDF mantém a previsão futura e e-mail a omite sem perder a comparação", () => {
   const report = {
     cidade: { nome: "Rio de Janeiro", uf: "RJ" },
     dataFormatadaCurta: "28/09/2026", dataFormatadaLonga: "segunda-feira, 28 de setembro de 2026", horaConsulta: "15:00",
@@ -74,9 +118,12 @@ test("PDF e e-mail das 15h mostram janela, dias e comparação", () => {
   };
   const pdf = renderPdfHtml(report);
   const email = renderEmailHtml(report);
+  assert.match(pdf, /Previsão por dia/);
+  assert.match(pdf, /Hoje, das 15:00 até 00:00/);
+  assert.match(pdf, /Amanhã/);
+  assert.doesNotMatch(email, /Previsão para os próximos dias/);
+  assert.doesNotMatch(email, /Hoje, das 15:00 até 00:00|Amanhã|Nublado/);
   for (const saida of [pdf, email]) {
-    assert.match(saida, /Hoje, das 15:00 até 00:00/);
-    assert.match(saida, /Amanhã/);
     assert.match(saida, /ATENÇÃO → ALERTA/);
     assert.match(saida, /35 km\/h → 48 km\/h/);
   }

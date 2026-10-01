@@ -23,7 +23,13 @@ const { montarRelatorio } = require("./reportBuilder");
 const { LIMIARES } = require("./riskEngine");
 const {
   classificarCondicoesMeteorologicas,
+  recomendacoes,
 } = require("./inmetAlertRules");
+const {
+  consolidarAvisosInmet,
+  fenomenoAvisoInmet,
+  grauAvisoInmet,
+} = require("../sources/inmet");
 
 const ARQUIVO_ESTADO = path.join(__dirname, "..", "..", "data", "alertas-notificados.json");
 
@@ -65,15 +71,6 @@ const GRAVIDADE_POR_GRAU = {
   ALERTA: "alto",
   "EMERGÊNCIA": "severo",
 };
-
-function normalizarTexto(t) {
-  return (t || "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function maximoNumerico(valores) {
   const validos = valores.filter(Number.isFinite);
@@ -123,37 +120,42 @@ function consolidarPorFenomeno(achados) {
 function detectarAlertasGraves(report) {
   const achados = [];
 
-  // 1. Avisos oficiais do INMET. São a fonte mais forte: já vêm classificados
-  // por autoridade competente. "Potencial" fica de fora — é previsão de
-  // possibilidade, não de evento em curso.
-  for (const aviso of report.avisosInmet || []) {
-    const sev = normalizarTexto(aviso.severidade);
-    const ehGrandePerigo = sev.includes("grande perigo");
-    const ehPerigo = sev.includes("perigo") && !sev.includes("potencial");
-    if (!ehGrandePerigo && !ehPerigo) continue;
+  // EHF é um gatilho próprio de saúde: risco combinado é apenas informativo.
+  // Só uma coleta nova pode mudar o estado; cache/erro nunca normalizam calor.
+  const calorSaude = report.climaSaude?.status === 'operacional' ? report.climaSaude.dados : null;
+  if (calorSaude?.nivel?.protocolo) {
+    achados.push({
+      origem: 'Clima e Saúde', fonteDados: calorSaude.source,
+      tipo: 'Calor / risco à saúde', assinatura: 'calor-ehf',
+      grau: calorSaude.nivel.grau, gravidade: calorSaude.nivel.gravidade,
+      protocolo: calorSaude.nivel.protocolo,
+      detalhe: `EHF ${calorSaude.ehf.classificacao}${calorSaude.ehf.valor == null ? '' : ` (${calorSaude.ehf.valor})`}; risco combinado: ${calorSaude.riscoCombinado ?? 'indisponível'}.`,
+      janela: 'consulta atual', naturezaDado: 'Indicador EHF',
+      recomendacoes: calorSaude.recomendacoes,
+    });
+  }
 
-    const descricaoNormalizada = normalizarTexto(aviso.descricao);
-    const fenomeno = /chuva|alagamento/.test(descricaoNormalizada)
-      ? "chuva"
-      : /vento|rajada|ventania/.test(descricaoNormalizada)
-        ? "vento"
-        : null;
-    const grau = ehGrandePerigo ? "EMERGÊNCIA" : "ALERTA";
+  // 1. Avisos oficiais do INMET. A assinatura é própria (`inmet:*`) e não
+  // colide com os gatilhos numéricos de previsão (`chuva`, `vento`, etc.).
+  for (const aviso of consolidarAvisosInmet(report.avisosInmet)) {
+    const grau = grauAvisoInmet(aviso.severidade);
+    if (!grau) continue;
+    const fenomeno = fenomenoAvisoInmet(aviso.descricao);
+    const janela = [aviso.inicio, aviso.fim].filter(Boolean).join(" até ");
 
     achados.push({
       origem: "INMET",
-      tipo: fenomeno === "chuva" ? "Chuva intensa" : fenomeno === "vento" ? "Vento" : aviso.descricao || "Aviso meteorológico",
+      tipo: aviso.descricao || "Aviso meteorológico",
       grau,
       gravidade: GRAVIDADE_POR_GRAU[grau],
       severidadeTexto: aviso.severidade,
       detalhe: (aviso.riscos || []).filter(Boolean).join(" "),
-      janela: `${aviso.inicio} até ${aviso.fim}`,
+      instrucoesOficiais: (aviso.instrucoes || []).filter(Boolean),
+      janela: janela || null,
       naturezaDado: "Aviso oficial",
       fonteDados: "INMET",
-      recomendacoes: fenomeno ? recomendacoes(fenomeno, grau) : [],
-      // A assinatura ignora acentuação/caixa para que o mesmo aviso reemitido
-      // com grafia levemente diferente não vire alerta novo.
-      assinatura: fenomeno || `inmet:${descricaoNormalizada}`,
+      recomendacoes: ["chuva", "vento"].includes(fenomeno) ? recomendacoes(fenomeno, grau) : [],
+      assinatura: `inmet:${fenomeno}`,
     });
   }
 
@@ -215,7 +217,7 @@ function detectarAlertasGraves(report) {
     });
   }
 
-  if (report.mar?.alturaMaxDiaM != null && report.mar.alturaMaxDiaM >= LIMIARES.marGrossoM) {
+  if (!report.mar?.desatualizado && report.mar?.alturaMaxDiaM != null && report.mar.alturaMaxDiaM >= LIMIARES.marGrossoM) {
     achados.push({
       origem: "Previsão",
       fonteDados: report.fontesPorCampo?.["mar.alturaMaxDiaM"] || "Previsão marítima",
@@ -262,7 +264,12 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
     const jaAvisado = estado[chave];
 
     if (!jaAvisado) {
-      novos.push({ ...a, chaveEstado: chave, motivo: "novo" });
+      novos.push({
+        ...a,
+        chaveEstado: chave,
+        motivo: "novo",
+        ...(a.assinatura.startsWith("inmet:") ? { grauAnterior: "NORMAL" } : {}),
+      });
       continue;
     }
 
@@ -275,7 +282,11 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
   for (const [chave, anterior] of Object.entries(estado)) {
     if (!chave.startsWith(`${chaveBase}|`) || achados.some((a) => chave === `${chaveBase}|${a.assinatura}`)) continue;
     const assinatura = chave.slice(chaveBase.length + 1);
+    // Estados legados de avisos oficiais usavam `chuva`/`vento` e podiam
+    // colidir com a previsão. Não inferimos normalização desses registros.
+    if (!assinatura.startsWith("inmet:") && anterior.fonteDados === "INMET") continue;
     if (!dadosDisponiveis(assinatura) || (GRAVIDADE[anterior.gravidade] ?? 0) === 0) continue;
+    const avisoOficial = assinatura.startsWith("inmet:");
     novos.push({
       chaveEstado: chave,
       assinatura,
@@ -284,10 +295,13 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
       gravidade: "normal",
       motivo: "normalizou",
       grauAnterior: anterior.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[anterior.gravidade],
-      detalhe: `O gatilho de ${anterior.tipo || assinatura} retornou ao nível NORMAL.`,
-      janela: "verificação atual",
+      detalhe: avisoOficial
+        ? "O aviso oficial não consta mais entre os avisos ativos do INMET para esta base."
+        : `O gatilho de ${anterior.tipo || assinatura} retornou ao nível NORMAL.`,
+      janela: avisoOficial ? null : "verificação atual",
       origem: anterior.origem || "Monitor CIM",
-      fonteDados: anterior.fonteDados || null,
+      fonteDados: avisoOficial ? "INMET" : anterior.fonteDados || null,
+      naturezaDado: avisoOficial ? "Aviso oficial" : anterior.naturezaDado,
       recomendacoes: [],
     });
   }
@@ -304,6 +318,7 @@ function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salva
       tipo: alerta.tipo,
       origem: alerta.origem,
       fonteDados: alerta.fonteDados,
+      naturezaDado: alerta.naturezaDado,
       janela: alerta.janela,
       emISO,
     };
@@ -343,14 +358,15 @@ async function verificarAlertas() {
   for (const chave of basesMonitoradas()) {
     const cidade = getCidade(chave);
     try {
-      const report = await montarRelatorio(cidade);
+      const report = await montarRelatorio(cidade, { atualizarClimaSaude: true });
       const graves = detectarAlertasGraves(report);
       const dadosDisponiveis = (assinatura) => {
         if (assinatura === "vento") return Number.isFinite(report.rajadaMaxKmh);
         if (assinatura === "chuva") return Number.isFinite(report.precipitacaoHorariaMaxMm) || Number.isFinite(report.precipitacaoTotalMm);
         if (assinatura.startsWith("inmet:")) return report.monitoramentoApis?.some((api) => api.id === "inmet-avisos" && api.status === "operacional");
-        if (assinatura === "mar") return Number.isFinite(report.mar?.alturaMaxDiaM);
+        if (assinatura === "mar") return !report.mar?.desatualizado && Number.isFinite(report.mar?.alturaMaxDiaM);
         if (assinatura === "calor") return Number.isFinite(report.tempMax);
+        if (assinatura === "calor-ehf") return report.climaSaude?.status === 'operacional' && Boolean(report.climaSaude.dados?.nivel);
         if (assinatura === "uv") return Number.isFinite(report.qualidadeAr?.uvMax);
         if (assinatura === "raios") return report.monitoramentoApis?.some((api) =>
           ["open-meteo", "windy-weather", "inmet-avisos"].includes(api.id) && api.status === "operacional");
@@ -376,6 +392,21 @@ async function verificarAlertas() {
   };
 }
 
+async function enviarAlertaCalorDoRelatorio(cidade, report) {
+  if (report.climaSaude?.status !== 'operacional') return null;
+  const chave = `${cidade.chave}|calor-ehf`;
+  const estadoCompleto = carregarEstado();
+  const estado = estadoCompleto[chave] ? { [chave]: estadoCompleto[chave] } : {};
+  const achados = detectarAlertasGraves(report).filter((a) => a.assinatura === 'calor-ehf');
+  const novos = filtrarNovidades(cidade.chave, achados, estado, () => true);
+  if (!novos.length) return null;
+  const base = { chave: cidade.chave, cidade, report, alertas: novos };
+  const { enviarAlertaPorEmail } = require('../email/sendAlert');
+  const envio = await enviarAlertaPorEmail(base);
+  marcarAlertasEnviados(base);
+  return envio;
+}
+
 module.exports = {
   verificarAlertas,
   detectarAlertasGraves,
@@ -384,4 +415,5 @@ module.exports = {
   carregarEstado,
   salvarEstado,
   ARQUIVO_ESTADO,
+  enviarAlertaCalorDoRelatorio,
 };

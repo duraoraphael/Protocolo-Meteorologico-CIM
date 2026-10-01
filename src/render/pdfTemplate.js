@@ -1,5 +1,8 @@
 const brand = require("./brand");
 const { logosComoDataUri, logoPdfComoDataUri } = require("../config/logos");
+const { ordenarEventosParaExibicao } = require("./eventOrdering");
+const { consolidarAvisosInmet } = require("../sources/inmet");
+const { formatarDataBrasilia } = require("../sources/sourceHealth");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -17,61 +20,69 @@ function listaHtml(itens) {
   return `<ul>${itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
 }
 
-function blocoRecomendacoes(itens) {
-  if (!itens?.length) return "";
-  return `<p class="titulo-recomendacao"><strong>Recomendações - Protocolo Meteorológico do COMPARTILHADO</strong></p>${listaHtml(itens)}`;
+function corSeveridade(severidade = "") {
+  const s = String(severidade).toLowerCase();
+  if (s.includes("grande perigo") || s.includes("extreme")) return "#B71C1C";
+  if (s.includes("perigo") || s.includes("severe")) return "#D32F2F";
+  if (s.includes("atenção") || s.includes("atencao") || s.includes("moderate")) return "#F57C00";
+  return "#2E7D32";
 }
 
-function corSeveridade(severidade = "") {
-  const s = severidade.toLowerCase();
-  if (s.includes("grande perigo")) return "#7B241C";
-  if (s.includes("perigo")) return brand.vermelhoAlerta;
-  if (s.includes("atenção") || s.includes("atencao")) return "#B9770E";
-  return brand.verde;
+function visualCard(grau) {
+  return grau === "NORMAL" ? { cor: "#2E7D32", fundo: "#E8F5E9" } : brand.statusVisual(grau);
+}
+
+function eventosLocais(r) {
+  const eventos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
+  return ordenarEventosParaExibicao(
+    (Array.isArray(eventos) ? eventos : []).filter((evento) => evento && evento.tipo !== "avisoInmet")
+  );
+}
+
+function textoOficialHtml(valor) {
+  const texto = Array.isArray(valor) ? valor.filter(Boolean).join(" ") : valor;
+  return esc(texto).replace(/\r?\n/g, "<br>");
+}
+
+function cardEvento({ titulo, grau, descricao, janela, fonteDados, detalhes = "", semFonte = false }) {
+  const visual = visualCard(grau);
+  return `<div class="evento-card" style="border-color:${visual.cor};background:${visual.fundo};">
+    <div class="evento-titulo" style="color:${visual.cor};"><span class="evento-icone">●</span> ${esc(titulo)}</div>
+    ${descricao ? `<p class="evento-descricao">${esc(descricao)}</p>` : ""}
+    ${detalhes}
+    ${janela ? `<p class="evento-linha"><em>Janela prevista:</em> ${esc(janela)}</p>` : ""}
+    ${semFonte ? "" : `<p class="evento-linha">Fonte de dados: ${esc(fonteDados || "Indisponível")}</p>`}
+  </div>`;
 }
 
 function blocoEventoExtremo(r) {
-  const grau = r.severidade?.grau || r.eventoMaisRelevante?.grau || "NORMAL";
-  const visual = brand.statusVisual(grau);
-  const eventos = (r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []))
-    .filter((evento, indice) => indice === 0 || evento.tipo !== "avisoInmet");
+  const eventos = eventosLocais(r);
+  if (eventos.length) return eventos.map((evento) => cardEvento(evento)).join("");
+  if ((r.severidade?.grau || "NORMAL") !== "NORMAL") return "";
+  return cardEvento({
+    titulo: "CONDIÇÃO NORMAL",
+    grau: "NORMAL",
+    descricao: "Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.",
+    semFonte: true,
+  });
+}
 
-  if (grau === "NORMAL" || eventos.length === 0) {
-    return `<div class="highlight condicao-normal" style="border-color:${visual.cor};background:${visual.fundo};">
-      <strong style="color:${visual.cor};">CONDIÇÃO NORMAL</strong>
-      <p>Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.</p>
-    </div>`;
-  }
-
-  const evento = eventos[0];
-  const icone = grau === "ATENÇÃO" ? "⚠" : "🚨";
-  const partesTitulo = String(evento.titulo || "").split(/\s+—\s+/);
-  const fenomeno = partesTitulo.length > 1 ? partesTitulo.slice(1).join(" — ") : evento.titulo;
-  const recomendacoesEvento = blocoRecomendacoes(evento.recomendacoes);
-  const demaisEventos = eventos
-    .slice(1)
-    .map((outro) => `<div class="evento-secundario">
-      <strong>${esc(outro.titulo)}</strong>
-      <p>${esc(outro.descricao)}</p>
-      <p class="severidade-janela"><em>Janela prevista:</em> ${esc(outro.janela)}</p>
-      <p class="severidade-fonte">Fonte de dados: ${esc(outro.fonteDados || (outro.tipo === "avisoInmet" ? "INMET — aviso oficial" : "Consulte as fontes por campo"))}</p>
-      ${blocoRecomendacoes(outro.recomendacoes)}
-    </div>`)
-    .join("");
-
-  return `<div class="highlight bloco-severidade" style="border-color:${visual.cor};background:${visual.fundo};">
-    <div class="severidade-cabecalho" aria-label="${escAtributo(evento.titulo)}">
-      <div class="severidade-linha">
-        <div class="severidade-grau" style="color:${visual.cor};">${icone} ${esc(grau)}</div>
-      </div>
-      <div class="severidade-fenomeno">${esc(fenomeno)}</div>
-      <p class="severidade-descricao">${esc(evento.descricao)}</p>
-      <p class="severidade-janela"><em>Janela prevista:</em> ${esc(evento.janela)}</p>
-      <p class="severidade-fonte">Fonte de dados: ${esc(evento.fonteDados || (evento.tipo === "avisoInmet" ? "INMET — aviso oficial" : "Consulte as fontes por campo"))}</p>
-    </div>
-    ${recomendacoesEvento}
-    ${demaisEventos}
-  </div>`;
+function blocoRecomendacoesPorFenomeno(r) {
+  const grupos = eventosLocais(r)
+    .filter((evento) => Array.isArray(evento.recomendacoes) && evento.recomendacoes.length)
+    .map((evento) => ({
+      nome: String(evento.titulo || evento.tipo).split(/\s+—\s+/).slice(-1)[0],
+      grau: evento.grau,
+      itens: evento.recomendacoes,
+    }));
+  const calor = r.climaSaude?.dados;
+  if (calor?.recomendacoes?.length) grupos.push({ nome: "CALOR / RISCO À SAÚDE", grau: calor.nivel?.grau, itens: calor.recomendacoes });
+  if (!grupos.length) return "";
+  return `<h4 class="subsecao">Recomendações - Protocolo Meteorológico do COMPARTILHADO</h4>
+    ${grupos.map((grupo) => `<div class="recomendacao-grupo">
+      <strong style="color:${visualCard(grupo.grau).cor};">${esc(grupo.nome)}:</strong>
+      ${listaHtml(grupo.itens)}
+    </div>`).join("")}`;
 }
 
 function blocoDivergencias(divergencias) {
@@ -82,8 +93,13 @@ function blocoDivergencias(divergencias) {
   </div>`;
 }
 
-function blocoAvisosColeta(avisosColeta) {
-  if (!avisosColeta || avisosColeta.length === 0) return "";
+function blocoAvisosColeta(r) {
+  const windyValido = (r.fontesAutomatizadas || r.fontes || []).some((fonte) => /^Windy\b/i.test(fonte.nome || ""));
+  const avisosColeta = [...new Set((r.avisosColeta || [])
+    .filter((aviso) => typeof aviso === "string" && aviso.trim())
+    .filter((aviso) => windyValido || !/^Windy\b/i.test(aviso.trim()))
+    .map((aviso) => aviso.trim()))];
+  if (!avisosColeta.length) return "";
   return `<div class="warning-box">
     <strong>⚠ Avisos de coleta automática</strong>
     ${listaHtml(avisosColeta)}
@@ -91,15 +107,27 @@ function blocoAvisosColeta(avisosColeta) {
 }
 
 function blocoAvisosInmet(avisos) {
-  if (!avisos || avisos.length === 0) return "";
-  return `<h4 class="subsecao">Aviso oficial INMET</h4>` + avisos
+  const consolidados = consolidarAvisosInmet(avisos);
+  if (!consolidados.length) return "";
+  return consolidados
     .map(
-      (a) => `<div class="aviso-inmet" style="border-left-color:${corSeveridade(a.severidade)}">
-        <strong>${esc(a.descricao)}</strong> — <span style="color:${corSeveridade(a.severidade)}">${esc(a.severidade)}</span>
-        <div class="aviso-janela">Vigência: ${esc(a.inicio)} até ${esc(a.fim)}</div>
-        <div class="aviso-fonte">Fonte de dados: INMET</div>
-        ${a.riscos?.length ? `<div class="aviso-motivo"><strong>Motivo do aviso:</strong> ${esc(a.riscos.filter(Boolean).join(" "))}</div>` : ""}
-      </div>`
+      (a) => {
+        const evento = a.event || a.evento || a.descricao || a.headline;
+        const severidade = a.severity || a.severidade;
+        const inicio = a.onset || a.inicio;
+        const fim = a.expires || a.fim;
+        const motivo = a.description || a.riscos;
+        const instrucoes = a.instruction || a.instrucoes;
+        const cor = corSeveridade(severidade);
+        return `<div class="aviso-inmet evento-card" style="border-color:${cor};background:#FFF8F0;">
+        <div class="evento-titulo" style="color:${cor};"><span class="evento-icone">●</span> Aviso oficial INMET</div>
+        <p class="evento-descricao"><strong>${esc(evento)}</strong> — <strong style="color:${cor};">${esc(severidade)}</strong></p>
+        ${(inicio || fim) ? `<p class="evento-linha"><strong>Vigência:</strong> ${esc(inicio)} até ${esc(fim)}</p>` : ""}
+        <p class="evento-linha"><strong>Fonte de dados:</strong> INMET</p>
+        ${motivo?.length ? `<p class="evento-linha"><strong>Motivo do aviso:</strong> ${textoOficialHtml(motivo)}</p>` : ""}
+        ${instrucoes?.length ? `<p class="evento-linha"><strong>Instruções oficiais:</strong> ${textoOficialHtml(instrucoes)}</p>` : ""}
+      </div>`;
+      }
     )
     .join("");
 }
@@ -157,6 +185,7 @@ function tabelaChuva(periodos) {
 function tabelaMar(mar) {
   if (!mar?.periodos?.length) return "";
   return `<h4 class="subsecao">Condições de mar${mar.referenciaPonto ? ` (ponto de referência: ${esc(mar.referenciaPonto)})` : ""}</h4>
+  ${mar.desatualizado ? `<p class="nota"><strong>Dado armazenado.</strong> Última atualização válida: ${esc(formatarDataBrasilia(mar.ultimaAtualizacao) || "horário indisponível")}.</p>` : ""}
   <table>
     <thead><tr><th>Período</th><th>Estado do mar</th><th>Altura máx.</th><th>Período de onda</th><th>Direção</th><th>Marulho</th></tr></thead>
     <tbody>
@@ -178,27 +207,36 @@ function tabelaMar(mar) {
 
 function tabelaQualidadeAr(qa) {
   if (!qa) return "";
-  return `<h4 class="subsecao">Índice UV e Qualidade do Ar</h4>
+  const linhasParticulado = [
+    qa.pm25Medio == null ? "" : `<tr class="zebra">
+      <td>Material particulado inalável (PM2,5)</td>
+      <td>${qa.pm25Medio} µg/m³</td>
+      <td>—</td>
+      <td>Diretriz OMS 2021: até 15 µg/m³</td>
+    </tr>`,
+    qa.pm10Medio == null ? "" : `<tr>
+      <td>Material particulado inalável (PM10)</td>
+      <td>${qa.pm10Medio} µg/m³</td>
+      <td>—</td>
+      <td>Diretriz OMS 2021: até 45 µg/m³</td>
+    </tr>`,
+  ].join("");
+  return `<h4 class="subsecao">Qualidade do Ar e Índice UV</h4>
   <table>
     <thead><tr><th>Indicador</th><th>Valor</th><th>Classificação</th><th>Referência</th></tr></thead>
     <tbody>
       <tr>
+        <td>QUALIDADE DO AR</td>
+        <td></td>
+        <td>${esc(qa.pm25Classificacao?.nivel)}</td>
+        <td></td>
+      </tr>
+      ${linhasParticulado}
+      <tr class="zebra">
         <td>Índice UV (máximo do dia)</td>
         <td>${qa.uvMax ?? "—"}${qa.horaPicoUv ? ` (pico ~${esc(qa.horaPicoUv)})` : ""}</td>
         <td>${esc(qa.uvClassificacao?.nivel)}</td>
         <td>Faixas OMS: 8+ muito alto, 11+ extremo</td>
-      </tr>
-      <tr class="zebra">
-        <td>Material particulado fino (PM2,5)</td>
-        <td>${qa.pm25Medio == null ? "—" : qa.pm25Medio + " µg/m³"}</td>
-        <td>${esc(qa.pm25Classificacao?.nivel)}</td>
-        <td>Diretriz OMS 2021: até 15 µg/m³</td>
-      </tr>
-      <tr>
-        <td>Material particulado inalável (PM10)</td>
-        <td>${qa.pm10Medio == null ? "—" : qa.pm10Medio + " µg/m³"}</td>
-        <td>—</td>
-        <td>Diretriz OMS 2021: até 45 µg/m³</td>
       </tr>
     </tbody>
   </table>`;
@@ -239,7 +277,8 @@ function blocoFontes(r) {
     <tbody>${linhas(manuais)}</tbody>
   </table>`
       : ""
-  }`;
+  }
+  ${blocoDivergencias(r.divergencias)}`;
 }
 
 function blocoPrevisaoAgendada(r) {
@@ -261,12 +300,36 @@ function blocoMudancasDia(r) {
   return `<h4 class="subsecao">Mudanças do dia em relação ao relatório das 05:00</h4>${listaHtml(r.mudancasDia)}`;
 }
 
+function blocoClimaSaude(r) {
+  const integracao = r.climaSaude;
+  if (!integracao) return '';
+  const dados = integracao.dados;
+  if (!dados) return `<p class="clima-indisponivel">${esc(integracao.mensagem || "Dados do Clima e Saúde indisponíveis nesta atualização.")}</p>`;
+  const nivel = dados.nivel || { grau: "NORMAL" };
+  const temperatura = dados.temperatura || {};
+  const previsao = (dados.previsaoDias || []).map((dia) => `<li>${esc(dia.data)}: EHF ${esc(dia.classificacao)}; máxima ${dia.tempMax == null ? 'indisponível' : `${esc(dia.tempMax)} °C`}</li>`).join('');
+  const detalhes = `<p class="evento-linha">Temperatura média: ${temperatura.media == null ? 'indisponível' : `${esc(temperatura.media)} °C`}</p>
+    <p class="evento-linha">Temperatura máxima prevista: ${temperatura.maxima == null ? 'indisponível' : `${esc(temperatura.maxima)} °C`}</p>
+    <p class="evento-linha">Temperatura mínima: ${temperatura.minima == null ? 'indisponível' : `${esc(temperatura.minima)} °C`}</p>
+    <p class="evento-linha">RISCO COMBINADO À SAÚDE: ${esc(dados.riscoCombinado)}</p>
+    <p class="evento-linha">GeoSES / vulnerabilidade social: ${dados.geoses?.valor == null ? 'indisponível' : esc(dados.geoses.valor)}${dados.geoses?.classificacao ? ` (${esc(dados.geoses.classificacao)})` : ''}</p>
+    <p class="evento-linha">Consulta: ${esc(dados.consultadoEm)}${integracao.status === 'armazenado' ? ' — última coleta válida armazenada' : ''}</p>
+    ${previsao ? `<div class="evento-linha"><strong>Previsão Clima e Saúde</strong><ul>${previsao}</ul></div>` : ''}`;
+  return cardEvento({
+    titulo: `${nivel.grau} — CALOR / RISCO À SAÚDE${nivel.protocolo ? ` ${nivel.protocolo}` : ''}`,
+    grau: nivel.grau,
+    descricao: `EHF: ${dados.ehf?.classificacao || "Indisponível"}${dados.ehf?.valor == null ? '' : ` (${dados.ehf.valor})`}`,
+    fonteDados: dados.source,
+    detalhes,
+  });
+}
+
 function renderPdfHtml(r) {
   const logos = logosComoDataUri();
   const logoPdf = logoPdfComoDataUri();
   const logoCimHtml = logoPdf
-    ? `<div class="header-logo-cim"><img src="${logoPdf}" alt="CIM — Centro integrado de monitoramento compartilhado" /></div>`
-    : `<div class="header-logo-cim"><div class="header-logo-cim-fallback"><strong>CIM</strong><div class="header-logo-cim-texto"><span>Centro integrado de monitoramento</span><span>compartilhado</span></div></div></div>`;
+    ? `<div class="header-logo-cim"><img src="${logoPdf}" alt="CIM — Centro Integrado de Monitoramento COMPARTILHADO" /></div>`
+    : `<div class="header-logo-cim"><div class="header-logo-cim-fallback"><strong>CIM</strong><div class="header-logo-cim-texto"><span>Centro Integrado de Monitoramento</span><span>COMPARTILHADO</span></div></div></div>`;
   const logoPetrobrasHtml = logos.petrobras
     ? `<div class="header-logo-petrobras"><img src="${logos.petrobras}" alt="Petrobras" /></div>`
     : `<div class="logo-placeholder">[ESPAÇO RESERVADO PARA LOGO OFICIAL — inserir manualmente via modelo corporativo aprovado]</div>`;
@@ -395,52 +458,32 @@ function renderPdfHtml(r) {
     border-bottom: 1px solid ${brand.cinzaBorda};
   }
   tr.zebra { background: ${brand.cinzaClaro}; }
-  .highlight {
-    border: 1.5px solid ${brand.amarelo};
-    background: #FFFDF2;
-    border-radius: 4px;
-    padding: 10px 14px;
-    margin: 14px 0;
-  }
-  .bloco-severidade {
-    border-width: 2px;
-    padding: 20px 22px;
-    margin: 24px 0 22px 0;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-  }
-  .severidade-cabecalho {
+  .evento-card {
+    width: 100%;
+    border: 1.5px solid;
+    border-left-width: 5px;
+    border-radius: 5px;
+    padding: 18px 20px;
+    margin: 16px 0;
+    font-size: 10.5pt;
+    line-height: 1.55;
     break-inside: avoid;
     page-break-inside: avoid;
+    -webkit-column-break-inside: avoid;
   }
-  .severidade-grau {
-    display: block;
-    font-size: 18pt;
-    font-weight: 700;
-    line-height: 1.3;
-    letter-spacing: 0.4px;
-    margin: 2px 0 16px 0;
-  }
-  .severidade-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
-  .severidade-fenomeno {
-    font-size: 13pt;
+  .evento-titulo {
+    font-size: 15pt;
     font-weight: 700;
     line-height: 1.4;
-    margin: 0 0 14px 0;
+    margin: 0 0 12px 0;
   }
-  .severidade-fonte { font-size: 9pt; font-weight: 600; color: #555; margin: 0 0 14px 0; line-height: 1.5; }
-  .severidade-descricao { margin: 0 0 14px 0; line-height: 1.6; }
-  .severidade-janela { margin: 0 0 12px 0; line-height: 1.5; }
-  .titulo-recomendacao { margin: 22px 0 12px 0; line-height: 1.5; }
-  .bloco-severidade ul { margin: 10px 0 18px 0; }
-  .bloco-severidade li { margin-bottom: 9px; line-height: 1.6; }
-  .condicao-normal { margin: 14px 0; }
-  .evento-secundario {
-    border-top: 1px solid ${brand.cinzaBorda};
-    margin-top: 20px;
-    padding-top: 18px;
-    line-height: 1.55;
-  }
+  .evento-icone { font-size: 11pt; vertical-align: 1px; }
+  .evento-descricao { margin: 0 0 10px 0; line-height: 1.55; }
+  .evento-linha { margin: 8px 0 0 0; line-height: 1.55; }
+  .evento-linha ul { margin-bottom: 0; }
+  .recomendacao-grupo { margin: 12px 0; break-inside: avoid; page-break-inside: avoid; }
+  .recomendacao-grupo ul { margin: 5px 0 0 0; }
+  .clima-indisponivel { color: #666; font-size: 10pt; margin: 12px 0; }
   .warning-box {
     border-left: 4px solid ${brand.vermelhoAlerta};
     background: #FDF2F1;
@@ -448,17 +491,7 @@ function renderPdfHtml(r) {
     margin: 14px 0;
     font-size: 10pt;
   }
-  .aviso-inmet {
-    border-left: 4px solid ${brand.vermelhoAlerta};
-    background: #FFF8F0;
-    padding: 16px 18px;
-    margin: 16px 0;
-    font-size: 10pt;
-    line-height: 1.55;
-  }
-  .aviso-janela { font-size: 9pt; color: #666; margin: 8px 0; }
-  .aviso-fonte { font-size: 9pt; color: #555; margin: 8px 0; }
-  .aviso-motivo { margin-top: 10px; line-height: 1.6; }
+  .aviso-inmet { break-inside: avoid; page-break-inside: avoid; }
   ul { margin: 8px 0 14px 0; padding-left: 20px; }
   li { margin-bottom: 6px; line-height: 1.45; }
   .fontes { font-size: 9pt; color: #555; margin-top: 10px; }
@@ -483,7 +516,6 @@ function renderPdfHtml(r) {
 
   <h3 class="secao">1. Previsão</h3>
   ${blocoPrevisaoAgendada(r)}
-  <p><strong>Condição geral do céu:</strong> ${esc(r.condicaoGeral)}</p>
 
   <h4 class="subsecao">Temperatura e umidade</h4>
   ${tabelaTemperatura(r.tabelaTemperaturaUmidade)}
@@ -496,11 +528,11 @@ function renderPdfHtml(r) {
 
   ${tabelaMar(r.mar)}
   ${tabelaQualidadeAr(r.qualidadeAr)}
-
   ${blocoEventoExtremo(r)}
+  ${blocoClimaSaude(r)}
   ${blocoAvisosInmet(r.avisosInmet)}
-  ${blocoDivergencias(r.divergencias)}
-  ${blocoAvisosColeta(r.avisosColeta)}
+  ${blocoRecomendacoesPorFenomeno(r)}
+  ${blocoAvisosColeta(r)}
 
   ${blocoFontes(r)}
 

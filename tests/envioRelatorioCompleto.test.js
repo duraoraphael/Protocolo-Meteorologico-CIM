@@ -30,13 +30,14 @@ function relatorioBase(sobrescritas = {}) {
   };
 }
 
-test("informativo do e-mail mostra chuva acumulada no lugar da onda máxima", () => {
+test("informativo do e-mail mostra chuva acumulada e onda em cards distintos", () => {
   const html = renderEmailHtml(relatorioBase());
 
   assert.match(html, /Chuva acumulada/i);
   assert.match(html, /12\.4 mm/);
   assert.doesNotMatch(html, /Mar — onda máx\./i);
-  assert.doesNotMatch(html, />1\.1 m</);
+  assert.match(html, /MAR — ALTURA MÁX\. DE ONDA/);
+  assert.match(html, />1\.1 m</);
 });
 
 test("zero milímetro é exibido como dado válido", () => {

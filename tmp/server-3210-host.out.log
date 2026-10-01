@@ -1,0 +1,28 @@
+
+> protocolo-meteorologico-cim@1.0.0 start
+> node server.js
+
+◇ injected env (12) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[CIM] Painel disponível em http://localhost:3210
+[AGENDADOR] 05:00 e 15:00 (America/Sao_Paulo), 12 bases cadastradas.
+[CIM] Monitor de alertas ativo: verificação a cada 60 min, das 05:00 às 22:00.
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] { tentativa: '1/3', http: 200, tempoMs: 287 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] { tentativa: '1/3', http: 200, tempoMs: 4126 }
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] { tentativa: '1/3', http: 200, tempoMs: 408 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.2877258&longitude=-41.719347&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] { tentativa: '1/3', http: 200, tempoMs: 991 }

@@ -47,18 +47,35 @@ async function buscarOceanop(local, fetchImpl = fetch) {
   try {
     resposta = await fetchImpl(url, {headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000),redirect:'error'});
   } catch (erro) {
-    if (erro.cause?.code === 'ENOTFOUND') throw new Error('Endereço Oceanop não resolvido. Verifique o endereço e o acesso do servidor à rede/VPN Petrobras.');
-    if (erro.name === 'TimeoutError' || erro.name === 'AbortError') throw new Error('Oceanop não respondeu em 15 segundos. Tente novamente.');
-    throw new Error('Não foi possível conectar ao Oceanop. Verifique a rede/VPN e os requisitos de acesso do serviço.');
+    const code = erro.code || erro.cause?.code || null;
+    const mensagem = code === 'ENOTFOUND'
+      ? 'Endereço Oceanop não resolvido. Verifique o endereço e o acesso do servidor à rede/VPN Petrobras.'
+      : erro.name === 'TimeoutError' || erro.name === 'AbortError'
+        ? 'Oceanop não respondeu em 15 segundos. Tente novamente.'
+        : 'Não foi possível conectar ao Oceanop. Verifique a rede/VPN e os requisitos de acesso do serviço.';
+    const externo = new Error(mensagem, { cause: erro });
+    externo.code = code || (erro.name === 'TimeoutError' || erro.name === 'AbortError' ? 'ETIMEDOUT' : 'NETWORK_ERROR');
+    externo.tipo = code === 'ENOTFOUND' ? 'dns' : externo.code === 'ETIMEDOUT' ? 'timeout' : 'network';
+    throw externo;
   }
   if (!resposta.ok) {
-    if ([401,403].includes(resposta.status)) throw new Error('Oceanop exige autorização. Confirme com o administrador o método de autenticação para o servidor.');
-    if (resposta.status === 404) throw new Error('Endpoint Oceanop não encontrado (HTTP 404). Confirme o endereço com o administrador.');
-    if (resposta.status === 429) throw new Error('Limite de consultas do Oceanop atingido. Aguarde antes de tentar novamente.');
-    throw new Error(`Oceanop indisponível (HTTP ${resposta.status}). Tente novamente mais tarde.`);
+    const mensagens = {
+      401: 'Oceanop exige autorização. Confirme com o administrador o método de autenticação para o servidor.',
+      403: 'Oceanop exige autorização. Confirme com o administrador o método de autenticação para o servidor.',
+      404: 'Endpoint Oceanop não encontrado (HTTP 404). Confirme o endereço com o administrador.',
+      429: 'Limite de consultas do Oceanop atingido. Aguarde antes de tentar novamente.',
+    };
+    const erro = new Error(mensagens[resposta.status] || `Oceanop indisponível (HTTP ${resposta.status}). Tente novamente mais tarde.`);
+    erro.code = `HTTP_${resposta.status}`;
+    erro.httpStatus = resposta.status;
+    erro.tipo = 'http';
+    throw erro;
   }
   let json;
-  try { json = await resposta.json(); } catch { throw new Error('Oceanop não retornou JSON. Confirme os requisitos de autenticação e acesso à rede.'); }
+  try { json = await resposta.json(); } catch (causa) {
+    const erro = new Error('Oceanop não retornou JSON. Confirme os requisitos de autenticação e acesso à rede.', { cause: causa });
+    erro.code = 'INVALID_JSON'; erro.tipo = 'invalid_json'; throw erro;
+  }
   return { fonte:'Oceanop / Petrobras', consulta, consultadoEm:new Date().toISOString(), campos:CAMPOS.map(([chave,rotulo])=>({chave,rotulo})), previsoes:normalizarResposta(json) };
 }
 module.exports = { buscarOceanop, normalizarResposta, validarConsulta, numero };

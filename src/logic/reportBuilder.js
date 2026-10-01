@@ -1,10 +1,21 @@
 const { buscarPacoteWindy } = require('../sources/windy');
 const { integrarWindy } = require('./windyMerge');
 const { buscarOpenMeteo } = require("../sources/openMeteo");
-const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
-const { buscarMar } = require("../sources/marine");
+const { buscarPrevisaoInmet, buscarAvisosInmet, consolidarAvisosInmet } = require("../sources/inmet");
+const { buscarMarComFallback } = require("../sources/marine");
 const { buscarQualidadeAr } = require("../sources/airQuality");
+const { buscarOceanop } = require("../sources/oceanop");
+const climaSaudeService = require("../sources/climaSaudeService");
 const oceanopAreas = require("../config/oceanopAreas");
+const {
+  criarHealthCheck,
+  operacional,
+  indisponivel,
+  naoConfigurada,
+  naoAplicavel,
+  paraMonitoramento,
+  registrarFalha,
+} = require("../sources/sourceHealth");
 const {
   avaliarRiscos,
   recomendacoesDeslocamento,
@@ -58,10 +69,13 @@ function detectarDivergencias(openMeteo, inmet) {
  * em src/config/cities.js. Não lança em caso de falha parcial de uma fonte —
  * cada fonte que falhar é sinalizada em `avisosColeta` e o restante segue.
  */
-async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
+async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaSaude = false } = {}) {
   const avisosColeta = [];
   const falhasApi = {};
   const windyPromise = buscarPacoteWindy(cidade);
+  const climaSaudePromise = (horarioAgendado || atualizarClimaSaude)
+    ? climaSaudeService.consultar(cidade)
+    : Promise.resolve(climaSaudeService.lerArmazenado(cidade));
   let openMeteo, inmetPrevisao, inmetAvisos;
 
   try {
@@ -71,34 +85,41 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
       horarioAgendado ? { inicioHora: horarioAgendado === "15:00" ? 15 : 5, diasPrevisao: horarioAgendado === "15:00" ? 2 : 4 } : undefined
     );
   } catch (erro) {
-    falhasApi.openMeteo = erro.message;
-    avisosColeta.push(`Open-Meteo indisponível no momento da coleta: ${erro.message}`);
+    falhasApi.openMeteo = erro;
+    registrarFalha("OPEN-METEO", erro);
+    avisosColeta.push("Open-Meteo: não foi possível atualizar esta fonte.");
   }
 
   try {
     inmetPrevisao = await buscarPrevisaoInmet(cidade.codigoIbge);
   } catch (erro) {
-    falhasApi.inmetPrevisao = erro.message;
-    avisosColeta.push(`INMET (previsão) indisponível no momento da coleta: ${erro.message}`);
+    falhasApi.inmetPrevisao = erro;
+    registrarFalha("INMET-PREVISAO", erro);
+    avisosColeta.push("INMET — Previsão: não foi possível atualizar esta fonte.");
   }
 
   try {
     inmetAvisos = await buscarAvisosInmet(cidade.codigoIbge);
   } catch (erro) {
-    falhasApi.inmetAvisos = erro.message;
-    avisosColeta.push(`INMET (avisos) indisponível no momento da coleta: ${erro.message}`);
+    falhasApi.inmetAvisos = erro;
+    registrarFalha("INMET-AVISOS", erro);
+    avisosColeta.push("INMET — Avisos: não foi possível atualizar esta fonte.");
   }
 
   // Condições de mar: só para bases costeiras/portuárias/offshore.
   let mar = null;
+  let marArmazenado = null;
+  let healthMarine = naoAplicavel("Open-Meteo Marine", "Base não costeira.");
   if (cidade.costeira) {
-    const ponto = cidade.pontoMar || { latitude: cidade.latitude, longitude: cidade.longitude };
-    try {
-      mar = await buscarMar(ponto.latitude, ponto.longitude);
-      if (cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
-    } catch (erro) {
-      falhasApi.marine = erro.message;
-      avisosColeta.push(`Condições de mar indisponíveis no momento da coleta: ${erro.message}`);
+    const resultadoMarine = await buscarMarComFallback(cidade);
+    healthMarine = resultadoMarine.health;
+    falhasApi.marine = resultadoMarine.erro || null;
+    if (resultadoMarine.health.status === "operacional") mar = resultadoMarine.dados;
+    else if (resultadoMarine.health.status === "degradado") {
+      marArmazenado = resultadoMarine.dados;
+      avisosColeta.push("Open-Meteo Marine: consulta atual indisponível; utilizando última coleta válida armazenada.");
+    } else {
+      avisosColeta.push("Open-Meteo Marine: não foi possível atualizar esta fonte.");
     }
   }
 
@@ -108,11 +129,18 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
   try {
     qualidadeAr = await buscarQualidadeAr(cidade.latitude, cidade.longitude);
   } catch (erro) {
-    falhasApi.airQuality = erro.message;
-    avisosColeta.push(`Qualidade do ar / índice UV indisponíveis no momento da coleta: ${erro.message}`);
+    falhasApi.airQuality = erro;
+    registrarFalha("OPEN-METEO-AIR-QUALITY", erro);
+    avisosColeta.push("Open-Meteo Air Quality: não foi possível atualizar esta fonte.");
   }
 
   const windy = await windyPromise;
+  let climaSaude;
+  try { climaSaude = await climaSaudePromise; }
+  catch (erro) {
+    registrarFalha(`CLIMA-SAÚDE:${cidade.chave}`, erro);
+    climaSaude = { status: "indisponivel", mensagem: "Clima e Saúde: dados indisponíveis nesta atualização.", dados: null };
+  }
   avisosColeta.push(...windy.avisos);
   if (horarioAgendado && !openMeteo) {
     throw new Error("Previsão horária e dos dias seguintes indisponível para a janela do relatório agendado.");
@@ -151,6 +179,14 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
   const arOpenMeteo = qualidadeAr;
   const integrado = integrarWindy(base, mar, qualidadeAr, windy, openMeteo ? 'Open-Meteo' : inmetPrevisao ? 'INMET' : 'Indisponível');
   ({ base, mar, qualidadeAr } = integrado);
+  const marAtualParaRisco = mar;
+  if (!mar && marArmazenado) {
+    mar = marArmazenado;
+    integrado.fontesPorCampo["mar.alturaMaxDiaM"] = "Open-Meteo Marine — dado armazenado";
+    integrado.fontesPorCampo["mar.temperaturaMarC"] = mar.temperaturaMarC != null
+      ? "Open-Meteo Marine — dado armazenado"
+      : "Indisponível";
+  }
   if (horarioAgendado) {
     // O Windy resume o dia inteiro; nesta versão só a série horária filtrada
     // da Open-Meteo representa corretamente 05/15h até a meia-noite.
@@ -166,7 +202,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
     }
   }
   if (mar && cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
-  const avisosInmet = inmetAvisos?.avisos || [];
+  const avisosInmet = consolidarAvisosInmet(inmetAvisos?.avisos || []);
 
   const { eventoMaisRelevante, categoriasAtivas, severidade } = avaliarRiscos({
     tempMax: base.tempMax,
@@ -178,7 +214,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
     temTempestadeHoje: base.temTempestadeHoje,
     periodos: base.periodos,
     avisosInmet,
-    mar,
+    mar: marAtualParaRisco,
     qualidadeAr,
   });
 
@@ -273,6 +309,8 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
       nome: "Open-Meteo Air Quality",
       uso: "Material particulado (PM2,5 e PM10) e índice UV",
     });
+  if (climaSaude.dados)
+    fontesAutomatizadas.push({ nome: "Clima e Saúde — Ministério da Saúde", uso: "EHF, risco combinado à saúde e vulnerabilidade social municipal" });
 
   const fontesManuais = [];
   if (cidade.links?.alertaRio)
@@ -296,6 +334,22 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
       uso: "Cruzamento comercial — sem API pública gratuita",
     });
 
+  const vinculoOceanop = oceanopAreas[cidade.chave];
+  const oceanopLocalId = vinculoOceanop?.oceanopLocalId || vinculoOceanop?.local || null;
+  let healthOceanop;
+  if (!oceanopLocalId) {
+    healthOceanop = naoConfigurada("Oceanop / Petrobras", "Local Oceanop ainda não vinculado a esta base.");
+  } else {
+    try {
+      await buscarOceanop(oceanopLocalId);
+      healthOceanop = operacional("Oceanop / Petrobras", "Integração Oceanop consultada com sucesso.");
+    } catch (erro) {
+      registrarFalha("OCEANOP", erro);
+      healthOceanop = indisponivel("Oceanop / Petrobras", erro);
+      avisosColeta.push("Oceanop / Petrobras: não foi possível atualizar esta fonte.");
+    }
+  }
+
 
   // Mantido para compatibilidade com o rodapé do PDF, que cita as fontes
   // principais em uma linha só.
@@ -306,10 +360,28 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
   // aparece mesmo quando está indisponível, não configurada ou não se aplica
   // à base selecionada.
   const windyConfigurado = Boolean(process.env.WINDY_API_KEY?.trim());
-  const status = (ok, falha, detalheOk) => ({
-    status: ok ? "operacional" : "indisponivel",
-    detalhe: ok ? detalheOk : falha || "A fonte não devolveu dados nesta coleta.",
-  });
+  const checkedAt = dataNow.toISOString();
+  const erroFonte = (erro) => {
+    if (erro instanceof Error) return erro;
+    const convertido = new Error(String(erro || "Fonte indisponível"));
+    convertido.code = "SOURCE_UNAVAILABLE";
+    return convertido;
+  };
+  const healthDaColeta = (source, ok, erro, mensagem) => ok
+    ? operacional(source, mensagem, { checkedAt })
+    : indisponivel(source, erroFonte(erro), "Não foi possível atualizar esta fonte.", { checkedAt });
+
+  const healthClimaSaude = climaSaude.status === "operacional"
+    ? operacional("Clima e Saúde — Ministério da Saúde", climaSaude.mensagem, {
+      checkedAt,
+      lastSuccessAt: climaSaude.dados?.consultadoEm || checkedAt,
+    })
+    : criarHealthCheck("Clima e Saúde — Ministério da Saúde", climaSaude.status, {
+      checkedAt,
+      lastSuccessAt: climaSaude.lastSuccessAt || climaSaude.dados?.consultadoEm || null,
+      message: climaSaude.mensagem,
+      errorCode: climaSaude.status === "armazenado" ? "CACHE_ONLY" : "SOURCE_UNAVAILABLE",
+    });
 
   for (const evento of severidade.eventos) {
     if (evento.tipo === "raios" && evento.fonteDados?.startsWith("Previsão horária")) {
@@ -347,48 +419,28 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
     }
   }
   const monitoramentoApis = [
-    {
-      id: "windy-weather",
-      nome: "Windy Point — Meteorologia",
-      ...(windyConfigurado
-        ? status(Boolean(windy.weather), windy.falhas?.weather, `${windy.weather?.amostras ?? 0} amostras recebidas`)
-        : { status: "nao_configurada", detalhe: "WINDY_API_KEY não configurada." }),
-    },
-    {
-      id: "windy-air",
-      nome: "Windy Point — Qualidade do ar",
-      ...(windyConfigurado
-        ? status(Boolean(windy.air), windy.falhas?.air, `${windy.air?.amostras ?? 0} amostras recebidas`)
-        : { status: "nao_configurada", detalhe: "WINDY_API_KEY não configurada." }),
-    },
-    {
-      id: "windy-sea",
-      nome: "Windy Point — Ondas",
-      ...(cidade.costeira
-        ? windyConfigurado
-          ? status(Boolean(windy.sea), windy.falhas?.sea, `${windy.sea?.amostras ?? 0} amostras recebidas`)
-          : { status: "nao_configurada", detalhe: "WINDY_API_KEY não configurada." }
-        : { status: "nao_aplicavel", detalhe: "Base não costeira." }),
-    },
-    { id: "open-meteo", nome: "Open-Meteo — Meteorologia", ...status(Boolean(openMeteo), falhasApi.openMeteo, "Previsão e condição atual recebidas") },
-    { id: "inmet-previsao", nome: "INMET — Previsão", ...status(Boolean(inmetPrevisao), falhasApi.inmetPrevisao, "Previsão oficial recebida") },
-    { id: "inmet-avisos", nome: "INMET — Avisos", ...status(Boolean(inmetAvisos), falhasApi.inmetAvisos, `${inmetAvisos?.avisos?.length ?? 0} aviso(s) para a base`) },
-    {
-      id: "open-meteo-marine",
-      nome: "Open-Meteo Marine",
-      ...(cidade.costeira
-        ? status(Boolean(marOpenMeteo), falhasApi.marine, "Condições marítimas recebidas")
-        : { status: "nao_aplicavel", detalhe: "Base não costeira." }),
-    },
-    { id: "open-meteo-air", nome: "Open-Meteo Air Quality", ...status(Boolean(arOpenMeteo), falhasApi.airQuality, "Qualidade do ar e UV recebidos") },
-    {
-      id: "oceanop",
-      nome: "Oceanop / Petrobras",
-      status: oceanopAreas[cidade.chave]?.local ? "sob_demanda" : "nao_configurada",
-      detalhe: oceanopAreas[cidade.chave]?.local
-        ? "Base vinculada; consulta disponível na tela Monitoramento por área."
-        : "Local Oceanop ainda não vinculado a esta base.",
-    },
+    paraMonitoramento("windy-weather", "Windy Point — Meteorologia", windyConfigurado
+      ? healthDaColeta("Windy Point — Meteorologia", Boolean(windy.weather), windy.falhas?.weather, `${windy.weather?.amostras ?? 0} amostras recebidas`)
+      : naoConfigurada("Windy Point — Meteorologia", "WINDY_API_KEY não configurada.")),
+    paraMonitoramento("windy-air", "Windy Point — Qualidade do ar", windyConfigurado
+      ? healthDaColeta("Windy Point — Qualidade do ar", Boolean(windy.air), windy.falhas?.air, `${windy.air?.amostras ?? 0} amostras recebidas`)
+      : naoConfigurada("Windy Point — Qualidade do ar", "WINDY_API_KEY não configurada.")),
+    paraMonitoramento("windy-sea", "Windy Point — Ondas", !cidade.costeira
+      ? naoAplicavel("Windy Point — Ondas", "Base não costeira.")
+      : windyConfigurado
+        ? healthDaColeta("Windy Point — Ondas", Boolean(windy.sea), windy.falhas?.sea, `${windy.sea?.amostras ?? 0} amostras recebidas`)
+        : naoConfigurada("Windy Point — Ondas", "WINDY_API_KEY não configurada.")),
+    paraMonitoramento("open-meteo", "Open-Meteo — Meteorologia",
+      healthDaColeta("Open-Meteo — Meteorologia", Boolean(openMeteo), falhasApi.openMeteo, "Previsão e condição atual recebidas")),
+    paraMonitoramento("inmet-previsao", "INMET — Previsão",
+      healthDaColeta("INMET — Previsão", Boolean(inmetPrevisao), falhasApi.inmetPrevisao, "Previsão oficial recebida")),
+    paraMonitoramento("inmet-avisos", "INMET — Avisos",
+      healthDaColeta("INMET — Avisos", Boolean(inmetAvisos), falhasApi.inmetAvisos, `${inmetAvisos?.avisos?.length ?? 0} aviso(s) para a base`)),
+    paraMonitoramento("open-meteo-marine", "Open-Meteo Marine", healthMarine),
+    paraMonitoramento("open-meteo-air", "Open-Meteo Air Quality",
+      healthDaColeta("Open-Meteo Air Quality", Boolean(arOpenMeteo), falhasApi.airQuality, "Qualidade do ar e UV recebidos")),
+    paraMonitoramento("oceanop", "Oceanop / Petrobras", healthOceanop),
+    paraMonitoramento("clima-saude", "Clima e Saúde — Ministério da Saúde", healthClimaSaude),
   ];
 
   return {
@@ -433,6 +485,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null } = {}) {
     fontesAutomatizadas,
     fontesManuais,
     monitoramentoApis,
+    climaSaude,
     geradoEmISO: dataNow.toISOString(),
     horarioAgendado,
     periodoCoberto: horarioAgendado === "05:00"

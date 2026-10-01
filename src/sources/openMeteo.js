@@ -33,7 +33,15 @@ const WMO_DESCRICOES = {
   99: "Trovoada com granizo forte",
 };
 
+const {
+  API_TIMEOUT_MS,
+  API_TENTATIVAS,
+  buscarJsonComRetentativa,
+} = require("./httpJsonClient");
+
 const CODIGOS_TEMPESTADE = new Set([95, 96, 99]);
+const OPEN_METEO_TIMEOUT_MS = API_TIMEOUT_MS;
+const OPEN_METEO_TENTATIVAS = API_TENTATIVAS;
 
 function descreverCodigo(codigo) {
   return WMO_DESCRICOES[codigo] || "Condição indisponível";
@@ -124,7 +132,13 @@ function resumirPeriodo(horas, chave, { dataReferencia = null, inicioHora = 6 } 
   };
 }
 
-async function buscarOpenMeteo(latitude, longitude, { inicioHora = 6, diasPrevisao = 1 } = {}) {
+async function buscarOpenMeteo(latitude, longitude, {
+  inicioHora = 6,
+  diasPrevisao = 1,
+  fetchImpl = fetch,
+  timeoutMs = OPEN_METEO_TIMEOUT_MS,
+  esperarFn,
+} = {}) {
   const params = new URLSearchParams({
     latitude: String(latitude),
     longitude: String(longitude),
@@ -139,28 +153,13 @@ async function buscarOpenMeteo(latitude, longitude, { inicioHora = 6, diasPrevis
 
   const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
 
-  // A API gratuita limita requisições por IP. Em hospedagem compartilhada
-  // (Render, etc.) o IP de saída é usado por muitos clientes, então HTTP 429
-  // acontece com frequência — vale a pena tentar de novo antes de desistir,
-  // em vez de cair direto no modo "só INMET" (que não tem rajada de vento).
-  let resposta;
-  for (let tentativa = 0; tentativa < 3; tentativa++) {
-    resposta = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (resposta.ok) break;
-    if (resposta.status !== 429) {
-      throw new Error(`Open-Meteo respondeu HTTP ${resposta.status}`);
-    }
-    if (tentativa < 2) {
-      await new Promise((r) => setTimeout(r, 2000 * (tentativa + 1)));
-    }
-  }
-  if (!resposta.ok) {
-    throw new Error(
-      `Open-Meteo respondeu HTTP ${resposta.status} (limite de requisições por IP) após 3 tentativas`
-    );
-  }
-
-  const json = await resposta.json();
+  const json = await buscarJsonComRetentativa(url, {
+    nomeFonte: "Open-Meteo",
+    fetchImpl,
+    timeoutMs,
+    tentativas: OPEN_METEO_TENTATIVAS,
+    esperarFn,
+  });
   const horas = json.hourly;
   const dia = json.daily;
   const dataReferencia = dia.time[0];
@@ -233,4 +232,10 @@ async function buscarOpenMeteo(latitude, longitude, { inicioHora = 6, diasPrevis
   };
 }
 
-module.exports = { buscarOpenMeteo, direcaoCardinal, classificarIntensidadeVento };
+module.exports = {
+  buscarOpenMeteo,
+  direcaoCardinal,
+  classificarIntensidadeVento,
+  OPEN_METEO_TIMEOUT_MS,
+  OPEN_METEO_TENTATIVAS,
+};

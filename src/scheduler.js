@@ -65,6 +65,14 @@ async function executarHorarioAgendado(horario, {
         estado[chave] = { enviadoEmISO: new Date().toISOString(), resumo: resumo(resultado.report) };
         salvar(estado);
         console.log(`[AGENDADOR] ${nome}: relatório gerado e e-mail enviado com sucesso (${horario}).`);
+        if (alertasAutomaticosAtivos() && process.env.MONITOR_ALERTAS !== "false" && resultado.report.climaSaude?.status === 'operacional') {
+          try {
+            const { enviarAlertaCalorDoRelatorio } = require('./logic/alertWatcher');
+            await enviarAlertaCalorDoRelatorio(CIDADES[cidadeChave], resultado.report);
+          } catch (erro) {
+            console.error(`[AGENDADOR] ${nome}: falha no alerta de calor: ${erro.message}`);
+          }
+        }
         onResultado?.(null, resultado);
       } catch (erro) {
         console.error(`[AGENDADOR] ${nome}: falha às ${horario}: ${erro.message}`);

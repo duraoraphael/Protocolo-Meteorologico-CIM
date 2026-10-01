@@ -197,7 +197,7 @@ da rede confiem nele sem alerta.
    | `HTTPS_HOST_PUBLICO` | *(opcional)* nome DNS usado no redirecionamento, ex. `painelcim.petrobras.com.br` |
 
 3. Reinicie a tarefa. O painel passa a responder em
-   `https://painelcim.petrobras.com.br:3443`; a porta antiga `3210` fica
+   `https://painelcim.petrobras.com.br:3443`; a porta HTTP `3210` fica
    apenas **redirecionando** para HTTPS (o link salvo na TV continua
    funcionando) e as respostas HTTPS levam `Strict-Transport-Security`.
    Se só uma das duas variáveis estiver definida, ou o .pfx/senha estiverem

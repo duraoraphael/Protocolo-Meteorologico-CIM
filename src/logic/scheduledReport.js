@@ -35,6 +35,7 @@ function resumo(report) {
     fenomenos: (report.severidade?.eventos || []).map((evento) => evento.titulo),
     rajadaMaxKmh: report.rajadaMaxKmh,
     precipitacaoTotalMm: report.precipitacaoTotalMm,
+    calor: report.climaSaude?.status === "operacional" ? report.climaSaude.dados?.nivel?.protocolo || "NORMAL" : null,
     geradoEmISO: report.geradoEmISO,
   };
 }
@@ -44,6 +45,10 @@ function compararComManha(anterior, atual) {
   const mudancas = [];
   for (const [campo, nome] of [["grau", "Grau geral"], ["vento", "Gatilho de vento"], ["chuva", "Gatilho de chuva"]]) {
     if (anterior[campo] !== atual[campo]) mudancas.push(`${nome}: ${anterior[campo]} → ${atual[campo]}.`);
+  }
+  if (anterior.calor && atual.calor && anterior.calor !== atual.calor) {
+    const rotulo = { NORMAL: "NORMAL", P1: "ATENÇÃO P1", P2: "ALERTA P2", P3: "EMERGÊNCIA P3" };
+    mudancas.push(`Calor / risco à saúde (EHF): ${rotulo[anterior.calor]} → ${rotulo[atual.calor]}.`);
   }
   for (const [campo, nome, unidade] of [["rajadaMaxKmh", "Rajada prevista", "km/h"], ["precipitacaoTotalMm", "Chuva acumulada prevista", "mm"]]) {
     if (Number.isFinite(anterior[campo]) && Number.isFinite(atual[campo]) && anterior[campo] !== atual[campo]) {

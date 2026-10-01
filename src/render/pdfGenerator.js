@@ -4,15 +4,49 @@ const { argsChromium, prepararPaginaIsolada } = require("./chromiumSeguro");
 
 let navegadorPromise = null;
 
-function getBrowser() {
-  if (!navegadorPromise) {
-    navegadorPromise = puppeteer.launch({
-      headless: true,
-      // --no-sandbox só em Linux/container (V-12) — ver chromiumSeguro.js.
-      args: argsChromium(),
-    });
+function iniciarNavegador() {
+  const inicializacao = puppeteer.launch({
+    headless: true,
+    // --no-sandbox só em Linux/container (V-12) — ver chromiumSeguro.js.
+    args: argsChromium(),
+  });
+
+  navegadorPromise = inicializacao;
+  inicializacao.then(
+    (browser) => {
+      // Um Chromium encerrado não pode continuar no cache para a próxima
+      // geração. O evento também é disparado em quedas inesperadas.
+      if (typeof browser.once === "function") {
+        browser.once("disconnected", () => {
+          if (navegadorPromise === inicializacao) navegadorPromise = null;
+        });
+      }
+    },
+    () => {
+      if (navegadorPromise === inicializacao) navegadorPromise = null;
+    }
+  );
+
+  return inicializacao;
+}
+
+async function getBrowser() {
+  let ultimoErro;
+
+  for (let tentativa = 1; tentativa <= 2; tentativa += 1) {
+    const inicializacao = navegadorPromise || iniciarNavegador();
+    try {
+      return await inicializacao;
+    } catch (erro) {
+      ultimoErro = erro;
+      if (navegadorPromise === inicializacao) navegadorPromise = null;
+      if (tentativa === 1) {
+        console.warn(`[CIM] Chromium não iniciou; tentando novamente: ${erro.message}`);
+      }
+    }
   }
-  return navegadorPromise;
+
+  throw ultimoErro;
 }
 
 async function gerarPdfBuffer(report) {
@@ -40,10 +74,11 @@ async function gerarPdfBuffer(report) {
 }
 
 async function fecharNavegador() {
-  if (navegadorPromise) {
-    const browser = await navegadorPromise;
+  const inicializacao = navegadorPromise;
+  if (inicializacao) {
+    const browser = await inicializacao;
     await browser.close();
-    navegadorPromise = null;
+    if (navegadorPromise === inicializacao) navegadorPromise = null;
   }
 }
 

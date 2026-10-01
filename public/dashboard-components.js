@@ -26,6 +26,10 @@ const Dashboard = (() => {
   function metric(label, value, detail, name, extra = '', source = '') {
     return `<article class="card ${extra}"><div class="metric-heading">${icon(name)}<h2 class="rotulo">${label}</h2></div><div class="valor">${value}</div><p class="detalhe">${escape(detail)}</p>${source ? `<p class="metric-source">${escape(source)}</p>` : ''}</article>`;
   }
+  function dateTimeBrasilia(value) {
+    if (!value || !Number.isFinite(Date.parse(value))) return null;
+    return new Intl.DateTimeFormat('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).format(new Date(value)).replace(',', '');
+  }
   function metrics(r) {
     const gusts = (r.ventoPorPeriodo || []).map(p => p.rajadaMaxKmh).filter(v => v != null);
     const aq = r.qualidadeAr;
@@ -34,14 +38,14 @@ const Dashboard = (() => {
     const grupoCondicoes = [
       metric('Temperatura', pair(r.tempMin, r.tempMax, '°'), 'Mínima / máxima · °C', 'thermometer', '', sources('tempMin','tempMax')),
       metric('Umidade relativa', pair(r.umidadeMin, r.umidadeMax, '%'), 'Mínima / máxima prevista', 'drop', '', sources('umidadeMin','umidadeMax')),
-      metric('Qualidade do ar (PM2,5)', escape(aq?.pm25Classificacao?.nivel), aq?.pm25Medio == null ? 'Dado indisponível' : `${aq.pm25Medio} µg/m³ · ${aq.pm25Periodo || 'média diária'}`, 'leaf', 'air', sources('ar.pm25Medio')),
+      metric('Qualidade do ar', escape(aq?.pm25Classificacao?.nivel), '', 'leaf', 'air', sources('ar.pm25Medio')),
       metric('Rajada prevista', unit(gusts.length ? Math.max(...gusts) : null, ' <small>km/h</small>'), 'Pico previsto no dia', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
     ];
     const grupoPrevisao = [
       metric('Condição geral', escape(r.condicaoGeral), fields.condicaoGeral?.startsWith('Windy') ? 'Previsão no horário de referência' : 'Previsão para o dia', 'cloud', 'condition', sources('condicaoGeral')),
       metric('Chuva acumulada', unit(r.precipitacaoTotalMm, ' <small>mm</small>'), 'Acumulado previsto no dia', 'drop', '', sources('precipitacaoTotalMm')),
       metric('Índice UV máx.', escape(aq?.uvMax), aq?.uvClassificacao?.nivel || 'Dado indisponível', 'sun', `uv-${['baixo','moderado','alto','muito_alto','extremo'].includes(aq?.uvClassificacao?.categoria) ? aq.uvClassificacao.categoria : 'ausente'}`, sources('ar.uvMax')),
-      metric('Mar — altura máx. de onda', unit(r.mar?.alturaMaxDiaM, ' <small>m</small>'), r.mar?.estadoMarDia || 'Sem dados marítimos para esta base', 'waves', '', sources('mar.alturaMaxDiaM')),
+      metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.desatualizado ? `Dado armazenado · última atualização válida: ${dateTimeBrasilia(r.mar?.ultimaAtualizacao) || 'horário indisponível'}` : r.mar?.estadoMarDia || 'Sem dados marítimos para esta base', 'waves', '', sources('mar.alturaMaxDiaM')),
     ];
     return `<section class="grid-cards" aria-label="Indicadores meteorológicos"><div class="metric-group" aria-label="Temperatura, umidade, ar e vento">${grupoCondicoes.join('')}</div><div class="metric-group" aria-label="Condição geral, chuva, UV e ondas">${grupoPrevisao.join('')}</div></section>`;
   }
@@ -78,6 +82,19 @@ const Dashboard = (() => {
     const avisoOficial = aviso ? `<div class="status-aviso"><strong>Aviso oficial INMET: ${escape(aviso.descricao)} — ${escape(aviso.severidade)}</strong>${aviso.riscos?.length ? `<span>Motivo do aviso: ${escape(aviso.riscos.filter(Boolean).join(' '))}</span>` : ''}<span>Fonte de dados: INMET</span></div>` : '';
     return `<section class="faixa-evento nivel-${classe}" aria-label="Status meteorológico: ${escape(grau)}">${icon('alert')}<div class="texto"><h2>${escape(titulo)}</h2><p>${texto}</p>${janela}${fonte}${recomendacao}${demais}${avisoOficial}${r.avisosColeta?.length ? '<span class="collection-note">Coleta parcial · consulte os detalhes das fontes</span>' : ''}</div><button class="text-link" data-detail="monitoramento">Ver detalhes <span aria-hidden="true">→</span></button></section>`;
   }
+  function heat(r) {
+    const integracao = r.climaSaude;
+    if (!integracao) return '';
+    const dados = integracao.dados;
+    if (!dados) return `<section class="faixa-evento" aria-label="Calor e risco à saúde">${icon('thermometer')}<div class="texto"><h2>Calor / risco à saúde</h2><p>${escape(integracao.mensagem)}</p></div></section>`;
+    const nivel = dados.nivel || { grau: 'NORMAL', protocolo: null };
+    const classe = {'NORMAL':'normal','ATENÇÃO':'atencao','ALERTA':'alerta','EMERGÊNCIA':'emergencia'}[nivel.grau] || 'normal';
+    const previsao = (dados.previsaoDias || []).map(dia => `<li>${escape(dia.data)}: ${escape(dia.classificacao)} · ${unit(dia.tempMax, ' °C')}</li>`).join('');
+    const recomendacoes = (dados.recomendacoes || []).map(item => `<li>${escape(item)}</li>`).join('');
+    const consulta = dateTimeBrasilia(dados.consultadoEm) || 'horário indisponível';
+    const origem = integracao.status === 'operacional' ? `Consulta: ${consulta}` : `Dado armazenado · última coleta válida: ${consulta}`;
+    return `<section class="faixa-evento nivel-${classe}" aria-label="Calor e risco à saúde: ${escape(nivel.grau)}">${icon('thermometer')}<div class="texto"><h2>Calor / risco à saúde — ${escape(nivel.grau)} ${escape(nivel.protocolo || '')}</h2><p>EHF: ${escape(dados.ehf?.classificacao)}${dados.ehf?.valor == null ? '' : ` (${escape(dados.ehf.valor)})`} · Temperatura máxima prevista: ${unit(dados.temperatura?.maxima, ' °C')}</p><p>RISCO COMBINADO À SAÚDE: ${escape(dados.riscoCombinado)} · GeoSES: ${escape(dados.geoses?.classificacao)}</p><p>Fonte de dados: ${escape(dados.source)} · ${escape(origem)}</p>${recomendacoes ? `<span class="status-recomendacao"><strong>Recomendações - Protocolo Meteorológico do COMPARTILHADO</strong><ul>${recomendacoes}</ul></span>` : ''}${previsao ? `<span class="status-recomendacao"><strong>Previsão Clima e Saúde</strong><ul>${previsao}</ul></span>` : ''}</div></section>`;
+  }
   function currentWeather(r) {
     const a = r.atual;
     const time = a?.previsao && Number.isFinite(Date.parse(a.horario)) ? new Date(a.horario).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }) : null;
@@ -94,7 +111,7 @@ const Dashboard = (() => {
       return labels[key] ? (periods[parts[1]] ? periods[parts[1]]+' · ' : '')+labels[key] : null;
     };
     const list = (items) => `<ul>${items.map(x => `<li>${escape(x)}</li>`).join('')}</ul>`;
-    const statusLabels = {operacional:'Operacional',indisponivel:'Indisponível',nao_configurada:'Não configurada',nao_aplicavel:'Não se aplica',sob_demanda:'Sob demanda'};
+    const statusLabels = {operacional:'Operacional',degradado:'Degradado',armazenado:'Última coleta armazenada',indisponivel:'Indisponível',nao_configurada:'Não configurada',nao_aplicavel:'Não se aplica'};
     const apiCards = (r.monitoramentoApis || []).map(api => `<article class="api-status api-${escape(api.status)}"><div><strong>${escape(api.nome)}</strong><span>${escape(statusLabels[api.status] || api.status)}</span></div><p>${escape(api.detalhe)}</p>${api.id === 'oceanop' ? `<a href="areas.html?cidade=${encodeURIComponent(r.cidade.chave)}">Abrir monitoramento Oceanop</a>` : ''}</article>`).join('');
     const eventos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
     const resumoEventos = eventos.length
@@ -102,5 +119,5 @@ const Dashboard = (() => {
       : '<p>Condição normal no período analisado.</p>';
     return `<h3>Status de todas as APIs</h3><p class="api-status-note">Última coleta desta base: ${escape(r.horaConsulta)} (Brasília).</p><div class="api-monitor-grid">${apiCards || '<p>Status das APIs indisponível nesta versão do relatório.</p>'}</div><h3>Eventos do dia</h3>${resumoEventos}<h3>Avisos oficiais INMET</h3>${r.avisosInmet?.length ? r.avisosInmet.map(a => `<article class="aviso-item"><strong>Aviso oficial INMET: ${escape(a.descricao)} — ${escape(a.severidade)}</strong><p>Vigência: ${escape(a.inicio)} até ${escape(a.fim)}</p><p>Fonte de dados: INMET</p>${a.riscos?.length ? `<p><strong>Motivo do aviso:</strong> ${escape(a.riscos.filter(Boolean).join(' '))}</p>` : ''}</article>`).join('') : '<p>Nenhum aviso retornado pela fonte.</p>'}${r.avisosColeta?.length ? `<h3>Falhas e avisos da coleta</h3>${list(r.avisosColeta)}` : ''}${r.divergencias?.length ? `<h3>Divergências entre fontes</h3>${list(r.divergencias)}` : ''}<h3>Destinatários desta base</h3><div id="lista-destinatarios-painel">Carregando…</div><h3>Fonte por campo</h3>${list(Object.entries(r.fontesPorCampo || {}).filter(([campo]) => fieldLabel(campo)).map(([campo,fonte]) => `${fieldLabel(campo)}: ${fonte}`))}<h3>Fontes automatizadas que responderam</h3>${list((r.fontesAutomatizadas || []).map(f => `${f.nome}: ${f.uso}`))}`;
   }
-  return { escape, icon, currentWeather, details, home: r => `${priority(r)}${metrics(r)}<div class="tables-grid">${marine(r)}${windRain(r)}</div>` };
+  return { escape, icon, currentWeather, details, home: r => `${priority(r)}${heat(r)}${metrics(r)}<div class="tables-grid">${marine(r)}${windRain(r)}</div>` };
 })();
