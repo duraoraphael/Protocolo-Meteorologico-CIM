@@ -8,7 +8,16 @@
 // - PM2.5/PM10: qualidade do ar respirável, especialmente em bases próximas a
 //   polos industriais/refinarias e em períodos de queimadas.
 
+const {
+  API_TIMEOUT_MS,
+  API_TENTATIVAS,
+  buscarJsonComRetentativa,
+} = require("./httpJsonClient");
+
 // Faixas do índice UV conforme a Organização Mundial da Saúde (OMS).
+const OPEN_METEO_AIR_TIMEOUT_MS = API_TIMEOUT_MS;
+const OPEN_METEO_AIR_TENTATIVAS = API_TENTATIVAS;
+
 function classificarUv(uv) {
   if (uv === null || uv === undefined) return { nivel: "Sem dado", categoria: null };
   if (uv < 3) return { nivel: "Baixo", categoria: "baixo" };
@@ -46,7 +55,11 @@ function arredondar(valor, casas = 1) {
   return Math.round(valor * f) / f;
 }
 
-async function buscarQualidadeAr(latitude, longitude) {
+async function buscarQualidadeAr(latitude, longitude, {
+  fetchImpl = fetch,
+  timeoutMs = OPEN_METEO_AIR_TIMEOUT_MS,
+  esperarFn,
+} = {}) {
   const params = new URLSearchParams({
     latitude: String(latitude),
     longitude: String(longitude),
@@ -57,22 +70,13 @@ async function buscarQualidadeAr(latitude, longitude) {
 
   const url = `https://air-quality-api.open-meteo.com/v1/air-quality?${params.toString()}`;
 
-  let resposta;
-  for (let tentativa = 0; tentativa < 3; tentativa++) {
-    resposta = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (resposta.ok) break;
-    if (resposta.status !== 429) {
-      throw new Error(`Open-Meteo Air Quality respondeu HTTP ${resposta.status}`);
-    }
-    if (tentativa < 2) await new Promise((r) => setTimeout(r, 2000 * (tentativa + 1)));
-  }
-  if (!resposta.ok) {
-    throw new Error(
-      `Open-Meteo Air Quality respondeu HTTP ${resposta.status} (limite de requisições) após 3 tentativas`
-    );
-  }
-
-  const json = await resposta.json();
+  const json = await buscarJsonComRetentativa(url, {
+    nomeFonte: "Open-Meteo Air Quality",
+    fetchImpl,
+    timeoutMs,
+    tentativas: OPEN_METEO_AIR_TENTATIVAS,
+    esperarFn,
+  });
   const horas = json.hourly || {};
 
   // O pico de UV interessa mais que a média: é o momento de maior risco de
@@ -107,4 +111,10 @@ async function buscarQualidadeAr(latitude, longitude) {
   };
 }
 
-module.exports = { buscarQualidadeAr, classificarUv, classificarPm25 };
+module.exports = {
+  buscarQualidadeAr,
+  classificarUv,
+  classificarPm25,
+  OPEN_METEO_AIR_TIMEOUT_MS,
+  OPEN_METEO_AIR_TENTATIVAS,
+};

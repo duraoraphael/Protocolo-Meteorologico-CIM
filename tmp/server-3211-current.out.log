@@ -1,0 +1,145 @@
+◇ injected env (10) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[CIM] Painel disponível em http://localhost:3211
+[CIM] Agendamento diário desativado via ENVIO_AUTOMATICO_DIARIO=false.
+[CIM] Monitor de alertas desativado via MONITOR_ALERTAS=false.
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] { tentativa: '1/3', http: 200, tempoMs: 3368 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '2/3'
+}
+[OPEN-METEO-MARINE] { tentativa: '2/3', http: 200, tempoMs: 4113 }
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '2/3'
+}
+[INMET-AVISOS] { tentativa: '2/3', http: 200, tempoMs: 3411 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] { tentativa: '1/3', http: 200, tempoMs: 899 }
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] { tentativa: '1/3', http: 200, tempoMs: 368 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] { tentativa: '1/3', http: 200, tempoMs: 4115 }
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] { tentativa: '1/3', http: 200, tempoMs: 7391 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '2/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '3/3'
+}
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] { tentativa: '1/3', http: 200, tempoMs: 389 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '2/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '3/3'
+}
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] { tentativa: '1/3', http: 200, tempoMs: 3301 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '2/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '3/3'
+}
+[RELATORIO] Iniciando geração
+[RELATORIO] Validando autorização
+[RELATORIO] Autorização validada
+[RELATORIO] Buscando dados meteorológicos
+[CLIMA-SAÚDE] Consultando Rio de Janeiro/RJ
+[CLIMA-SAÚDE] HTTP 200
+[CLIMA-SAÚDE] EHF=Sem excesso; Risco=Sem Risco; dados armazenados.
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '2/3'
+}
+[INMET-AVISOS] { tentativa: '2/3', http: 200, tempoMs: 3385 }
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '2/3'
+}
+[OPEN-METEO-MARINE] { tentativa: '2/3', http: 200, tempoMs: 4123 }
+[RELATORIO] Dados obtidos
+[RELATORIO] Gerando HTML
+[RELATORIO] Gerando PDF
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '1/3'
+}
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '2/3'
+}
+[INMET-AVISOS] {
+  url: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
+  tentativa: '3/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '1/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '2/3'
+}
+[OPEN-METEO-MARINE] {
+  url: 'https://marine-api.open-meteo.com/v1/marine?latitude=-22.9068&longitude=-43.1729&hourly=wave_height%2Cwave_period%2Cwave_direction%2Cswell_wave_height%2Cswell_wave_period%2Csea_surface_temperature&timezone=America%2FSao_Paulo&forecast_days=1',
+  tentativa: '3/3'
+}

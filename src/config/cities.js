@@ -5,6 +5,8 @@
 // codigoIbge: código IBGE de 7 dígitos usado pela API de previsão do INMET
 // (mesmo código usado na URL publica https://previsao.inmet.gov.br/<codigo>).
 // Códigos e coordenadas conferidos em servicodados.ibge.gov.br e OpenStreetMap.
+// climaSaudeUrl: página municipal pública conferida por HTTP 200 e título da
+// localidade. Campo manual; não derivar URL automaticamente da chave da base.
 
 const CIDADES = {
   rio_de_janeiro: {
@@ -15,6 +17,7 @@ const CIDADES = {
     latitude: -22.9068,
     longitude: -43.1729,
     codigoIbge: "3304557",
+    climaSaudeUrl: "https://clima.saude.gov.br/rj/rio-de-janeiro?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3304557",
       alertaRio:
@@ -34,6 +37,7 @@ const CIDADES = {
     latitude: -22.2828305,
     longitude: -41.9649091,
     codigoIbge: "3302403",
+    climaSaudeUrl: "https://clima.saude.gov.br/rj/macae?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3302403",
       defesaCivilTelefone: "199",
@@ -52,6 +56,8 @@ const CIDADES = {
     latitude: -22.2877258,
     longitude: -41.719347,
     codigoIbge: "3302403",
+    climaSaudeMunicipio: "Macaé",
+    climaSaudeUrl: "https://clima.saude.gov.br/rj/macae?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3302403",
       defesaCivilTelefone: "199",
@@ -65,6 +71,7 @@ const CIDADES = {
     latitude: -15.7939869,
     longitude: -47.8828,
     codigoIbge: "5300108",
+    climaSaudeUrl: "https://clima.saude.gov.br/df/brasilia?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/5300108",
       defesaCivilTelefone: "199",
@@ -78,6 +85,7 @@ const CIDADES = {
     latitude: -3.1316333,
     longitude: -59.9825041,
     codigoIbge: "1302603",
+    climaSaudeUrl: "https://clima.saude.gov.br/am/manaus?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/1302603",
       defesaCivilTelefone: "199",
@@ -92,6 +100,7 @@ const CIDADES = {
     latitude: -23.9609448,
     longitude: -46.3166316,
     codigoIbge: "3548500",
+    climaSaudeUrl: "https://clima.saude.gov.br/sp/santos?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3548500",
       defesaCivilTelefone: "199",
@@ -106,6 +115,7 @@ const CIDADES = {
     latitude: -10.9162061,
     longitude: -37.0774655,
     codigoIbge: "2800308",
+    climaSaudeUrl: "https://clima.saude.gov.br/se/aracaju?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/2800308",
       defesaCivilTelefone: "199",
@@ -125,6 +135,7 @@ const CIDADES = {
     // do município.
     pontoMar: { latitude: -19.6486, longitude: -39.8258, referencia: "Regência (foz do Rio Doce)" },
     codigoIbge: "3203205",
+    climaSaudeUrl: "https://clima.saude.gov.br/es/linhares?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3203205",
       defesaCivilTelefone: "199",
@@ -139,6 +150,7 @@ const CIDADES = {
     latitude: -20.8057672,
     longitude: -40.6454564,
     codigoIbge: "3200409",
+    climaSaudeUrl: "https://clima.saude.gov.br/es/anchieta?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3200409",
       defesaCivilTelefone: "199",
@@ -153,6 +165,7 @@ const CIDADES = {
     latitude: -20.3200917,
     longitude: -40.3376682,
     codigoIbge: "3205309",
+    climaSaudeUrl: "https://clima.saude.gov.br/es/vitoria?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3205309",
       defesaCivilTelefone: "199",
@@ -166,6 +179,7 @@ const CIDADES = {
     latitude: -25.5861107,
     longitude: -49.4051209,
     codigoIbge: "4101804",
+    climaSaudeUrl: "https://clima.saude.gov.br/pr/araucaria?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/4101804",
       defesaCivilTelefone: "199",
@@ -180,6 +194,7 @@ const CIDADES = {
     latitude: -12.9777,
     longitude: -38.5016,
     codigoIbge: "2927408",
+    climaSaudeUrl: "https://clima.saude.gov.br/ba/salvador?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/2927408",
       codesal: "https://codesal.salvador.ba.gov.br/",
@@ -193,14 +208,25 @@ const CIDADES = {
 // Cidade usada por padrão quando a env CIDADE não é definida.
 const CIDADE_PADRAO = "rio_de_janeiro";
 
-function getCidade(chave) {
-  const c = CIDADES[chave || CIDADE_PADRAO];
-  if (!c) {
-    throw new Error(
-      `Cidade "${chave}" não cadastrada em src/config/cities.js. Cidades disponíveis: ${Object.keys(CIDADES).join(", ")}`
-    );
-  }
-  return c;
+// Chaves de base válidas: só letras minúsculas e "_", 2 a 40 caracteres, e
+// que existam como propriedade PRÓPRIA de CIDADES (V-10). Object.hasOwn
+// impede que "constructor", "__proto__", "toString" etc. passem pela
+// validação por serem herdadas do protótipo.
+const CHAVE_BASE_REGEX = /^[a-z_]{2,40}$/;
+
+function baseExiste(chave) {
+  return typeof chave === "string" && CHAVE_BASE_REGEX.test(chave) && Object.hasOwn(CIDADES, chave);
 }
 
-module.exports = { CIDADES, CIDADE_PADRAO, getCidade };
+/** Erro com mensagem genérica, seguro para devolver ao cliente (HTTP 400). */
+function erroBaseInvalida() {
+  return Object.assign(new Error("Base inválida."), { status: 400, publico: true, code: "BASE_INVALIDA" });
+}
+
+function getCidade(chave) {
+  const efetiva = chave === undefined || chave === null || chave === "" ? CIDADE_PADRAO : chave;
+  if (!baseExiste(efetiva)) throw erroBaseInvalida();
+  return CIDADES[efetiva];
+}
+
+module.exports = { CIDADES, CIDADE_PADRAO, getCidade, baseExiste, erroBaseInvalida };

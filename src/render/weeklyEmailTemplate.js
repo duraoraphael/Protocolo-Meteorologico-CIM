@@ -9,7 +9,7 @@
 
 const brand = require("./brand");
 const { barraHtml, fitaSeveridadeHtml } = require("./charts");
-const { logosComoDataUri } = require("../config/logos");
+const { renderEmailHeader } = require("./emailComponents");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -50,7 +50,7 @@ function linhaBase(base, chuvaMaxRef, rajadaMaxRef) {
           <strong>${esc(base.cidade.nome)}</strong>
           <span style="color:#888;font-size:11px;">${esc(base.cidade.uf)}</span>
           <div style="color:#777;font-size:11px;margin-top:1px;">
-            ${base.tempMinSemana}–${base.tempMaxSemana}°C · ${base.chuvaTotalSemana} mm · rajada ${base.rajadaMaxSemana} km/h${base.ondaMaxSemana ? ` · onda ${base.ondaMaxSemana} m` : ""}
+            ${base.tempMinSemana}–${base.tempMaxSemana}°C · ${base.chuvaTotalSemana} mm · rajada prevista ${base.rajadaMaxSemana} km/h${base.ondaMaxSemana ? ` · onda ${base.ondaMaxSemana} m` : ""}
           </div>
         </td>
         <td width="130" align="right" valign="middle">
@@ -65,7 +65,6 @@ function linhaBase(base, chuvaMaxRef, rajadaMaxRef) {
 }
 
 function renderWeeklyEmailHtml(r) {
-  const logos = logosComoDataUri();
   const alertasTopo = r.alertas.slice(0, 8);
   const chuvaMaxRef = Math.max(...r.basesOrdenadas.map((b) => b.chuvaTotalSemana), 1);
   const rajadaMaxRef = Math.max(...r.basesOrdenadas.map((b) => b.rajadaMaxSemana), 1);
@@ -92,31 +91,18 @@ function renderWeeklyEmailHtml(r) {
 
   return `<!doctype html>
 <html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#EEF1EF;font-family:Arial,'Segoe UI',sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF1EF;padding:18px 0;">
-    <tr><td align="center">
-      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:6px;overflow:hidden;max-width:640px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#EEF1EF;">
+    <tr><td align="center" style="padding:18px 6px;">
+      <!--[if mso]><table role="presentation" width="850" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:850px;background:#ffffff;">
 
         <!-- Cabeçalho -->
-        <tr><td style="background:${brand.verde};padding:18px 24px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            ${
-              logos.cim
-                ? `<td width="86" valign="middle"><img src="${logos.cim}" alt="CIM" width="80" style="display:block;width:80px;height:auto;" /></td>`
-                : ""
-            }
-            <td valign="middle" align="center">
-              <div style="color:#ffffff;font-size:17px;font-weight:bold;letter-spacing:0.4px;">RELATÓRIO METEOROLÓGICO SEMANAL</div>
-              <div style="color:#EAFAF0;font-size:12.5px;margin-top:3px;">Centro Integrado de Monitoramento · ${esc(r.periodoLabel)}</div>
-            </td>
-            ${
-              logos.petrobras
-                ? `<td width="96" align="right" valign="middle"><div style="background:#fff;border-radius:4px;padding:4px 8px;display:inline-block;line-height:0;"><img src="${logos.petrobras}" alt="Petrobras" width="80" style="display:block;width:80px;height:auto;" /></div></td>`
-                : ""
-            }
-          </tr></table>
-        </td></tr>
-        <tr><td style="height:4px;background:${brand.amarelo};line-height:4px;font-size:0;">&nbsp;</td></tr>
+        ${renderEmailHeader({
+          titulo: "RELATÓRIO METEOROLÓGICO SEMANAL",
+          contexto: `Bases monitoradas — ${r.periodoLabel} — ${r.dataGeracao} às ${r.horaGeracao}`,
+        })}
 
         <!-- Cartões -->
         <tr><td style="padding:16px 20px 6px 20px;">
@@ -192,6 +178,7 @@ function renderWeeklyEmailHtml(r) {
         </td></tr>
 
       </table>
+      <!--[if mso]></td></tr></table><![endif]-->
     </td></tr>
   </table>
 </body>

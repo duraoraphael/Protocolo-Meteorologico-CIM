@@ -11,6 +11,7 @@
 // bases por acidente.
 
 require("dotenv").config({ quiet: true });
+require("./security/certificados");
 const fs = require("fs");
 const { executarPipelineSemanal } = require("./weeklyPipeline");
 

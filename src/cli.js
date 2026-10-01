@@ -8,6 +8,7 @@
 //   node src/cli.js --cidade=salvador
 
 require("dotenv").config();
+require("./security/certificados");
 const { executarPipeline } = require("./pipeline");
 const { fecharNavegador } = require("./render/pdfGenerator");
 

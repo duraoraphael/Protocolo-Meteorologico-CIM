@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const puppeteer = require("puppeteer");
+const { argsChromium, prepararPaginaIsolada } = require("./render/chromiumSeguro");
 
 const { montarRelatorioSemanal } = require("./logic/weeklyBuilder");
 const { renderWeeklyPdfHtml, weeklyFooterTemplate } = require("./render/weeklyPdfTemplate");
@@ -12,10 +13,12 @@ const PASTA_SAIDA = path.join(__dirname, "..", "output");
 async function gerarPdfSemanalBuffer(relatorio) {
   const navegador = await puppeteer.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    args: argsChromium(), // --no-sandbox só em Linux/container (V-12)
   });
   try {
     const pagina = await navegador.newPage();
+    // V-12: sem JavaScript e sem rede (só data: e about:).
+    await prepararPaginaIsolada(pagina);
     await pagina.setContent(renderWeeklyPdfHtml(relatorio), { waitUntil: "networkidle0" });
     return await pagina.pdf({
       format: "A4",

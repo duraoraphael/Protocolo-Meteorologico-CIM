@@ -33,7 +33,15 @@ const WMO_DESCRICOES = {
   99: "Trovoada com granizo forte",
 };
 
+const {
+  API_TIMEOUT_MS,
+  API_TENTATIVAS,
+  buscarJsonComRetentativa,
+} = require("./httpJsonClient");
+
 const CODIGOS_TEMPESTADE = new Set([95, 96, 99]);
+const OPEN_METEO_TIMEOUT_MS = API_TIMEOUT_MS;
+const OPEN_METEO_TENTATIVAS = API_TENTATIVAS;
 
 function descreverCodigo(codigo) {
   return WMO_DESCRICOES[codigo] || "Condição indisponível";
@@ -58,18 +66,19 @@ function classificarIntensidadeVento(kmh) {
 
 // Divide as horas do dia corrente em três períodos operacionais.
 const PERIODOS = {
-  manha: { label: "Manhã", horaInicio: 6, horaFim: 12 },
+  manha: { label: "Manhã", horaInicio: 5, horaFim: 12 },
   tarde: { label: "Tarde", horaInicio: 12, horaFim: 18 },
   noite: { label: "Noite", horaInicio: 18, horaFim: 24 },
 };
 
-function resumirPeriodo(horas, chave) {
+function resumirPeriodo(horas, chave, { dataReferencia = null, inicioHora = 6 } = {}) {
   const { horaInicio, horaFim } = PERIODOS[chave];
   const idxs = horas.time
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => {
-      const h = new Date(t).getHours();
-      return h >= horaInicio && h < horaFim;
+      const h = dataReferencia ? Number(t.slice(11, 13)) : new Date(t).getHours();
+      return (!dataReferencia || t.slice(0, 10) === dataReferencia) &&
+        h >= Math.max(horaInicio, inicioHora) && h < horaFim;
     })
     .map(({ i }) => i);
 
@@ -82,6 +91,7 @@ function resumirPeriodo(horas, chave) {
       rajadaMaxKmh: null,
       probabilidadeChuva: null,
       precipitacaoMm: 0,
+      precipitacaoHorariaMaxMm: null,
       tempestade: false,
     };
   }
@@ -100,6 +110,10 @@ function resumirPeriodo(horas, chave) {
     direcoes.reduce((a, b) => a + b, 0) / direcoes.length;
   const probabilidadeChuva = Math.max(...probs);
   const precipitacaoMm = precs.reduce((a, b) => a + b, 0);
+  const precipitacoesValidas = precs.filter(Number.isFinite);
+  const precipitacaoHorariaMaxMm = precipitacoesValidas.length
+    ? Math.max(...precipitacoesValidas)
+    : null;
   const tempestade = codigos.some((c) => CODIGOS_TEMPESTADE.has(c));
 
   return {
@@ -110,11 +124,21 @@ function resumirPeriodo(horas, chave) {
     rajadaMaxKmh: Math.round(rajadaMaxKmh),
     probabilidadeChuva: Math.round(probabilidadeChuva),
     precipitacaoMm: Math.round(precipitacaoMm * 10) / 10,
+    precipitacaoHorariaMaxMm:
+      precipitacaoHorariaMaxMm == null
+        ? null
+        : Math.round(precipitacaoHorariaMaxMm * 10) / 10,
     tempestade,
   };
 }
 
-async function buscarOpenMeteo(latitude, longitude) {
+async function buscarOpenMeteo(latitude, longitude, {
+  inicioHora = 6,
+  diasPrevisao = 1,
+  fetchImpl = fetch,
+  timeoutMs = OPEN_METEO_TIMEOUT_MS,
+  esperarFn,
+} = {}) {
   const params = new URLSearchParams({
     latitude: String(latitude),
     longitude: String(longitude),
@@ -124,40 +148,34 @@ async function buscarOpenMeteo(latitude, longitude) {
     daily:
       "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code",
     timezone: "America/Sao_Paulo",
-    forecast_days: "1",
+    forecast_days: String(diasPrevisao),
   });
 
   const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
 
-  // A API gratuita limita requisições por IP. Em hospedagem compartilhada
-  // (Render, etc.) o IP de saída é usado por muitos clientes, então HTTP 429
-  // acontece com frequência — vale a pena tentar de novo antes de desistir,
-  // em vez de cair direto no modo "só INMET" (que não tem rajada de vento).
-  let resposta;
-  for (let tentativa = 0; tentativa < 3; tentativa++) {
-    resposta = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (resposta.ok) break;
-    if (resposta.status !== 429) {
-      throw new Error(`Open-Meteo respondeu HTTP ${resposta.status}`);
-    }
-    if (tentativa < 2) {
-      await new Promise((r) => setTimeout(r, 2000 * (tentativa + 1)));
-    }
-  }
-  if (!resposta.ok) {
-    throw new Error(
-      `Open-Meteo respondeu HTTP ${resposta.status} (limite de requisições por IP) após 3 tentativas`
-    );
-  }
-
-  const json = await resposta.json();
+  const json = await buscarJsonComRetentativa(url, {
+    nomeFonte: "Open-Meteo",
+    fetchImpl,
+    timeoutMs,
+    tentativas: OPEN_METEO_TENTATIVAS,
+    esperarFn,
+  });
   const horas = json.hourly;
   const dia = json.daily;
+  const dataReferencia = dia.time[0];
+  const relatorioAgendado = inicioHora !== 6 || diasPrevisao !== 1;
+  const indicesJanela = horas.time.map((instante, i) => ({ instante, i }))
+    .filter(({ instante }) => instante.slice(0, 10) === dataReferencia && Number(instante.slice(11, 13)) >= inicioHora)
+    .map(({ i }) => i);
+  if (relatorioAgendado && !indicesJanela.length) throw new Error("Open-Meteo não retornou horas para a janela solicitada.");
+  const valoresJanela = (campo) => indicesJanela.map((i) => horas[campo]?.[i]).filter(Number.isFinite);
+  const minimoJanela = (campo) => valoresJanela(campo).length ? Math.min(...valoresJanela(campo)) : null;
+  const maximoJanela = (campo) => valoresJanela(campo).length ? Math.max(...valoresJanela(campo)) : null;
 
   const periodos = {
-    manha: resumirPeriodo(horas, "manha"),
-    tarde: resumirPeriodo(horas, "tarde"),
-    noite: resumirPeriodo(horas, "noite"),
+    manha: resumirPeriodo(horas, "manha", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
+    tarde: resumirPeriodo(horas, "tarde", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
+    noite: resumirPeriodo(horas, "noite", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
   };
 
   const umidades = horas.relative_humidity_2m;
@@ -171,6 +189,9 @@ async function buscarOpenMeteo(latitude, longitude) {
   // baseados em picos de madrugada que já haviam passado na hora da consulta.
   const precipitacaoTotalMm =
     Math.round(listaPeriodos.reduce((soma, p) => soma + (p.precipitacaoMm || 0), 0) * 10) / 10;
+  const precipitacaoHorariaMaxMm = Math.max(
+    ...listaPeriodos.map((p) => p.precipitacaoHorariaMaxMm ?? 0)
+  );
   const probabilidadeChuvaMax = Math.max(...listaPeriodos.map((p) => p.probabilidadeChuva ?? 0));
   const rajadaMaxKmh = Math.max(...listaPeriodos.map((p) => p.rajadaMaxKmh ?? 0));
   const velocidadeMaxKmh = Math.max(...listaPeriodos.map((p) => p.velocidadeMediaKmh ?? 0));
@@ -179,7 +200,9 @@ async function buscarOpenMeteo(latitude, longitude) {
     fonte: "Open-Meteo",
     url,
     dataReferencia: dia.time[0],
-    condicaoGeral: descreverCodigo(dia.weather_code[0]),
+    condicaoGeral: inicioHora === 6
+      ? descreverCodigo(dia.weather_code[0])
+      : descreverCodigo(horas.weather_code[indicesJanela[0]]),
     atual: json.current ? {
       temperaturaC: json.current.temperature_2m ?? null,
       codigo: json.current.weather_code ?? null,
@@ -187,17 +210,32 @@ async function buscarOpenMeteo(latitude, longitude) {
       dia: json.current.is_day === 1,
       horario: json.current.time,
     } : null,
-    tempMin: Math.round(dia.temperature_2m_min[0]),
-    tempMax: Math.round(dia.temperature_2m_max[0]),
-    umidadeMin: Math.round(Math.min(...umidades)),
-    umidadeMax: Math.round(Math.max(...umidades)),
+    tempMin: inicioHora === 6 ? Math.round(dia.temperature_2m_min[0]) : minimoJanela("temperature_2m"),
+    tempMax: inicioHora === 6 ? Math.round(dia.temperature_2m_max[0]) : maximoJanela("temperature_2m"),
+    umidadeMin: inicioHora === 6 ? Math.round(Math.min(...umidades)) : minimoJanela("relative_humidity_2m"),
+    umidadeMax: inicioHora === 6 ? Math.round(Math.max(...umidades)) : maximoJanela("relative_humidity_2m"),
     precipitacaoTotalMm,
+    precipitacaoHorariaMaxMm,
     probabilidadeChuvaMax,
     rajadaMaxKmh,
     velocidadeMaxKmh,
     temTempestadeHoje,
     periodos,
+    previsaoDias: dia.time.map((data, i) => ({
+      data,
+      condicao: descreverCodigo(dia.weather_code[i]),
+      tempMin: dia.temperature_2m_min[i],
+      tempMax: dia.temperature_2m_max[i],
+      chuvaMm: dia.precipitation_sum[i],
+      rajadaKmh: dia.wind_gusts_10m_max[i],
+    })),
   };
 }
 
-module.exports = { buscarOpenMeteo, direcaoCardinal, classificarIntensidadeVento };
+module.exports = {
+  buscarOpenMeteo,
+  direcaoCardinal,
+  classificarIntensidadeVento,
+  OPEN_METEO_TIMEOUT_MS,
+  OPEN_METEO_TENTATIVAS,
+};

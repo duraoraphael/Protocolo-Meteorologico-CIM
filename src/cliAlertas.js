@@ -9,8 +9,9 @@
 //   node src/cliAlertas.js --bases=a,b  -> restringe as bases
 
 require("dotenv").config({ quiet: true });
+require("./security/certificados");
 const fs = require("fs");
-const { verificarAlertas, ARQUIVO_ESTADO } = require("./logic/alertWatcher");
+const { verificarAlertas, marcarAlertasEnviados, ARQUIVO_ESTADO } = require("./logic/alertWatcher");
 
 function argumento(nome) {
   const p = process.argv.find((a) => a.startsWith(`--${nome}=`));
@@ -37,23 +38,22 @@ function argumento(nome) {
     `[CIM] Verificando alertas${enviar ? " (MODO ENVIO)" : " (simulação — nada será enviado)"}...`
   );
 
-  // Em simulação não registramos nada, para que o teste não "consuma" o
-  // alerta e impeça o envio real logo depois.
-  const resultado = await verificarAlertas({ registrar: enviar });
+  // A verificação nunca altera o estado; o registro acontece após o SMTP.
+  const resultado = await verificarAlertas();
 
   console.log("");
   if (resultado.totalNovos === 0) {
-    console.log("Nenhuma condição grave nova nas bases monitoradas.");
+    console.log("Nenhuma condição de alerta nova nas bases monitoradas.");
   } else {
     console.log(`${resultado.totalNovos} alerta(s) novo(s) em ${resultado.porBase.length} base(s):`);
     console.log("");
     for (const base of resultado.porBase) {
       console.log(`  ${base.cidade.nome} — ${base.cidade.uf}`);
       for (const a of base.alertas) {
-        const marca = a.gravidade === "severo" ? "[SEVERO]" : "[ALTO]  ";
+        const marca = `[${a.grau || (a.gravidade === "severo" ? "SEVERO" : "ALTO")}]`;
         console.log(`    ${marca} ${a.tipo}${a.motivo === "agravou" ? " (AGRAVOU)" : ""}`);
         if (a.detalhe) console.log(`             ${a.detalhe}`);
-        console.log(`             janela: ${a.janela} · fonte: ${a.origem}`);
+        console.log(`             janela: ${a.janela} · critério: ${a.origem}${a.fonteDados ? ` · dado: ${a.fonteDados}` : ""}`);
       }
       console.log("");
     }
@@ -70,6 +70,7 @@ function argumento(nome) {
     for (const base of resultado.porBase) {
       try {
         const envio = await enviarAlertaPorEmail(base);
+        marcarAlertasEnviados(base);
         console.log(`[CIM] Alerta enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`);
       } catch (erro) {
         console.error(`[CIM] Falha ao enviar (${base.chave}): ${erro.message}`);

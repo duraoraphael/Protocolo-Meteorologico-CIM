@@ -6,6 +6,7 @@
 // dia o vento vira. O agregado diário da Open-Meteo já entrega isso pronto.
 
 const { descreverCodigoSemanal, CODIGOS_TEMPESTADE } = require("./wmoCodes");
+const { buscarJsonComRetentativa } = require("./httpJsonClient");
 
 // A consulta semanal pede 12 parâmetros diários por 7 dias — bem mais pesada
 // que a diária, e a Open-Meteo às vezes estoura o tempo de resposta.
@@ -18,53 +19,12 @@ const TENTATIVAS = 4;
 const TIMEOUT_MS = 30000;
 
 async function buscarComRetentativa(url, nomeFonte) {
-  let ultimoErro;
-
-  for (let tentativa = 0; tentativa < TENTATIVAS; tentativa++) {
-    if (tentativa > 0) {
-      await new Promise((r) => setTimeout(r, 1500 * tentativa));
-    }
-
-    try {
-      const resposta = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-
-      if (resposta.ok) {
-        // A Open-Meteo pode responder HTTP 200 e mesmo assim abortar a
-        // geração no meio ("Unexpected error while streaming data:
-        // timeoutReached"), devolvendo texto que não é JSON. Sem este
-        // tratamento o JSON.parse estoura com uma mensagem incompreensível.
-        const texto = await resposta.text();
-        try {
-          return JSON.parse(texto);
-        } catch {
-          ultimoErro = new Error(
-            `${nomeFonte}: resposta incompleta da API (${texto.slice(0, 80).trim()})`
-          );
-          continue;
-        }
-      }
-
-      if (resposta.status === 429) {
-        ultimoErro = new Error(`${nomeFonte}: limite de requisições por IP (HTTP 429)`);
-        continue;
-      }
-      // Erros 5xx também são transitórios; 4xx (fora 429) não adianta repetir.
-      if (resposta.status >= 500) {
-        ultimoErro = new Error(`${nomeFonte} respondeu HTTP ${resposta.status}`);
-        continue;
-      }
-      throw new Error(`${nomeFonte} respondeu HTTP ${resposta.status}`);
-    } catch (erro) {
-      // TimeoutError/AbortError e falhas de rede entram aqui.
-      if (erro.name === "TimeoutError" || erro.name === "AbortError" || erro.name === "TypeError") {
-        ultimoErro = new Error(`${nomeFonte}: tempo de resposta esgotado (${TIMEOUT_MS / 1000}s)`);
-        continue;
-      }
-      throw erro;
-    }
-  }
-
-  throw new Error(`${ultimoErro?.message || nomeFonte + " indisponível"} após ${TENTATIVAS} tentativas`);
+  return buscarJsonComRetentativa(url, {
+    nomeFonte,
+    timeoutMs: TIMEOUT_MS,
+    tentativas: TENTATIVAS,
+    atrasoBaseMs: 1500,
+  });
 }
 
 const arred = (v, casas = 0) => {

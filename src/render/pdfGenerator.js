@@ -1,31 +1,64 @@
 const puppeteer = require("puppeteer");
 const { renderPdfHtml, headerTemplateVazio, footerTemplate } = require("./pdfTemplate");
+const { argsChromium, prepararPaginaIsolada } = require("./chromiumSeguro");
 
 let navegadorPromise = null;
 
-function getBrowser() {
-  if (!navegadorPromise) {
-    navegadorPromise = puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        // Containers Docker (Render, etc.) costumam limitar /dev/shm a
-        // ~64MB — sem essa flag o Chrome pode travar/matar a aba ao
-        // renderizar o PDF, causando "Navigation timeout" no page.setContent.
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-      ],
-    });
+function iniciarNavegador() {
+  const inicializacao = puppeteer.launch({
+    headless: true,
+    // --no-sandbox só em Linux/container (V-12) — ver chromiumSeguro.js.
+    args: argsChromium(),
+  });
+
+  navegadorPromise = inicializacao;
+  inicializacao.then(
+    (browser) => {
+      // Um Chromium encerrado não pode continuar no cache para a próxima
+      // geração. O evento também é disparado em quedas inesperadas.
+      if (typeof browser.once === "function") {
+        browser.once("disconnected", () => {
+          if (navegadorPromise === inicializacao) navegadorPromise = null;
+        });
+      }
+    },
+    () => {
+      if (navegadorPromise === inicializacao) navegadorPromise = null;
+    }
+  );
+
+  return inicializacao;
+}
+
+async function getBrowser() {
+  let ultimoErro;
+
+  for (let tentativa = 1; tentativa <= 2; tentativa += 1) {
+    const inicializacao = navegadorPromise || iniciarNavegador();
+    try {
+      return await inicializacao;
+    } catch (erro) {
+      ultimoErro = erro;
+      if (navegadorPromise === inicializacao) navegadorPromise = null;
+      if (tentativa === 1) {
+        console.warn(`[CIM] Chromium não iniciou; tentando novamente: ${erro.message}`);
+      }
+    }
   }
-  return navegadorPromise;
+
+  throw ultimoErro;
 }
 
 async function gerarPdfBuffer(report) {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
-    await page.setContent(renderPdfHtml(report), { waitUntil: "networkidle0" });
+    // V-12: sem JavaScript e sem rede (só data: e about:).
+    await prepararPaginaIsolada(page);
+    await page.setContent(renderPdfHtml(report), {
+      waitUntil: "load",
+      timeout: 60000,
+    });
     const buffer = await page.pdf({
       format: "A4",
       printBackground: true,
@@ -41,10 +74,11 @@ async function gerarPdfBuffer(report) {
 }
 
 async function fecharNavegador() {
-  if (navegadorPromise) {
-    const browser = await navegadorPromise;
+  const inicializacao = navegadorPromise;
+  if (inicializacao) {
+    const browser = await inicializacao;
     await browser.close();
-    navegadorPromise = null;
+    if (navegadorPromise === inicializacao) navegadorPromise = null;
   }
 }
 

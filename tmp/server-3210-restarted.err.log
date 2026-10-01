@@ -1,0 +1,3 @@
+[Windy] { grupo: 'sea', modelo: 'gfsWave', status: 200 }
+[Windy] { grupo: 'weather', modelo: 'gfs', status: 200 }
+[Windy] { grupo: 'air', modelo: 'cams', status: 200 }

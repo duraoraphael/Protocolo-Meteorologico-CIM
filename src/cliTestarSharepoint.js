@@ -14,6 +14,7 @@
 //        para confirmar que a permissão de ESCRITA está concedida (não só leitura)
 
 require("dotenv").config({ quiet: true });
+require("./security/certificados");
 const ged = require("./integrations/sharepointGed");
 
 function argumento(nome) {
