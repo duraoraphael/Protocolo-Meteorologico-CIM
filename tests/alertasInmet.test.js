@@ -301,7 +301,7 @@ test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {
     assert.match(html, /CIM/);
     assert.match(html, /Centro Integrado<br>de Monitoramento/);
     assert.match(html, /COMPARTILHADO/);
-    assert.match(html, /background:#006527/);
+    assert.match(html, /background:#047C3E/);
     assert.match(html, /Fonte de dados: Open-Meteo/);
     assert.doesNotMatch(html, /Fonte do critério|Fonte do dado/);
   }

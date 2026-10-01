@@ -1,5 +1,6 @@
 const { criarTransportador, enderecoRemetente } = require("./transport");
 const { listarTodos } = require("../config/recipients");
+const { anexosLogosEmail } = require("../config/headerAssets");
 
 /**
  * Destinatários do relatório SEMANAL.
@@ -55,6 +56,7 @@ async function enviarRelatorioSemanalPorEmail(relatorio, pdfBuffer, emailHtml) {
     subject: `Relatório Meteorológico Semanal — CIM — ${relatorio.periodoLabel}`,
     html: emailHtml,
     attachments: [
+      ...anexosLogosEmail(emailHtml),
       {
         filename: `${relatorio.nomeArquivoBase}.pdf`,
         content: pdfBuffer,

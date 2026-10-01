@@ -78,10 +78,16 @@ test("envio reutiliza o PDF completo em memória como anexo SMTP", { concurrency
     const resultado = await enviarRelatorioPorEmail(relatorioBase(), pdfCompleto);
 
     assert.equal(resultado.messageId, "teste-message-id");
-    assert.equal(mensagem.attachments.length, 1);
-    assert.equal(mensagem.attachments[0].filename, "Informativo_Meteorologico_TESTE.pdf");
-    assert.equal(mensagem.attachments[0].contentType, "application/pdf");
-    assert.strictEqual(mensagem.attachments[0].content, pdfCompleto);
+    const pdfs = mensagem.attachments.filter((anexo) => anexo.contentType === "application/pdf");
+    assert.equal(pdfs.length, 1);
+    assert.equal(pdfs[0].filename, "Informativo_Meteorologico_TESTE.pdf");
+    assert.strictEqual(pdfs[0].content, pdfCompleto);
+    // Logos do cabeçalho seguem inline por Content-ID, referenciadas no HTML.
+    const logos = mensagem.attachments.filter((anexo) => anexo.cid);
+    assert.deepEqual(logos.map((anexo) => anexo.cid), ["logo-petrobras-header@cim"]);
+    assert.equal(logos[0].contentDisposition, "inline");
+    assert.ok(fs.existsSync(logos[0].path));
+    assert.match(mensagem.html, /src="cid:logo-petrobras-header@cim"/);
     assert.match(mensagem.html, /Relatório completo com todas as tabelas/);
     assert.equal(resultado.respostaSmtp, "250 2.0.0 OK");
     assert.equal(resultado.aceitos, 1);

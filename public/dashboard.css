@@ -60,8 +60,8 @@ button:disabled { cursor:wait; opacity:.55; }
 .top-navigation { min-height:86px; padding:10px var(--page-gutter); display:flex; align-items:center; gap:42px; border-bottom:1px solid rgba(255,255,255,.08); background:rgba(2,25,21,.18); backdrop-filter:blur(2px); }
 .brand { display:flex; flex:none; }
 
-.petrobras-brand { margin-left:auto; flex:none; }
-.logo-petrobras { display:block; width:210px; height:50px; object-fit:contain; }
+.petrobras-brand { margin-left:auto; flex:none; display:flex; align-items:center; padding:0; border:0; border-radius:0; background:none; box-shadow:none; line-height:0; }
+.logo-petrobras { display:block; width:auto; height:40px; max-width:none; border:0; border-radius:0; background:none; box-shadow:none; }
 .navigation-links { display:flex; align-items:center; gap:26px; align-self:stretch; }
 .navigation-links a,.navigation-links button { display:flex; align-items:center; padding:4px 0; color:#d5e2dd; font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:650; border:0; border-bottom:2px solid transparent; background:none; white-space:nowrap; }
 .navigation-links .active { color:var(--yellow-petro); border-bottom-color:var(--yellow-petro); }
@@ -154,7 +154,7 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 @media (max-width:1399px) {
   .grid-cards { grid-template-columns:1fr; }
   .metric-group + .metric-group { border-left:0; padding-left:0; border-top:1px solid var(--border-medium); padding-top:14px; }
-  .top-navigation { gap:24px; }.navigation-links { gap:20px; }.logo-petrobras { width:175px; }
+  .top-navigation { gap:24px; }.navigation-links { gap:20px; }.logo-petrobras { height:36px; }
 }
 @media (max-width:1099px) {
   .metric-group { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -181,9 +181,9 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
   .card { padding:13px; }.valor { font-size:26px; }
   .faixa-evento { flex-wrap:wrap; padding:14px; gap:12px; }.faixa-evento .texto { flex-basis:75%; }.faixa-evento .text-link { margin-left:43px; }
   .tabela-periodos { min-width:520px; }.section-heading h2 { font-size:13px; }.secao-periodos { padding:13px; }
-  .logo-petrobras { width:135px; height:36px; }
+  .logo-petrobras { height:30px; }
 }
-@media (max-width:370px) { .metric-group { grid-template-columns:1fr; }.hero-weather { grid-template-columns:1fr; }.current-weather { grid-column:1; grid-row:auto; margin-top:16px; }.logo-petrobras { width:115px; } }
+@media (max-width:370px) { .metric-group { grid-template-columns:1fr; }.hero-weather { grid-template-columns:1fr; }.current-weather { grid-column:1; grid-row:auto; margin-top:16px; }.logo-petrobras { height:24px; } }
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; scroll-behavior:auto !important; } }
 .overlay {
   position: fixed;

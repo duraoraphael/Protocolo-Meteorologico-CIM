@@ -255,7 +255,6 @@ function renderEmailHtml(r) {
           cidade: r.cidade?.nome,
           uf: r.cidade?.uf,
           data: r.dataFormatadaLonga,
-          horario: r.horaConsulta,
         })}
         <tr><td class="email-pad" style="padding:11px 25px 3px;color:${COR.texto};font:16px/1.4 Arial,sans-serif;"><strong>Hora da consulta:</strong> ${texto(r.horaConsulta)} (Horário de Brasília)</td></tr>
         <tr><td class="email-pad" style="padding:5px 20px;">${resumoMeteorologico(r)}</td></tr>

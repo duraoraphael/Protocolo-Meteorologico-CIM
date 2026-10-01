@@ -1,8 +1,12 @@
-const { logosComoDataUri } = require("../config/logos");
+const { HEADER_AMARELO, HEADER_VERDE, srcLogoEmail } = require("../config/headerAssets");
 
-const EMAIL_HEADER_VERDE = "#006527";
-const EMAIL_HEADER_VERDE_ESCURO = "#00451B";
-const EMAIL_HEADER_AMARELO = "#FFCC00";
+const EMAIL_HEADER_VERDE = HEADER_VERDE;
+const EMAIL_HEADER_AMARELO = HEADER_AMARELO;
+// Amarelo do "I" na marca original (Logo/Logo_PDF.png).
+const EMAIL_CIM_AMARELO = "#FEBF0A";
+// petrobras-header.png tem 640x126; exibida a 150px de largura.
+const EMAIL_PETROBRAS_LARGURA = 150;
+const EMAIL_PETROBRAS_ALTURA = 30;
 
 const EMAIL_STATUS = Object.freeze({
   NORMAL: Object.freeze({ cor: "#2E7D32", fundo: "#E8F5E9" }),
@@ -40,47 +44,44 @@ function statusEmail(grau) {
 }
 
 function identidadeCimHtml() {
-  // A identidade nunca depende de imagem: esse HTML permanece legível mesmo
-  // quando Gmail/Outlook bloqueiam imagens externas e Data URIs.
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>
-    <td valign="middle" style="color:#ffffff;font:bold 38px/1 Arial,sans-serif;padding-right:9px;white-space:nowrap;"><span style="color:#ffffff;">C</span><span style="color:${EMAIL_HEADER_AMARELO};">I</span><span style="color:#ffffff;">M</span></td>
-    <td valign="middle" style="border-left:2px solid #ffffff;padding-left:9px;color:#ffffff;font:bold 11px/1.18 Arial,sans-serif;white-space:nowrap;">Centro Integrado<br>de Monitoramento<br><span style="color:#ffffff;letter-spacing:0.2px;">COMPARTILHADO</span></td>
+  // Réplica em HTML da marca de Logo/Logo_PDF.png: "CIM" em letras pesadas
+  // e próximas (o "I" em Arial Black é uma barra retangular, aqui amarela),
+  // divisória branca e o texto institucional. Não depende de imagem, então
+  // continua legível quando Gmail/Outlook bloqueiam imagens.
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+    <td valign="middle" style="padding:0 11px 0 0;color:#ffffff;font-family:'Arial Black','Arial Bold',Arial,sans-serif;font-size:42px;font-weight:900;line-height:42px;letter-spacing:-3px;white-space:nowrap;mso-line-height-rule:exactly;"><span style="color:#ffffff;">C</span><span style="color:${EMAIL_CIM_AMARELO};">I</span><span style="color:#ffffff;">M</span></td>
+    <td valign="middle" style="border-left:2px solid #ffffff;padding:1px 0 1px 11px;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:15px;white-space:nowrap;mso-line-height-rule:exactly;">Centro Integrado<br>de Monitoramento<br><span style="color:#ffffff;font-weight:normal;font-size:12px;letter-spacing:1.2px;">COMPARTILHADO</span></td>
   </tr></table>`;
 }
 
 function petrobrasHtml() {
-  const { petrobras } = logosComoDataUri();
-  if (petrobras) {
-    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" align="center" style="width:100%;background:${EMAIL_HEADER_VERDE_ESCURO};"><tr><td align="center" style="padding:7px;line-height:0;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#ffffff;"><tr><td align="center" style="padding:8px 6px;line-height:0;">
-        <img src="${petrobras}" width="135" alt="Petrobras" style="display:block;width:135px;max-width:100%;height:auto;border:0;color:#00843D;font:bold 16px/1.2 Arial,sans-serif;">
-      </td></tr></table>
-    </td></tr></table>`;
+  // Imagem com o mesmo verde do header (sem caixa, contorno ou fundo branco),
+  // anexada inline por Content-ID — ver src/config/headerAssets.js.
+  const src = srcLogoEmail("petrobras");
+  if (src) {
+    return `<img src="${src}" width="${EMAIL_PETROBRAS_LARGURA}" height="${EMAIL_PETROBRAS_ALTURA}" alt="Petrobras" style="display:block;width:${EMAIL_PETROBRAS_LARGURA}px;height:auto;max-width:100%;border:0;outline:none;text-decoration:none;color:#ffffff;font:italic bold 20px/1.2 Arial,sans-serif;">`;
   }
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:${EMAIL_HEADER_VERDE_ESCURO};"><tr><td align="center" style="padding:13px 6px;color:#ffffff;font:italic bold 19px/1.2 Arial,sans-serif;">Petrobras</td></tr></table>`;
+  return `<span style="color:#ffffff;font:italic bold 20px/1.2 Arial,sans-serif;">PETROBRAS</span>`;
 }
 
-function linhaLocal({ cidade, uf, data, horario, contexto }) {
+function linhaLocal({ cidade, uf, data, contexto }) {
   if (contexto) return esc(contexto);
-  const local = [cidade, uf].filter((item) => item !== null && item !== undefined && item !== "").map(esc).join(" — ");
-  const dataHora = [data, horario ? `${esc(data) === "—" ? "" : "às "}${esc(horario)}` : null]
-    .filter((item) => item && item !== "—")
-    .join(" ");
-  return [local, dataHora].filter(Boolean).join(" — ") || "—";
+  const partes = [cidade, uf, data].filter((item) => item !== null && item !== undefined && item !== "");
+  return partes.length ? partes.map(esc).join(" — ") : "—";
 }
 
-function renderEmailHeader({ titulo, cidade, uf, data, horario, contexto }) {
-  return `<tr data-email-header="true"><td style="background:${EMAIL_HEADER_VERDE};padding:15px 18px 13px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>
-      <td data-email-header-cim="true" width="32%" valign="middle" style="width:32%;color:#ffffff;padding-right:10px;">${identidadeCimHtml()}</td>
-      <td data-email-header-title="true" width="49%" valign="middle" align="center" style="width:49%;color:#ffffff;padding:0 8px;text-align:center;">
-        <div style="color:#ffffff;font:bold 21px/1.18 Arial,sans-serif;letter-spacing:0.2px;">${esc(titulo)}</div>
-        <div style="color:#ffffff;font:13px/1.4 Arial,sans-serif;margin-top:8px;">${linhaLocal({ cidade, uf, data, horario, contexto })}</div>
+function renderEmailHeader({ titulo, cidade, uf, data, contexto }) {
+  return `<tr data-email-header="true"><td bgcolor="${EMAIL_HEADER_VERDE}" style="background:${EMAIL_HEADER_VERDE};padding:16px 22px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;"><tr>
+      <td data-email-header-cim="true" width="31%" valign="middle" align="left" style="width:31%;color:#ffffff;">${identidadeCimHtml()}</td>
+      <td data-email-header-title="true" width="47%" valign="middle" align="center" style="width:47%;color:#ffffff;padding:0 10px;text-align:center;">
+        <div style="color:#ffffff;font-family:Arial,sans-serif;font-size:21px;font-weight:bold;line-height:25px;letter-spacing:0.3px;text-align:center;">${esc(titulo)}</div>
+        <div data-email-header-local="true" style="color:#ffffff;font-family:Arial,sans-serif;font-size:13px;line-height:18px;margin-top:6px;text-align:center;">${linhaLocal({ cidade, uf, data, contexto })}</div>
       </td>
-      <td data-email-header-petrobras="true" width="19%" valign="middle" align="center" style="width:19%;text-align:center;padding-left:8px;">${petrobrasHtml()}</td>
+      <td data-email-header-petrobras="true" width="22%" valign="middle" align="right" style="width:22%;text-align:right;line-height:0;">${petrobrasHtml()}</td>
     </tr></table>
   </td></tr>
-  <tr data-email-header-stripe="true"><td style="height:4px;background:${EMAIL_HEADER_AMARELO};font-size:0;line-height:4px;">&nbsp;</td></tr>`;
+  <tr data-email-header-stripe="true"><td bgcolor="${EMAIL_HEADER_AMARELO}" style="height:4px;background:${EMAIL_HEADER_AMARELO};font-size:0;line-height:4px;mso-line-height-rule:exactly;">&nbsp;</td></tr>`;
 }
 
 // Compatibilidade para consumidores externos antigos. Os templates do

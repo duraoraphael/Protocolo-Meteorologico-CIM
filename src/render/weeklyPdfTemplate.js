@@ -1,5 +1,5 @@
 const brand = require("./brand");
-const { logosComoDataUri } = require("../config/logos");
+const { cabecalhoPdfCss, cabecalhoPdfHtml } = require("./pdfTemplate");
 const {
   svgTemperaturaEChuva,
   svgPanoramaSemana,
@@ -133,14 +133,6 @@ function secaoBase(base, indice) {
 }
 
 function renderWeeklyPdfHtml(r) {
-  const logos = logosComoDataUri();
-  const logoCim = logos.cim
-    ? `<div class="logo-cim"><img src="${logos.cim}" alt="CIM" /></div>`
-    : "";
-  const logoPetrobras = logos.petrobras
-    ? `<div class="logo-petrobras"><img src="${logos.petrobras}" alt="Petrobras" /></div>`
-    : "";
-
   const corDiaCritico =
     r.diaMaisCritico?.basesCriticas > 0
       ? "#C0392B"
@@ -161,22 +153,8 @@ function renderWeeklyPdfHtml(r) {
     margin: 0;
     padding: 0 30px 20px 30px;
   }
-  .header {
-    background: ${brand.verde};
-    color: #fff;
-    margin: 0 -30px 0 -30px;
-    padding: 16px 30px 14px 30px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-  }
-  .logo-cim img { height: 64px; display: block; }
-  .header-textos { flex: 1; text-align: center; }
-  .header h1 { font-size: 19pt; font-weight: bold; margin: 0; letter-spacing: 0.5px; }
-  .header h2 { font-size: 12pt; font-weight: normal; margin: 4px 0 0 0; }
-  .logo-petrobras { background: #fff; border-radius: 4px; padding: 5px 11px; line-height: 0; }
-  .logo-petrobras img { height: 20px; display: block; }
-  .divisor-amarelo { height: 4px; background: ${brand.amarelo}; margin: 0 -30px 16px -30px; }
+  ${cabecalhoPdfCss(30)}
+  .divisor-amarelo { margin-bottom: 16px; }
 
   h3.secao {
     color: ${brand.verde};
@@ -275,15 +253,10 @@ function renderWeeklyPdfHtml(r) {
 </style>
 </head>
 <body>
-  <div class="header">
-    ${logoCim}
-    <div class="header-textos">
-      <h1>RELATÓRIO METEOROLÓGICO SEMANAL</h1>
-      <h2>Centro Integrado de Monitoramento &nbsp;·&nbsp; ${esc(r.periodoLabel)}</h2>
-    </div>
-    ${logoPetrobras}
-  </div>
-  <div class="divisor-amarelo"></div>
+  ${cabecalhoPdfHtml({
+    titulo: "RELATÓRIO METEOROLÓGICO SEMANAL",
+    linhaLocal: `Bases monitoradas — ${esc(r.periodoLabel)} — ${esc(r.dataGeracao)}`,
+  })}
 
   <p style="font-size:9.5pt;color:#555;margin:0 0 12px 0;">
     Gerado em ${esc(r.dataGeracao)} às ${esc(r.horaGeracao)} (Horário de Brasília) ·

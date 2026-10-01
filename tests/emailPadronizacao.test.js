@@ -39,17 +39,23 @@ function validarCabecalho(html, titulo) {
   assert.match(textoComQuebras(cim), /^CIM Centro Integrado de Monitoramento COMPARTILHADO$/);
   assert.equal(cim.find("img").length, 0, "a identidade CIM deve ser HTML, não imagem");
   assert.match(centro.text(), new RegExp(titulo));
-  assert.match(cabecalho.html(), /width="32%"[^>]*width:32%/);
-  assert.match(cabecalho.html(), /width="49%"[^>]*width:49%/);
-  assert.match(cabecalho.html(), /width="19%"[^>]*width:19%/);
-  assert.match(html, /<span style="color:#ffffff;">C<\/span><span style="color:#FFCC00;">I<\/span><span style="color:#ffffff;">M<\/span>/);
+  assert.match(cabecalho.html(), /width="31%"[^>]*width:31%/);
+  assert.match(cabecalho.html(), /width="47%"[^>]*width:47%/);
+  assert.match(cabecalho.html(), /width="22%"[^>]*width:22%/);
+  assert.match(html, /<span style="color:#ffffff;">C<\/span><span style="color:#FEBF0A;">I<\/span><span style="color:#ffffff;">M<\/span>/);
   assert.match(html, /border-left:2px solid #ffffff/);
-  assert.match(html, /Centro Integrado<br>de Monitoramento<br><span[^>]*>COMPARTILHADO<\/span>/);
-  assert.match(html, /alt="Petrobras"|>Petrobras<\/td>/);
-  assert.match(html, /data-email-header-stripe="true"[^>]*><td style="height:4px;background:#FFCC00/);
-  assert.match(html, /background:#006527/);
-  assert.match(html, /background:#00451B/);
-  assert.match(html, /<img src="[^"]+" width="135" alt="Petrobras"/);
+  assert.match(html, /Centro Integrado<br>de Monitoramento<br><span[^>]*font-weight:normal[^>]*>COMPARTILHADO<\/span>/);
+  assert.match(html, /data-email-header-stripe="true"[^>]*><td bgcolor="#FFCC00" style="height:4px;background:#FFCC00/);
+  assert.match(html, /bgcolor="#047C3E" style="background:#047C3E/);
+  // Título e local/data no mesmo eixo central; o horário fica só no corpo.
+  assert.equal(centro.attr("align"), "center");
+  assert.equal(centro.find('[data-email-header-local="true"]').length, 1);
+  assert.doesNotMatch(centro.text(), /Horário de Brasília/);
+  assert.match(html, /letter-spacing:-3px/);
+  // Petrobras sem caixa branca: a imagem já tem o verde do header e vai por Content-ID.
+  assert.match(petrobras.html(), /<img src="cid:logo-petrobras-header@cim" width="150" height="30" alt="Petrobras"/);
+  assert.doesNotMatch(petrobras.html(), /background|border:\s*[1-9]/);
+  assert.doesNotMatch(cabecalho.html(), /src="data:|localhost|file:/);
 }
 
 function relatorioDiario(sobrescritas = {}) {
@@ -113,7 +119,7 @@ test("todos os tipos de e-mail reutilizam o cabeçalho institucional completo", 
   validarCabecalho(alerta, "ALERTA METEOROLÓGICO");
   validarCabecalho(normalizacao, "ATUALIZAÇÃO METEOROLÓGICA");
   validarCabecalho(semanal, "RELATÓRIO METEOROLÓGICO SEMANAL");
-  assert.match(diario, /<img src="data:image\/png;base64,[^"]+" width="135" alt="Petrobras"/);
+  assert.match(diario, /<img src="cid:logo-petrobras-header@cim"[^>]*alt="Petrobras"/);
 });
 
 test("identidade CIM permanece completa quando todas as imagens são bloqueadas", () => {

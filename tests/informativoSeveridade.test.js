@@ -274,11 +274,15 @@ test("cabeçalho do PDF alinha CIM, título/data e Petrobras em três colunas", 
   report.dataFormatadaLonga = "segunda-feira, 28 de setembro de 2026";
   const html = renderPdfHtml(report);
   const cim = html.indexOf('class="header-logo-cim"');
-  const centro = html.indexOf('class="header-center"', cim);
+  const centro = html.indexOf('header-center"', cim);
   const petrobras = html.indexOf('class="header-logo-petrobras"', centro);
   assert.ok(cim >= 0 && centro > cim && petrobras > centro);
-  assert.match(html, /grid-template-columns: 200px minmax\(0, 1fr\) 125px/);
-  assert.match(html, /align-items: center/);
+  assert.match(html, /class="header-tabela"/);
+  assert.match(html, /\.header-tabela td \{[^}]*vertical-align: middle/);
+  assert.match(html, /\.header \{[^}]*background: #047C3E[^}]*page-break-inside: avoid/s);
+  assert.match(html, /<img src="data:image\/png;base64,[^"]+" alt="Petrobras"/);
+  assert.doesNotMatch(html, /class="header-horario"/);
+  assert.match(html, /<strong>Hora da consulta:<\/strong>/);
   assert.match(html, /Rio de Janeiro — RJ — segunda-feira, 28 de setembro de 2026/);
   assert.match(html, /class="divisor-amarelo"/);
 });

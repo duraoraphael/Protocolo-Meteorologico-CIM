@@ -1,6 +1,7 @@
 const { renderEmailHtml } = require("../render/emailTemplate");
 const { listarPorCidade } = require("../config/recipients");
 const { criarTransportador, enderecoRemetente } = require("./transport");
+const { anexosLogosEmail } = require("../config/headerAssets");
 
 // Prioriza os responsáveis cadastrados para a base (painel > Gerenciar
 // responsáveis). Se nenhum estiver cadastrado, cai para REPORT_RECIPIENTS do
@@ -33,13 +34,15 @@ async function enviarRelatorioPorEmail(report, pdfBuffer) {
 
   const transportador = criarTransportador();
   const assunto = `Informativo Meteorológico — ${report.cidade.nome} — ${report.dataFormatadaCurta}`;
+  const html = renderEmailHtml(report);
 
   const info = await transportador.sendMail({
     from: enderecoRemetente().formatado,
     to: destinatarios.join(", "),
     subject: assunto,
-    html: renderEmailHtml(report),
+    html,
     attachments: [
+      ...anexosLogosEmail(html),
       {
         filename: `${report.nomeArquivoBase}.pdf`,
         content: pdfBuffer,

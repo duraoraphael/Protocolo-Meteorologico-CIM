@@ -6,6 +6,7 @@ const { gerarPdfBuffer } = require("./render/pdfGenerator");
 const { enviarRelatorioPorEmail } = require("./email/sendReport");
 const ged = require("./integrations/sharepointGed");
 const { resumo, compararComManha } = require("./logic/scheduledReport");
+const { obterMonitorSecas } = require("./sources/monitorSecas");
 
 const PASTA_SAIDA = path.join(__dirname, "..", "output");
 
@@ -106,6 +107,11 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
       report.mudancasDia = compararComManha(comparacaoAnterior, resumo(report));
     }
   }
+
+  // Monitor de Secas (ANA): mensal e em cache por competência. Nunca lança —
+  // indisponível vira aviso na seção, sem interromper o protocolo. Recortado
+  // para a UF deste informativo: cada PDF leva só o resumo do seu destino.
+  report.monitorSecas = await obterMonitorSecas({ uf: cidade.uf });
 
   let pdfBuffer;
   console.log("[RELATORIO] Gerando HTML");

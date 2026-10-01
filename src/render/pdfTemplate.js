@@ -1,8 +1,9 @@
 const brand = require("./brand");
-const { logosComoDataUri, logoPdfComoDataUri } = require("../config/logos");
+const { HEADER_AMARELO, HEADER_VERDE, LOGOS_HEADER, logoHeaderDataUri } = require("../config/headerAssets");
 const { ordenarEventosParaExibicao } = require("./eventOrdering");
 const { consolidarAvisosInmet } = require("../sources/inmet");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
+const monitorSecas = require("../sources/monitorSecas");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -278,7 +279,110 @@ function blocoFontes(r) {
   </table>`
       : ""
   }
+  ${blocoFontesMonitorSecas(r.monitorSecas)}
   ${blocoDivergencias(r.divergencias)}`;
+}
+
+// Endereços oficiais efetivamente usados na seção do Monitor de Secas.
+function blocoFontesMonitorSecas(ms) {
+  if (!ms?.urls?.pagina) return "";
+  const linhas = [
+    ["Página do mapa (fonte de referência)", ms.urls.pagina],
+    ms.urls.api && ["API pública consumida pela página: resumo oficial por UF e data de elaboração", ms.urls.api],
+    ms.urls.mapa && ["Mapa oficial (imagem reproduzida)", ms.urls.mapa],
+  ].filter(Boolean);
+  return `<p style="font-size:10pt;margin:10px 0 4px 0;"><strong>Monitor de Secas — ANA (${esc(ms.competencia?.rotulo || "competência indisponível")}):</strong></p>
+  <table class="ms-fontes">
+    <thead><tr><th>Uso</th><th>Endereço</th></tr></thead>
+    <tbody>${linhas.map(([uso, url], i) => `<tr class="${i % 2 ? "zebra" : ""}"><td style="width:38%;">${esc(uso)}</td><td class="ms-url">${esc(url)}</td></tr>`).join("")}</tbody>
+  </table>`;
+}
+
+function dataElaboracaoMs(valor) {
+  const partes = String(valor || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : null;
+}
+
+const IMPACTOS_MS = Object.freeze({ C: "Curto prazo (C)", L: "Longo prazo (L)", CL: "Curto e longo prazo (CL)" });
+const VERBOS_EVOLUCAO_MS = /avan[çc]|recu|agrav|surg|desapare|intensific|passou|passando|deixou|amplia|pior|melhor|expan|retra/i;
+
+// Reorganiza o texto oficial da UF sem reescrevê-lo: cada frase vai, inteira,
+// para "Situação", "Evolução no mês" ou "Impactos". As intensidades e os
+// tipos de impacto destacados são só os códigos citados literalmente no texto.
+function analisarResumoMs(texto) {
+  const original = String(texto || "");
+  const frases = original.split(/(?<=\.)\s+/).map((f) => f.trim()).filter(Boolean);
+  const grupos = { situacao: [], evolucao: [], impactos: [] };
+  for (const frase of frases) {
+    if (/impacto/i.test(frase)) grupos.impactos.push(frase);
+    else if (VERBOS_EVOLUCAO_MS.test(frase)) grupos.evolucao.push(frase);
+    else grupos.situacao.push(frase);
+  }
+  const codigos = new Set([...original.matchAll(/\((S[0-4])\)/g)].map((m) => m[1].toLowerCase()));
+  if (/\(SSR\)|sem seca relativa/i.test(original)) codigos.add("si");
+  const intensidades = Object.keys(monitorSecas.CATEGORIAS).filter((chave) => codigos.has(chave));
+  const ordemImpactos = Object.keys(IMPACTOS_MS);
+  const impactos = [...new Set([...original.matchAll(/\((CL|C|L)\)/g)].map((m) => m[1]))]
+    .sort((a, b) => ordemImpactos.indexOf(a) - ordemImpactos.indexOf(b));
+  return { grupos, intensidades, impactos };
+}
+
+function blocoResumoUfMs(resumo, rotulo) {
+  const cabecalho = `<div class="ms-uf-titulo">Situação da seca — ${esc(resumo.nome)}</div>
+    <div class="ms-uf-abrangencia">Resumo estadual — ${esc(resumo.uf)}; sem detalhamento municipal disponível na fonte.</div>`;
+  if (!resumo.texto) {
+    return `${cabecalho}<p class="ms-uf-paragrafo">Não disponível na fonte para ${esc(rotulo.toLowerCase())}.</p>`;
+  }
+  const { grupos, intensidades, impactos } = analisarResumoMs(resumo.texto);
+  const destaques = [
+    intensidades.length && `<div class="ms-destaque"><span class="ms-destaque-rotulo">Intensidades citadas</span>${intensidades.map((chave) => {
+      const cat = monitorSecas.CATEGORIAS[chave];
+      return `<span class="ms-tag"><span class="ms-chip" style="background:${cat.cor};"></span>${chave === "si" ? "" : `${cat.codigo} `}${esc(cat.nome)}</span>`;
+    }).join("")}</div>`,
+    impactos.length && `<div class="ms-destaque"><span class="ms-destaque-rotulo">Tipos de impacto citados</span>${impactos.map((c) => `<span class="ms-tag">${esc(IMPACTOS_MS[c])}</span>`).join("")}</div>`,
+  ].filter(Boolean).join("");
+  const grupo = (titulo, frases) => frases.length
+    ? `<div class="ms-grupo"><div class="ms-grupo-titulo">${titulo}</div>${frases.map((f) => `<p class="ms-uf-paragrafo">${esc(f)}</p>`).join("")}</div>`
+    : "";
+  return `${cabecalho}
+    ${destaques ? `<div class="ms-destaques">${destaques}</div>` : ""}
+    ${grupo("Situação", grupos.situacao)}
+    ${grupo("Evolução no mês", grupos.evolucao)}
+    ${grupo("Impactos", grupos.impactos)}`;
+}
+
+// Seção "Monitor de Secas — <Mês>/<Ano>": mapa oficial à esquerda e, à
+// direita, só o resumo oficial da UF do próprio informativo.
+function blocoMonitorSecas(r) {
+  const ms = r.monitorSecas;
+  if (!ms) return "";
+  const rotulo = ms.competencia?.rotulo || "competência indisponível";
+  const titulo = `<h4 class="subsecao ms-titulo">Monitor de Secas — ${esc(rotulo)}</h4>
+  <p class="ms-nota">Acompanhamento <strong>mensal</strong> da seca publicado pela ANA (condição acumulada no mês de referência). Não é previsão meteorológica diária.</p>`;
+  const resumo = (ms.resumosUf || []).find((item) => item.uf === r.cidade?.uf);
+  const mapa = ms.status === "indisponivel" ? null : monitorSecas.mapaDataUri(ms.competencia);
+  if (ms.status === "indisponivel" || !mapa || !resumo) {
+    return `${titulo}
+    <p class="clima-indisponivel">Não disponível na fonte para ${esc(rotulo.toLowerCase())} nesta emissão${ms.mensagem ? ` — ${esc(ms.mensagem)}` : ""}. Consulta: ${esc(ms.urls?.pagina || "monitordesecas.ana.gov.br")}</p>`;
+  }
+
+  const elaborado = dataElaboracaoMs(ms.dataElaboracao);
+  const coletado = formatarDataBrasilia(ms.coletadoEm);
+  const legenda = ["si", "s0", "s1", "s2", "s3", "s4"].map((chave) => {
+    const cat = monitorSecas.CATEGORIAS[chave];
+    return `<span class="ms-leg-item"><span class="ms-chip" style="background:${cat.cor};"></span>${chave === "si" ? "" : `${cat.codigo} `}${esc(cat.nome)}</span>`;
+  }).join("");
+
+  return `<div class="ms-bloco">${titulo}
+  <table class="ms-layout" role="presentation"><tr>
+    <td class="ms-col-mapa">
+      <img class="ms-mapa" src="${mapa}" alt="Mapa oficial do Monitor de Secas — ${escAtributo(rotulo)}" />
+      <div class="ms-legenda"><strong>Legenda (reproduzida do mapa oficial):</strong><br>${legenda}<br>
+        <strong>Tipos de impacto:</strong> C = curto prazo (ex.: agricultura, pastagem); L = longo prazo (ex.: hidrologia, ecologia); linhas = delimitação de impactos dominantes.</div>
+      <p class="ms-ref">Fonte: ANA / Monitor de Secas — competência ${esc(rotulo.toLowerCase())}.${elaborado ? ` Elaborado em ${esc(elaborado)}.` : ""} Coleta: ${esc(coletado || "—")}${ms.status === "cache" ? " (cópia validada armazenada)" : ""}.</p>
+    </td>
+    <td class="ms-col-info">${blocoResumoUfMs(resumo, rotulo)}</td>
+  </tr></table></div>`;
 }
 
 function blocoPrevisaoAgendada(r) {
@@ -324,16 +428,81 @@ function blocoClimaSaude(r) {
   });
 }
 
-function renderPdfHtml(r) {
-  const logos = logosComoDataUri();
-  const logoPdf = logoPdfComoDataUri();
-  const logoCimHtml = logoPdf
-    ? `<div class="header-logo-cim"><img src="${logoPdf}" alt="CIM — Centro Integrado de Monitoramento COMPARTILHADO" /></div>`
-    : `<div class="header-logo-cim"><div class="header-logo-cim-fallback"><strong>CIM</strong><div class="header-logo-cim-texto"><span>Centro Integrado de Monitoramento</span><span>COMPARTILHADO</span></div></div></div>`;
-  const logoPetrobrasHtml = logos.petrobras
-    ? `<div class="header-logo-petrobras"><img src="${logos.petrobras}" alt="Petrobras" /></div>`
-    : `<div class="logo-placeholder">[ESPAÇO RESERVADO PARA LOGO OFICIAL — inserir manualmente via modelo corporativo aprovado]</div>`;
+// Cabeçalho institucional dos PDFs (diário e semanal): CIM à esquerda,
+// título/local/data/horário centralizados e Petrobras à direita, sobre o
+// mesmo verde do e-mail. As logos (src/assets/header/) já têm esse verde
+// como fundo, então não há caixa nem contorno ao redor delas.
+function cabecalhoPdfCss(margemLateral) {
+  return `
+  .header {
+    width: auto;
+    margin: 0 -${margemLateral}px;
+    background: ${HEADER_VERDE};
+    color: #ffffff;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .header-tabela { width: 100%; border-collapse: collapse; margin: 0; table-layout: fixed; font-size: inherit; }
+  .header-tabela td { border: 0; padding: 0; vertical-align: middle; }
+  .header-tabela td.header-col-cim { width: 236px; padding: 18px 0 18px 26px; text-align: left; }
+  .header-tabela td.header-col-centro { padding: 16px 12px; text-align: center; }
+  .header-tabela td.header-col-petrobras { width: 186px; padding: 18px 26px 18px 0; text-align: right; }
+  .header-logo-cim img { display: block; width: 210px; height: auto; }
+  .header-logo-petrobras img { display: block; width: 160px; height: auto; margin-left: auto; }
+  .header-logo-cim-fallback { color: #ffffff; font: 900 30pt/1 'Arial Black', Arial, sans-serif; letter-spacing: -1px; white-space: nowrap; }
+  .header-logo-cim-fallback span.i { color: #FEBF0A; }
+  .header-logo-petrobras-fallback { color: #ffffff; font: italic bold 16pt/1.2 Arial, sans-serif; }
+  .header h1 {
+    font-size: 18pt;
+    font-weight: bold;
+    text-align: center;
+    margin: 0;
+    line-height: 1.2;
+    letter-spacing: 0.3px;
+    color: #ffffff;
+  }
+  .header .header-local {
+    font-size: 10.5pt;
+    font-weight: normal;
+    text-align: center;
+    line-height: 1.35;
+    margin: 6px 0 0 0;
+    color: #ffffff;
+  }
+  .divisor-amarelo {
+    height: 4px;
+    background: ${HEADER_AMARELO};
+    margin: 0 -${margemLateral}px 20px -${margemLateral}px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }`;
+}
 
+function cabecalhoPdfHtml({ titulo, linhaLocal }) {
+  const cim = logoHeaderDataUri("cim");
+  const petrobras = logoHeaderDataUri("petrobras");
+  const logoCimHtml = cim
+    ? `<div class="header-logo-cim"><img src="${cim}" alt="${escAtributo(LOGOS_HEADER.cim.alt)}" /></div>`
+    : `<div class="header-logo-cim"><div class="header-logo-cim-fallback">C<span class="i">I</span>M</div></div>`;
+  const logoPetrobrasHtml = petrobras
+    ? `<div class="header-logo-petrobras"><img src="${petrobras}" alt="Petrobras" /></div>`
+    : `<div class="header-logo-petrobras"><div class="header-logo-petrobras-fallback">PETROBRAS</div></div>`;
+  return `<div class="header">
+    <table class="header-tabela" role="presentation"><tr>
+      <td class="header-col-cim">${logoCimHtml}</td>
+      <td class="header-col-centro header-center">
+        <h1>${esc(titulo)}</h1>
+        <div class="header-local">${linhaLocal}</div>
+      </td>
+      <td class="header-col-petrobras">${logoPetrobrasHtml}</td>
+    </tr></table>
+  </div>
+  <div class="divisor-amarelo"></div>`;
+}
+
+function renderPdfHtml(r) {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -350,83 +519,7 @@ function renderPdfHtml(r) {
     margin: 0;
     padding: 0 36px 20px 36px;
   }
-  .header {
-    background: ${brand.verde};
-    color: #ffffff;
-    margin: 0 -36px 0 -36px;
-    padding: 20px 28px;
-    min-height: 112px;
-    display: grid;
-    grid-template-columns: 200px minmax(0, 1fr) 125px;
-    column-gap: 14px;
-    align-items: center;
-  }
-  .header-center {
-    min-width: 0;
-    text-align: center;
-  }
-  .header h1 {
-    font-size: 19pt;
-    font-weight: bold;
-    text-align: center;
-    margin: 0;
-    line-height: 1.18;
-    letter-spacing: 0.25px;
-  }
-  .header h2 {
-    font-size: 11pt;
-    font-weight: normal;
-    text-align: center;
-    line-height: 1.35;
-    margin: 9px 0 0 0;
-  }
-  .logo-placeholder {
-    font-size: 7pt;
-    color: #E4F2E9;
-    border: 1px dashed #E4F2E9;
-    padding: 8px;
-    border-radius: 3px;
-    text-align: center;
-  }
-  .header-logo-cim {
-    width: 200px;
-    min-height: 78px;
-    display: flex;
-    align-items: center;
-  }
-  .header-logo-cim img {
-    width: 100%;
-    height: auto;
-    display: block;
-    mix-blend-mode: lighten;
-  }
-  .header-logo-cim-fallback {
-    color: #ffffff;
-    width: 200px;
-    line-height: 1.25;
-    padding: 10px 11px 11px 12px;
-    border-left: 3px solid ${brand.amarelo};
-    background: rgba(0, 0, 0, 0.12);
-  }
-  .header-logo-cim-fallback strong { display: block; font-size: 19pt; letter-spacing: -0.5px; line-height: 1; }
-  .header-logo-cim-texto { margin-top: 7px; border-top: 1px solid rgba(255,255,255,.5); padding-top: 5px; }
-  .header-logo-cim-texto span { display: block; font-size: 7pt; margin-top: 2px; }
-  .header-logo-petrobras {
-    width: 125px;
-    min-height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #ffffff;
-    border-radius: 4px;
-    padding: 8px 10px;
-  }
-  .header-logo-petrobras img { width: 100%; height: auto; max-height: 32px; object-fit: contain; display: block; }
-  .divisor-amarelo {
-    height: 4px;
-    background: ${brand.amarelo};
-    margin: 0 -36px 20px -36px;
-  }
+  ${cabecalhoPdfCss(36)}
   h3.secao {
     color: ${brand.verde};
     font-weight: bold;
@@ -497,18 +590,36 @@ function renderPdfHtml(r) {
   .fontes { font-size: 9pt; color: #555; margin-top: 10px; }
   .fontes ul { padding-left: 16px; }
   .fontes a { color: ${brand.verdeEscuro}; }
+  .ms-bloco { break-inside: avoid; page-break-inside: avoid; }
+  .ms-titulo { border-bottom: 2px solid ${brand.verde}; padding-bottom: 3px; margin-top: 0; }
+  .ms-nota { font-size: 9.5pt; margin: 4px 0 8px 0; }
+  table.ms-layout { margin: 0; font-size: 9pt; table-layout: fixed; break-inside: avoid; page-break-inside: avoid; }
+  table.ms-layout > tbody > tr > td { border: 0; padding: 0; vertical-align: top; }
+  td.ms-col-mapa { width: 54%; padding-right: 12px !important; }
+  img.ms-mapa { display: block; width: 100%; height: auto; border: 1px solid ${brand.cinzaBorda}; }
+  .ms-legenda { font-size: 8pt; line-height: 1.5; margin-top: 5px; }
+  .ms-leg-item { display: inline-block; margin-right: 8px; white-space: nowrap; }
+  .ms-chip { display: inline-block; width: 10px; height: 10px; border: 1px solid #555; margin-right: 4px; vertical-align: -1px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .ms-ref { font-size: 8pt; color: #444; margin: 5px 0 0 0; }
+  td.ms-col-info { padding-left: 6px !important; }
+  .ms-uf-titulo { font-size: 13pt; font-weight: bold; color: ${brand.verde}; line-height: 1.3; margin: 0 0 4px 0; }
+  .ms-uf-abrangencia { font-size: 9pt; font-style: italic; color: #555; margin-bottom: 12px; }
+  .ms-destaques { background: ${brand.cinzaClaro}; border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }
+  .ms-destaque + .ms-destaque { margin-top: 8px; }
+  .ms-destaque-rotulo { display: block; font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; color: #555; margin-bottom: 4px; }
+  .ms-tag { display: inline-block; font-size: 9.5pt; margin: 0 10px 3px 0; white-space: nowrap; }
+  .ms-grupo { margin-bottom: 10px; }
+  .ms-grupo-titulo { font-size: 10pt; font-weight: bold; border-bottom: 1px solid ${brand.cinzaBorda}; padding-bottom: 2px; margin-bottom: 5px; }
+  .ms-uf-paragrafo { font-size: 10.5pt; line-height: 1.55; margin: 0 0 7px 0; }
+  table.ms-fontes { font-size: 8.5pt; }
+  td.ms-url { word-break: break-all; }
 </style>
 </head>
 <body>
-  <div class="header">
-    ${logoCimHtml}
-    <div class="header-center">
-      <h1>INFORMATIVO METEOROLÓGICO</h1>
-      <h2>${esc(r.cidade.nome)} — ${esc(r.cidade.uf)} — ${esc(r.dataFormatadaLonga)}</h2>
-    </div>
-    ${logoPetrobrasHtml}
-  </div>
-  <div class="divisor-amarelo"></div>
+  ${cabecalhoPdfHtml({
+    titulo: "INFORMATIVO METEOROLÓGICO",
+    linhaLocal: `${esc(r.cidade.nome)} — ${esc(r.cidade.uf)} — ${esc(r.dataFormatadaLonga)}`,
+  })}
 
   <p><strong>Data da previsão:</strong> ${esc(r.dataFormatadaCurta)} &nbsp;|&nbsp; <strong>Hora da consulta:</strong> ${esc(r.horaConsulta)} (Horário de Brasília)</p>
   ${r.periodoCoberto ? `<p><strong>Período coberto:</strong> ${esc(r.periodoCoberto)}.</p>` : ""}
@@ -532,6 +643,7 @@ function renderPdfHtml(r) {
   ${blocoClimaSaude(r)}
   ${blocoAvisosInmet(r.avisosInmet)}
   ${blocoRecomendacoesPorFenomeno(r)}
+  ${blocoMonitorSecas(r)}
   ${blocoAvisosColeta(r)}
 
   ${blocoFontes(r)}
@@ -576,4 +688,4 @@ function footerTemplate(r) {
   </div>`;
 }
 
-module.exports = { renderPdfHtml, headerTemplateVazio, footerTemplate, esc };
+module.exports = { renderPdfHtml, headerTemplateVazio, footerTemplate, esc, cabecalhoPdfCss, cabecalhoPdfHtml };

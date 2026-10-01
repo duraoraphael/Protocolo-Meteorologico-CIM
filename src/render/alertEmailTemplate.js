@@ -49,7 +49,6 @@ function renderAlertEmailHtml(base) {
           cidade: cidade.nome,
           uf: cidade.uf,
           data: r.dataFormatadaCurta,
-          horario: r.horaConsulta,
         })}
 
         <tr><td style="padding:16px 22px 4px 22px;font-family:Arial,sans-serif;font-size:13.5px;color:#333;">

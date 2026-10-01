@@ -135,6 +135,7 @@ kiosk também ao iniciar a sessão.
 | **INMET** (`apiprevmet3.inmet.gov.br`) | Previsão oficial (validação cruzada) + avisos de perigo ativos (equivalente a alertas de Defesa Civil coordenados nacionalmente) | Gratuita, sem chave, API pública oficial |
 | **Open-Meteo Marine** (`marine-api.open-meteo.com`) | Altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Gratuita, sem chave. Atende ao item do protocolo original que pedia dados de mar (OCEANOP) |
 | **Open-Meteo Air Quality** (`air-quality-api.open-meteo.com`) | Índice UV (exposição de equipes externas) e material particulado PM2,5/PM10 | Gratuita, sem chave |
+| **Monitor de Secas — ANA** (`monitordesecas.ana.gov.br`) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório

@@ -101,7 +101,7 @@ function renderWeeklyEmailHtml(r) {
         <!-- Cabeçalho -->
         ${renderEmailHeader({
           titulo: "RELATÓRIO METEOROLÓGICO SEMANAL",
-          contexto: `Bases monitoradas — ${r.periodoLabel} — ${r.dataGeracao} às ${r.horaGeracao}`,
+          contexto: `Bases monitoradas — ${r.periodoLabel} — ${r.dataGeracao}`,
         })}
 
         <!-- Cartões -->
