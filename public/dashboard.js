@@ -441,9 +441,11 @@ let detalheAtivo = 'monitoramento';
 function abrirDetalhes(tipo) {
   detalheAtivo = tipo;
   const dialog = document.getElementById('detalhes');
-  document.getElementById('detalhes-titulo').textContent = {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[tipo];
-  document.getElementById('detalhes-conteudo').innerHTML = Dashboard.details(reportAtual, tipo);
+  document.getElementById('detalhes-titulo').textContent = Dashboard.detailsTitle(reportAtual, tipo);
+  const corpo = document.getElementById('detalhes-conteudo');
+  corpo.innerHTML = Dashboard.details(reportAtual, tipo);
   if (!dialog.open) dialog.showModal();
+  else dialog.scrollTop = 0; // trocou de conteúdo com o diálogo aberto
   if (tipo === 'monitoramento' && reportAtual) carregarDestinatariosPainel();
 }
 document.addEventListener('click', e => {

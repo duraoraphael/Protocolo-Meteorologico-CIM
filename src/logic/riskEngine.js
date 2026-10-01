@@ -103,6 +103,7 @@ function avaliarRiscos(consolidado) {
       descricao: periodoEletrico
         ? "Trovoada identificada por código meteorológico na previsão do período."
         : "Atividade elétrica indicada em aviso oficial do INMET; consulte o aviso completo abaixo.",
+      ...(avisoEletrico ? { avisoInmet: avisoEletrico } : {}),
     });
   }
 
@@ -198,7 +199,11 @@ function avaliarRiscos(consolidado) {
         tipo: "avisoInmet",
         nivel: /grande perigo/i.test(aviso.severidade) ? 5 : /perigo/i.test(aviso.severidade) ? 4 : 2,
         janela: `${aviso.inicio} até ${aviso.fim}`,
-        descricao: "Aviso oficial INMET ativo; consulte o texto completo na seção de avisos oficiais abaixo.",
+        // Texto oficial do próprio aviso — nunca um encaminhamento genérico.
+        descricao: aviso.riscos?.length
+          ? `${aviso.descricao} — ${aviso.severidade}: ${aviso.riscos.join(" ")}`
+          : `${aviso.descricao} — ${aviso.severidade}. Detalhes do aviso indisponíveis na fonte oficial.`,
+        avisoInmet: aviso,
       });
     }
   }

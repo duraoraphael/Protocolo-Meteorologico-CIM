@@ -10,6 +10,7 @@ const { renderPdfHtml } = require('../src/render/pdfTemplate');
 const { renderEmailHtml } = require('../src/render/emailTemplate');
 const { renderAlertEmailHtml } = require('../src/render/alertEmailTemplate');
 const { carregarPainel } = require('./helpers/fakeDom');
+const { montarOcorrencias } = require('../src/logic/ocorrenciasPainel');
 
 function pagina({ ehf = 'Severo', risco = 'Alto', valor = '7.76', temperatura = true, geoses = true } = {}) {
   return `<html><body><section><h1>Petrópolis</h1><p>RJ · Sudeste</p>
@@ -131,11 +132,24 @@ test('PDF, e-mail e painel exibem bloco próprio sem alterar severidade meteorol
     fontesAutomatizadas: [], fontesManuais: [], fontesPorCampo: {}, monitoramentoApis: [],
     climaSaude: { status: 'operacional', dados },
   };
-  for (const html of [renderPdfHtml(report), renderEmailHtml(report), carregarPainel().executar('Dashboard.home')(report)]) {
+  for (const html of [renderPdfHtml(report), renderEmailHtml(report)]) {
     assert.match(html, /CALOR \/ RISCO À SAÚDE|Calor \/ risco à saúde/);
     assert.match(html, /ALERTA/);
     assert.match(html, /RISCO COMBINADO À SAÚDE/);
     assert.match(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
   }
+  // Painel: calor em ALERTA vira card na área de destaque e no card compacto;
+  // risco combinado e recomendações ficam em "Ver detalhes".
+  report.ocorrencias = montarOcorrencias(report);
+  const painel = carregarPainel();
+  const tela = painel.executar('Dashboard.home')(report);
+  const calor = report.ocorrencias.find((o) => o.fenomeno === 'calor');
+  assert.equal(calor.grau, 'ALERTA');
+  assert.match(tela, /aria-label="ALERTA — Calor e saúde"/);
+  assert.match(tela, /Calor e Saúde/);
+  assert.doesNotMatch(tela, /Previsão Clima e Saúde/, 'lista de vários dias fora do painel');
+  const detalhe = painel.executar('Dashboard.details')(report, `ocorrencia:${calor.id}`);
+  assert.match(detalhe, /Risco combinado à saúde/);
+  assert.match(detalhe, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
   assert.equal(report.severidade.grau, 'NORMAL');
 });

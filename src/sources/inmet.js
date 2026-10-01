@@ -152,6 +152,14 @@ function dataAvisoEmMs(valor) {
     const data = new Date(`${aaaa}-${mm}-${dd}T${hora}:${minuto}:${segundo}-03:00`);
     return Number.isNaN(data.getTime()) ? null : data.getTime();
   }
+  // /avisos/ativos publica "AAAA-MM-DD HH:MM" sem fuso — horário de Brasília.
+  // Sem isto, Date.parse usaria o fuso da máquina que roda o servidor.
+  const semFuso = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(valor.trim());
+  if (semFuso) {
+    const [, aaaa, mm, dd, hora, minuto, segundo = "00"] = semFuso;
+    const data = new Date(`${aaaa}-${mm}-${dd}T${hora}:${minuto}:${segundo}-03:00`);
+    return Number.isNaN(data.getTime()) ? null : data.getTime();
+  }
   const ms = Date.parse(valor);
   return Number.isNaN(ms) ? null : ms;
 }
@@ -207,6 +215,69 @@ function consolidarAvisosInmet(avisos, { agora = new Date() } = {}) {
   });
 }
 
+// Identificador oficial do aviso. `id_aviso` é o mesmo em todas as versões
+// (sequências) de um aviso; `codigo` é o identificador CAP da versão.
+function identificadorAviso(aviso) {
+  if (aviso?.idAviso != null) return `inmet:${aviso.idAviso}`;
+  if (aviso?.id) return `cap:${String(aviso.id).replace(/\.\d+$/, "")}`;
+  return null;
+}
+
+function chaveConteudoAviso(aviso) {
+  return [
+    fenomenoAvisoInmet(aviso.descricao),
+    normalizarComparacao(aviso.severidade),
+    [...new Set(aviso.geocodes || [])].sort().join(","),
+    dataAvisoEmMs(aviso.inicio) ?? normalizarComparacao(aviso.inicio),
+    dataAvisoEmMs(aviso.fim) ?? normalizarComparacao(aviso.fim),
+    (aviso.riscos || []).map(normalizarComparacao).join("|"),
+  ].join("#");
+}
+
+/**
+ * Remove repetições do MESMO aviso oficial, sem fundir avisos distintos que
+ * tratam do mesmo fenômeno (ao contrário de consolidarAvisosInmet, usado
+ * pelo PDF/e-mail). Com identificador oficial, versões do mesmo aviso viram
+ * uma só (prevalece a sequência mais recente); sem identificador, só são
+ * fundidos avisos com mesmo fenômeno, classificação, área, validade e riscos.
+ * Riscos e instruções de todas as cópias são preservados.
+ */
+function deduplicarAvisosInmet(avisos) {
+  const grupos = new Map();
+  const grupoPorConteudo = new Map();
+  const lista = Array.isArray(avisos) ? avisos.filter(Boolean) : [];
+  // Primeiro os avisos com identificador oficial; depois os sem
+  // identificador, comparados por conteúdo com TODOS os grupos (inclusive os
+  // identificados), para que uma cópia sem id não vire um aviso a mais.
+  for (const aviso of [...lista.filter(identificadorAviso), ...lista.filter((a) => !identificadorAviso(a))]) {
+    const conteudo = chaveConteudoAviso(aviso);
+    const chave = identificadorAviso(aviso) || grupoPorConteudo.get(conteudo) || `conteudo:${conteudo}`;
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(aviso);
+    if (!grupoPorConteudo.has(conteudo)) grupoPorConteudo.set(conteudo, chave);
+  }
+  return [...grupos.values()].map((grupo) => {
+    const principal = grupo.reduce((atual, candidato) =>
+      (candidato.sequencia ?? 0) > (atual.sequencia ?? 0) ? candidato : atual
+    );
+    if (grupo.length === 1) return principal;
+    return {
+      ...principal,
+      riscos: deduplicarTextos(grupo.map((aviso) => aviso.riscos)),
+      instrucoes: deduplicarTextos(grupo.map((aviso) => aviso.instrucoes)),
+      geocodes: [...new Set(grupo.flatMap((aviso) => aviso.geocodes || []))],
+      copiasNaFonte: grupo.length,
+    };
+  });
+}
+
+/** Aviso ainda aplicável: não encerrado e com término não ultrapassado. */
+function avisoAplicavel(aviso, agora = new Date()) {
+  if (aviso?.encerrado === true) return false;
+  const fim = dataAvisoEmMs(aviso?.fim);
+  return fim === null || fim >= agora.getTime();
+}
+
 function valoresGeocode(valor) {
   if (Array.isArray(valor)) return valor.flatMap(valoresGeocode);
   if (valor && typeof valor === "object") {
@@ -237,7 +308,15 @@ function normalizarAviso(aviso) {
   // `event`, `description`, `onset`, `expires` e `instruction` são os nomes
   // CAP. Os equivalentes em português preservam compatibilidade com o JSON
   // historicamente servido por /avisos/ativos. Nenhum texto é sintetizado.
+  const municipios = textoOficial(origem.municipios);
   return {
+    id: textoOficial(origem.codigo, origem.identifier),
+    idAviso: textoOficial(origem.id_aviso),
+    sequencia: Number.isFinite(origem.id_sequencia) ? origem.id_sequencia : null,
+    encerrado: origem.encerrado === true,
+    estados: textoOficial(origem.estados),
+    totalMunicipios: municipios ? municipios.split(/,(?=[^,]+ - [A-Z]{2} \(\d{7}\))/).length : null,
+    atualizadoEm: textoOficial(origem.updated_at, origem.sent),
     descricao: textoOficial(origem.event, origem.evento, origem.descricao, origem.headline),
     severidade: textoOficial(origem.severity, origem.severidade),
     cor: textoOficial(origem.aviso_cor, origem.cor),
@@ -266,6 +345,7 @@ function extrairAvisos(payload) {
 }
 
 async function buscarAvisosInmet(codigoIbge, {
+  agora = new Date(),
   fetchImpl = fetch,
   timeoutMs = INMET_AVISOS_TIMEOUT_MS,
   esperarFn,
@@ -294,8 +374,12 @@ async function buscarAvisosInmet(codigoIbge, {
   const todos = extrairAvisos(json);
   const normalizados = todos.map(normalizarAviso).filter(Boolean);
   const codigo = String(codigoIbge);
-  const relevantes = consolidarAvisosInmet(
-    normalizados.filter((aviso) => aviso.geocodes.includes(codigo))
+  // Só avisos cuja área abrange o município da base e que ainda valem.
+  // Repetições do mesmo aviso são removidas; avisos distintos do mesmo
+  // fenômeno são mantidos (a consolidação por fenômeno, se desejada, é feita
+  // na renderização do PDF/e-mail).
+  const relevantes = deduplicarAvisosInmet(
+    normalizados.filter((aviso) => aviso.geocodes.includes(codigo) && avisoAplicavel(aviso, agora))
   );
 
   return {
@@ -312,6 +396,9 @@ module.exports = {
   normalizarAviso,
   extrairAvisos,
   consolidarAvisosInmet,
+  deduplicarAvisosInmet,
+  avisoAplicavel,
+  dataAvisoEmMs,
   fenomenoAvisoInmet,
   grauAvisoInmet,
   normalizarComparacao,

@@ -1,7 +1,8 @@
 const { buscarPacoteWindy } = require('../sources/windy');
 const { integrarWindy } = require('./windyMerge');
 const { buscarOpenMeteo } = require("../sources/openMeteo");
-const { buscarPrevisaoInmet, buscarAvisosInmet, consolidarAvisosInmet } = require("../sources/inmet");
+const { buscarPrevisaoInmet, buscarAvisosInmet, deduplicarAvisosInmet } = require("../sources/inmet");
+const { montarOcorrencias } = require("./ocorrenciasPainel");
 const { buscarMarComFallback } = require("../sources/marine");
 const { buscarQualidadeAr } = require("../sources/airQuality");
 const { buscarOceanop } = require("../sources/oceanop");
@@ -202,7 +203,9 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     }
   }
   if (mar && cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
-  const avisosInmet = consolidarAvisosInmet(inmetAvisos?.avisos || []);
+  // Repetições do mesmo aviso já saem da coleta; avisos distintos do mesmo
+  // fenômeno permanecem separados (PDF e e-mail consolidam na renderização).
+  const avisosInmet = deduplicarAvisosInmet(inmetAvisos?.avisos || []);
 
   const { eventoMaisRelevante, categoriasAtivas, severidade } = avaliarRiscos({
     tempMax: base.tempMax,
@@ -443,7 +446,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     paraMonitoramento("clima-saude", "Clima e Saúde — Ministério da Saúde", healthClimaSaude),
   ];
 
-  return {
+  const relatorio = {
     cidade: { chave: cidade.chave, nome: cidade.nome, uf: cidade.uf },
     nomeArquivoBase: `Informativo_Meteorologico_${slugCidade(cidade.nome)}_${dataNow.toISOString().slice(0, 10)}`,
     dataFormatadaLonga: new Intl.DateTimeFormat("pt-BR", {
@@ -477,6 +480,10 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     eventoMaisRelevante,
     severidade,
     avisosInmet,
+    // "indisponivel" quando a coleta de avisos falhou — o painel informa a
+    // indisponibilidade em vez de exibir "nenhum aviso".
+    avisosInmetStatus: inmetAvisos ? "operacional" : "indisponivel",
+    linkInmet: cidade.links?.inmet || null,
     divergencias,
     avisosColeta,
     deslocamento,
@@ -497,6 +504,8 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       ? { ...dia, chuvaMm: base.precipitacaoTotalMm, rajadaKmh: base.rajadaMaxKmh, periodo: horarioAgendado === "15:00" ? "Hoje (15:00–00:00)" : "Hoje (05:00–00:00)" }
       : { ...dia, periodo: i === 1 ? "Amanhã" : `Dia +${i}` }) : null,
   };
+  relatorio.ocorrencias = montarOcorrencias(relatorio);
+  return relatorio;
 }
 
 module.exports = { montarRelatorio };

@@ -14,6 +14,7 @@ const { renderPdfHtml } = require("../src/render/pdfTemplate");
 const { renderEmailHtml } = require("../src/render/emailTemplate");
 const { recomendacoes } = require("../src/logic/inmetAlertRules");
 const { carregarPainel } = require("./helpers/fakeDom");
+const { montarOcorrencias } = require("../src/logic/ocorrenciasPainel");
 
 function conferir(casos, criarEntrada) {
   for (const [valor, grau, cor] of casos) {
@@ -44,7 +45,7 @@ function consolidado({ rajadaKmh = 0, chuvaHorariaMmH = 0, chuvaDiariaMm = 0 } =
 
 function relatorioRenderizado(entrada) {
   const riscos = avaliarRiscos(consolidado(entrada));
-  return {
+  const report = {
     cidade: { nome: "Rio de Janeiro", uf: "RJ", chave: "rio_de_janeiro" },
     dataFormatadaLonga: "sexta-feira, 25 de setembro de 2026",
     dataFormatadaCurta: "25/09/2026",
@@ -71,6 +72,8 @@ function relatorioRenderizado(entrada) {
     fontesAutomatizadas: [],
     fontesManuais: [],
   };
+  report.ocorrencias = montarOcorrencias(report);
+  return report;
 }
 
 test("vento usa as fronteiras do protocolo e o mapa visual solicitado", () => {
@@ -124,10 +127,14 @@ test("rajada de 36 km/h aparece como ATENÇÃO laranja em tela, PDF e e-mail", (
     assert.doesNotMatch(html, /Sem risco meteorológico relevante identificado/);
   }
 
-  assert.match(tela, /nivel-atencao/);
-  assert.match(tela, /ATENÇÃO — VENTO/);
-  assert.match(tela, /Manter o monitoramento durante o dia/);
-  assert.doesNotMatch(tela, /Sem evento extremo identificado/);
+  // Painel: card compacto na cor de Atenção; recomendações ficam nos detalhes.
+  assert.match(tela, /class="ocorrencia nivel-atencao"/);
+  assert.match(tela, /aria-label="ATENÇÃO — Vento"/);
+  assert.doesNotMatch(tela, /Manter o monitoramento durante o dia/);
+  assert.doesNotMatch(tela, /sem-ocorrencias/);
+  const detalhe = carregarPainel().executar("Dashboard.details")(report, "ocorrencia:oc-1");
+  assert.match(detalhe, /Manter o monitoramento durante o dia/);
+  assert.match(detalhe, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
 });
 
 test("vento e chuva simultâneos permanecem visíveis com a maior severidade", () => {
@@ -144,9 +151,9 @@ test("vento e chuva simultâneos permanecem visíveis com a maior severidade", (
 
 test("estados NORMAL, ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saídas", () => {
   const casos = [
-    { rajadaMaxKmh: 25, grau: "NORMAL", corPdf: "#2E7D32", corEmail: "#2E7D32", classe: "nivel-normal", titulo: "CONDIÇÃO NORMAL" },
-    { rajadaMaxKmh: 45, grau: "ALERTA", corPdf: "#D32F2F", corEmail: "#D32F2F", classe: "nivel-alerta", titulo: "ALERTA — VENTO" },
-    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", corPdf: "#B71C1C", corEmail: "#B71C1C", classe: "nivel-emergencia", titulo: "EMERGÊNCIA — VENTO" },
+    { rajadaMaxKmh: 25, grau: "NORMAL", corPdf: "#2E7D32", corEmail: "#2E7D32", classe: "sem-ocorrencias", titulo: "CONDIÇÃO NORMAL", tela: "Nenhuma ocorrência ativa" },
+    { rajadaMaxKmh: 45, grau: "ALERTA", corPdf: "#D32F2F", corEmail: "#D32F2F", classe: "ocorrencia nivel-alerta", titulo: "ALERTA — VENTO", tela: "ALERTA — Vento" },
+    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", corPdf: "#B71C1C", corEmail: "#B71C1C", classe: "ocorrencia nivel-emergencia", titulo: "EMERGÊNCIA — VENTO", tela: "EMERGÊNCIA — Vento" },
   ];
 
   for (const caso of casos) {
@@ -161,7 +168,8 @@ test("estados NORMAL, ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saíd
     assert.match(pdf, new RegExp(caso.corPdf));
     assert.match(email, new RegExp(caso.corEmail));
     assert.match(tela, new RegExp(caso.classe));
-    assert.match(tela, new RegExp(caso.titulo));
+    assert.match(tela, new RegExp(caso.tela));
+    if (caso.grau === "NORMAL") assert.doesNotMatch(tela, /class="ocorrencia /, "sem cards vazios");
     if (caso.grau !== "NORMAL") {
       assert.match(pdf, /class="evento-titulo"/);
       assert.match(pdf, /font-size: 15pt/);
@@ -213,12 +221,20 @@ test("rajada, fonte, recomendações e motivo oficial são consistentes em tela,
     fim: "18:00",
     riscos: ["Chuva entre 20 e 30 mm/h.", "Ventos intensos entre 40 e 60 km/h."],
   }];
+  report.ocorrencias = montarOcorrencias(report);
   const painel = carregarPainel();
   const tela = painel.executar("Dashboard.home")(report);
   const detalhes = painel.executar("Dashboard.details")(report, "monitoramento");
+  const idVento = report.ocorrencias.find((o) => o.fenomeno === "vento").id;
+  const detalheVento = painel.executar("Dashboard.details")(report, `ocorrencia:${idVento}`);
   const pdf = renderPdfHtml(report);
   const email = renderEmailHtml(report);
-  for (const html of [tela, detalhes, pdf, email]) {
+  // Card compacto: valor, fonte e o texto oficial do aviso, sem encaminhamento genérico.
+  assert.match(tela, /<dt>Rajada prevista<\/dt><dd>41 km\/h<\/dd>/);
+  assert.match(tela, /Fonte: Open-Meteo/);
+  assert.match(tela, /Chuva entre 20 e 30 mm\/h\. Ventos intensos entre 40 e 60 km\/h\./);
+  assert.doesNotMatch(tela, /consulte o (texto|site|aviso)/i);
+  for (const html of [detalheVento, pdf, email]) {
     assert.match(html, /Rajada prevista: 41 km\/h/);
     assert.match(html, /Fonte de dados: Open-Meteo/);
     assert.match(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
@@ -238,17 +254,23 @@ test("rajada, fonte, recomendações e motivo oficial são consistentes em tela,
   assert.match(pdf, /Edificação/);
 });
 
-test("indicadores exibem oito cards em dois grupos de quatro com chuva acumulada", () => {
+test("indicadores ficam em uma grade única, com Calor e Saúde e mar só quando aplicável", () => {
   const report = relatorioRenderizado({ rajadaKmh: 30, chuvaHorariaMmH: 0, chuvaDiariaMm: 12.4 });
-  const tela = carregarPainel().executar("Dashboard.home")(report);
-  const inicioPrimeiro = tela.indexOf('<div class="metric-group"');
-  const inicioSegundo = tela.indexOf('<div class="metric-group"', inicioPrimeiro + 1);
-  const fimSegundo = tela.indexOf('</section>', inicioSegundo);
-  assert.ok(inicioPrimeiro >= 0 && inicioSegundo > inicioPrimeiro);
-  assert.deepEqual([
-    (tela.slice(inicioPrimeiro, inicioSegundo).match(/<article class="card /g) || []).length,
-    (tela.slice(inicioSegundo, fimSegundo).match(/<article class="card /g) || []).length,
-  ], [4, 4]);
+  const painel = carregarPainel();
+  const grade = (html) => {
+    const inicio = html.indexOf('<div class="grid-cards">');
+    return html.slice(inicio, html.indexOf("</section>", inicio));
+  };
+  const tela = painel.executar("Dashboard.home")(report);
+  assert.equal((grade(tela).match(/<article class="card /g) || []).length, 8);
+  assert.match(grade(tela), /Calor e Saúde/);
+  assert.doesNotMatch(tela, /Mar — altura máx\. de onda|Condições de mar por período/, "base sem mar não exibe indicadores marítimos");
+  const costeira = { ...report, mar: { alturaMaxDiaM: 1.2, estadoMarDia: "Moderado", periodos: [] } };
+  const telaCosteira = painel.executar("Dashboard.home")(costeira);
+  assert.equal((grade(telaCosteira).match(/<article class="card /g) || []).length, 9);
+  assert.match(telaCosteira, /Mar — altura máx\. de onda/);
+  assert.match(telaCosteira, /Condições de mar por período/);
+  assert.ok(tela.indexOf("grid-cards") < tela.indexOf("tables-grid"), "tabelas abaixo dos indicadores");
   assert.match(tela, /Chuva acumulada/);
   assert.match(tela, /12\.4 <small>mm<\/small>/);
   assert.match(tela, /Rajada prevista/);

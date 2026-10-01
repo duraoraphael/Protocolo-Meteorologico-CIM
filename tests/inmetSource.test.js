@@ -27,6 +27,13 @@ test("aviso INMET em formato CAP preserva os campos oficiais sem reescrever", ()
   });
 
   assert.deepEqual(aviso, {
+    id: null,
+    idAviso: null,
+    sequencia: null,
+    encerrado: false,
+    estados: null,
+    totalMunicipios: null,
+    atualizadoEm: null,
     descricao: "Tempestade",
     severidade: "Moderate",
     cor: null,
