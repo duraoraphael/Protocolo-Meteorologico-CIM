@@ -7,6 +7,7 @@ const { enviarRelatorioPorEmail } = require("./email/sendReport");
 const ged = require("./integrations/sharepointGed");
 const { resumo, compararComManha } = require("./logic/scheduledReport");
 const { obterMonitorSecas } = require("./sources/monitorSecas");
+const { obterPrevisaoProximosDias } = require("./sources/previsaoProximosDias");
 
 const PASTA_SAIDA = path.join(__dirname, "..", "output");
 
@@ -112,6 +113,16 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // indisponível vira aviso na seção, sem interromper o protocolo. Recortado
   // para a UF deste informativo: cada PDF leva só o resumo do seu destino.
   report.monitorSecas = await obterMonitorSecas({ uf: cidade.uf });
+
+  // Previsão dos 3 dias seguintes (seção final do PDF), no fuso da própria
+  // localidade e a partir do instante de geração do informativo. Nunca lança
+  // — falha da fonte vira "Não disponível" na tabela e aviso de coleta.
+  report.previsaoProximosDias = await obterPrevisaoProximosDias(cidade, {
+    agora: new Date(report.geradoEmISO || Date.now()),
+  });
+  if (report.previsaoProximosDias.status === "indisponivel") {
+    report.avisosColeta.push("Open-Meteo (previsão dos próximos 3 dias): não foi possível atualizar esta fonte.");
+  }
 
   let pdfBuffer;
   console.log("[RELATORIO] Gerando HTML");

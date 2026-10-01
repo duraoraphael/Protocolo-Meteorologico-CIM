@@ -82,6 +82,9 @@ const CIDADES = {
     chave: "manaus",
     nome: "Manaus",
     uf: "AM",
+    // Fuso IANA da localidade (padrão: America/Sao_Paulo). Define o dia civil
+    // local da seção "Previsão para os próximos 3 dias".
+    fusoHorario: "America/Manaus",
     latitude: -3.1316333,
     longitude: -59.9825041,
     codigoIbge: "1302603",

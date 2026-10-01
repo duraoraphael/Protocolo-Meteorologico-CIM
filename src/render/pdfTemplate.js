@@ -399,6 +399,80 @@ function blocoPrevisaoAgendada(r) {
     <table><thead><tr><th>Período</th><th>Condição</th><th>Temperatura mín./máx.</th><th>Chuva</th><th>Rajada prevista</th></tr></thead><tbody>${linhas}</tbody></table>`;
 }
 
+const NAO_DISPONIVEL = `<span class="p3d-nd">Não disponível</span>`;
+
+function numeroBr(valor, casas) {
+  return valor.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+function celulaNumero(valor, casas = 0) {
+  return valor == null ? NAO_DISPONIVEL : numeroBr(valor, casas);
+}
+
+function dataHoraLocal(iso, fuso) {
+  const instante = new Date(iso);
+  if (!iso || Number.isNaN(instante.getTime())) return null;
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: fuso, day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZoneName: "shortOffset",
+  }).formatToParts(instante);
+  const p = Object.fromEntries(partes.map(({ type, value }) => [type, value]));
+  return `${p.day}/${p.month}/${p.year} às ${p.hour}:${p.minute} (${p.timeZoneName})`;
+}
+
+// Seção final "Previsão para os próximos 3 dias": título e tabela num mesmo
+// bloco indivisível — se não couberem no fim da página, vão juntos para a
+// próxima. Valor ausente na fonte aparece como "Não disponível", nunca zero.
+function blocoPrevisaoProximosDias(r, numeroSecao) {
+  const p = r.previsaoProximosDias;
+  if (!p?.dias?.length) return "";
+  const local = `${esc(p.localidade?.nome || r.cidade.nome)} — ${esc(p.localidade?.uf || r.cidade.uf)}`;
+  const linhas = p.dias.map((d, i) => {
+    const temperatura = d.tempMaxC == null && d.tempMinC == null
+      ? NAO_DISPONIVEL
+      : `<span class="p3d-max">${celulaNumero(d.tempMaxC)}</span><span class="p3d-sep">/</span><span class="p3d-min">${celulaNumero(d.tempMinC)}</span>`;
+    return `<tr class="${i % 2 === 1 ? "zebra" : ""}">
+      <td class="p3d-data"><strong>${esc(d.dataFormatada)}</strong><span>${esc(d.diaSemana)}</span></td>
+      <td class="p3d-num">${temperatura}</td>
+      <td class="p3d-num">${celulaNumero(d.rajadaMaxKmh)}</td>
+      <td class="p3d-num">${celulaNumero(d.chuvaMm, 1)}</td>
+      <td class="p3d-num">${celulaNumero(d.uvMax, 1)}</td>
+      <td>${d.condicao ? esc(d.condicao) : NAO_DISPONIVEL}</td>
+    </tr>`;
+  }).join("");
+
+  const consulta = dataHoraLocal(p.consultadoEm, p.fuso);
+  const ponto = p.pontoGrade
+    ? ` Ponto de grade da fonte mais próximo da localidade: ${numeroBr(p.pontoGrade.latitude, 2)}; ${numeroBr(p.pontoGrade.longitude, 2)}.`
+    : "";
+  const situacao = p.status === "indisponivel"
+    ? `<p class="p3d-aviso"><strong>Fonte indisponível nesta emissão.</strong> ${esc(p.mensagem || "")} Os campos aparecem como "Não disponível"; nenhum valor foi estimado.</p>`
+    : p.status === "parcial"
+      ? `<p class="p3d-aviso">Alguns campos não foram fornecidos pela fonte para esta localidade e aparecem como "Não disponível".</p>`
+      : "";
+
+  return `<div class="p3d-bloco">
+    <h3 class="secao">${numeroSecao}. Previsão para os próximos 3 dias</h3>
+    <p class="p3d-sub">${local} · três dias seguintes à data de geração deste informativo (hoje não incluído).</p>
+    <table class="p3d">
+      <colgroup><col style="width:16%"><col style="width:17%"><col style="width:14%"><col style="width:14%"><col style="width:13%"><col style="width:26%"></colgroup>
+      <thead><tr>
+        <th>Data</th>
+        <th class="p3d-num">Temperatura Máx./Mín. (°C)</th>
+        <th class="p3d-num">Rajada prevista (km/h)</th>
+        <th class="p3d-num">Chuva acumulada (mm)</th>
+        <th class="p3d-num">Índice UV (máx.)</th>
+        <th>Condição geral</th>
+      </tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>
+    ${situacao}
+    <p class="p3d-fonte"><strong>Fonte:</strong> ${esc(p.fonte)} — previsão diária (seleção automática de modelos), consultada para ${local}.${ponto}
+      <strong>${p.status === "indisponivel" ? "Tentativa de consulta" : "Atualização (horário da consulta à fonte)"}:</strong> ${esc(consulta || "horário indisponível")}, horário local.
+      Valores diários calculados pela fonte no dia civil local (00h–24h, ${esc(p.fuso)}): rajada = maior rajada prevista a 10 m (não é a velocidade média do vento); chuva = volume total previsto no dia (não é probabilidade); índice UV = máximo previsto no dia.</p>
+  </div>`;
+}
+
 function blocoMudancasDia(r) {
   if (!r.mudancasDia) return "";
   return `<h4 class="subsecao">Mudanças do dia em relação ao relatório das 05:00</h4>${listaHtml(r.mudancasDia)}`;
@@ -613,6 +687,21 @@ function renderPdfHtml(r) {
   .ms-uf-paragrafo { font-size: 10.5pt; line-height: 1.55; margin: 0 0 7px 0; }
   table.ms-fontes { font-size: 8.5pt; }
   td.ms-url { word-break: break-all; }
+  .p3d-bloco { break-inside: avoid; page-break-inside: avoid; padding-top: 1px; }
+  .p3d-sub { font-size: 10pt; color: #555; margin: 6px 0 4px 0; }
+  table.p3d { table-layout: fixed; font-size: 10.5pt; margin: 8px 0 8px 0; border: 1px solid ${brand.cinzaBorda}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  table.p3d th { background: ${brand.verde}; color: #ffffff; font-size: 9.5pt; line-height: 1.3; padding: 10px 10px; vertical-align: bottom; }
+  table.p3d td { padding: 12px 10px; vertical-align: middle; line-height: 1.35; }
+  table.p3d tr { break-inside: avoid; page-break-inside: avoid; }
+  table.p3d .p3d-num { text-align: center; padding-left: 6px; padding-right: 6px; }
+  td.p3d-data strong { display: block; font-size: 11.5pt; color: ${brand.verdeEscuro}; letter-spacing: 0.2px; }
+  td.p3d-data span { display: block; font-size: 8.5pt; color: #666; margin-top: 1px; }
+  .p3d-max { font-weight: bold; color: #B23A12; }
+  .p3d-min { font-weight: bold; color: #1F5F99; }
+  .p3d-sep { color: #999; margin: 0 5px; }
+  .p3d-nd { font-size: 9pt; font-style: italic; color: #666; white-space: nowrap; }
+  .p3d-aviso { font-size: 9.5pt; margin: 6px 0; padding: 6px 10px; border-left: 4px solid ${brand.amarelo}; background: #FFFBE6; }
+  .p3d-fonte { font-size: 8.5pt; line-height: 1.5; color: #555; margin: 6px 0 0 0; }
 </style>
 </head>
 <body>
@@ -664,6 +753,8 @@ function renderPdfHtml(r) {
       (secao) => `<h4 class="subsecao">${esc(secao.titulo)}</h4>${listaHtml(secao.itens)}`
     )
     .join("")}
+
+  ${blocoPrevisaoProximosDias(r, 4)}
 
 </body>
 </html>`;
