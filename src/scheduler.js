@@ -249,4 +249,41 @@ function iniciarMonitorAlertas(onResultado) {
   return tarefa;
 }
 
-module.exports = { iniciarAgendamentoDiario, executarHorarioAgendado, agendarEnvioUnicoHoje, iniciarMonitorAlertas };
+/**
+ * Renova os dados do painel no servidor, independentemente de haver um
+ * navegador aberto. Só coleta (montarRelatorio) — não envia e-mail nem mexe
+ * no estado dos alertas. Controlado por env:
+ *   ATUALIZACAO_AUTOMATICA=false     (desliga; padrão: ligado)
+ *   INTERVALO_ATUALIZACAO_MIN=30     (divisor de 60; padrão 30)
+ *   BASES_ATUALIZACAO=a,b            (opcional; padrão: todas)
+ * Roda uma vez ao iniciar e depois nos minutos múltiplos do intervalo.
+ */
+function iniciarAtualizacaoAutomatica(atualizador, agendar = cron.schedule) {
+  if (!atualizador) return null;
+  if (process.env.ATUALIZACAO_AUTOMATICA === "false") {
+    console.log("[ATUALIZACAO] Atualização automática desativada via ATUALIZACAO_AUTOMATICA=false.");
+    return null;
+  }
+  const restricao = process.env.BASES_ATUALIZACAO;
+  const chaves = restricao
+    ? restricao.split(",").map((c) => c.trim()).filter((c) => CIDADES[c])
+    : Object.keys(CIDADES);
+  const cidades = chaves.map((chave) => CIDADES[chave]);
+  const minutos = Math.round(atualizador.intervaloMs / 60000);
+
+  const executar = (origem) => atualizador.atualizarTodas(cidades, origem).catch((erro) => {
+    console.error(`[ATUALIZACAO] Falha inesperada no ciclo: ${erro.message}`);
+  });
+  const tarefa = agendar(`*/${minutos} * * * *`, () => executar("agendado"), { timezone: "America/Sao_Paulo" });
+  console.log(`[ATUALIZACAO] Dados do painel renovados a cada ${minutos} min, ${cidades.length} base(s).`);
+  executar("inicial");
+  return tarefa;
+}
+
+module.exports = {
+  iniciarAgendamentoDiario,
+  executarHorarioAgendado,
+  agendarEnvioUnicoHoje,
+  iniciarMonitorAlertas,
+  iniciarAtualizacaoAutomatica,
+};

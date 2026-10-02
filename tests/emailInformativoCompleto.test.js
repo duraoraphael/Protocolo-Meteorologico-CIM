@@ -164,7 +164,7 @@ test('aviso oficial INMET reutiliza exatamente o componente visual dos demais ca
   assert.equal(tituloInmet.attr('style'), tituloLocal.attr('style'));
 });
 
-test('título do INMET fica vermelho e a linha dinâmica do aviso fica toda branca', () => {
+test('título do INMET fica vermelho e a linha dinâmica do aviso fica escura sobre o fundo branco', () => {
   for (const [evento, severidade] of [
     ['Baixa Umidade', 'Perigo Potencial'],
     ['Chuvas Intensas', 'Perigo'],
@@ -175,8 +175,8 @@ test('título do INMET fica vermelho e a linha dinâmica do aviso fica toda bran
     const titulo = $('div').filter((_, elemento) => $(elemento).text().trim() === 'AVISO OFICIAL INMET').first();
     const linha = $('div').filter((_, elemento) => $(elemento).text().trim() === `${evento} — ${severidade}`).first();
     assert.match(titulo.attr('style'), /color:#D32F2F;.*font:bold/);
-    assert.match(linha.attr('style'), /color:#FFFFFF;/);
-    assert.match(linha.find('strong').attr('style'), /color:#FFFFFF;/);
+    assert.match(linha.attr('style'), /color:#222222;/);
+    assert.match(linha.find('strong').attr('style'), /color:#222222;/);
   }
 });
 

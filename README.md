@@ -136,14 +136,16 @@ kiosk também ao iniciar a sessão.
 | **Open-Meteo Marine** (`marine-api.open-meteo.com`) | Altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Gratuita, sem chave. Atende ao item do protocolo original que pedia dados de mar (OCEANOP) |
 | **Open-Meteo Air Quality** (`air-quality-api.open-meteo.com`) | Índice UV (exposição de equipes externas) e material particulado PM2,5/PM10 | Gratuita, sem chave |
 | **Monitor de Secas — ANA** (`monitordesecas.ana.gov.br`) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
+| **COR-Rio** (`appcor.cor-rio.work/estagio_cidade` e `cor.rio/wp-json/wp/v2/posts`) | Painel "Comunicados COR-Rio" e card "Comunicado oficial COR-Rio" no PDF (download e anexo do e-mail) — **só na base Rio de Janeiro** (`integracaoCorRio`): estágio operacional da cidade (1–5) e comunicados das categorias Estágios e Prevenção e Operação publicados ou atualizados nas últimas 24 h | Públicas, sem chave. O endpoint de estágio é o mesmo que o widget da página cor.rio consulta (não é uma API documentada; se mudar, o painel mostra "Estágio indisponível"). Painel e PDF usam a mesma instância e o mesmo cache (consulta no máximo a cada 5 min); cores dos estágios em `public/cor-rio-compartilhado.js`; última coleta válida em `data/cor-rio.json`. Em "Fontes Consultadas" do PDF, cada parte só aparece como coleta automática se respondeu naquela geração |
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório
 inclui os links para checagem manual, com a mesma ressalva de transparência
 usada nos modelos de referência):
 - **Windy.com** — SPA sem API pública gratuita.
-- **Alerta Rio / COR-Rio / CODESAL** — boletins em página web, sem endpoint
-  JSON documentado e estável.
+- **Alerta Rio / CODESAL** — boletins em página web, sem endpoint
+  JSON documentado e estável. (O COR-Rio é integrado só para a base Rio de
+  Janeiro, veja a tabela acima.)
 - **Climatempo** — sem API pública gratuita.
 
 Fontes **testadas e descartadas** (registrado para não retestar à toa):

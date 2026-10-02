@@ -11,7 +11,9 @@ const botaoCancelar = document.getElementById("botao-cancelar");
 const botaoConfirmar = document.getElementById("botao-confirmar");
 const toastEl = document.getElementById("toast");
 
-const REFRESH_MS = 10 * 60 * 1000; // 10 minutos
+// Intervalo padrão; o servidor informa o valor real em /api/preview.
+let intervaloAtualizacaoMs = 30 * 60 * 1000;
+const PREVIEW_TIMEOUT_MS = 90 * 1000;
 
 // Todo texto vindo do servidor (nomes, e-mails, mensagens de erro) passa por
 // este escape antes de ir para innerHTML — evita XSS armazenado (V-01).
@@ -47,13 +49,28 @@ setInterval(atualizarRelogio, 1000);
 atualizarRelogio();
 
 let reportAtual = null;
-function renderPainel(report) {
+// "Última atualização" mostra sempre a hora da última consulta bem-sucedida
+// do relatório exibido (horaConsulta); falhas só acrescentam o aviso.
+function mostrarUltimaAtualizacao(situacao = "") {
+  if (!reportAtual) return;
+  ultimaAtualizacaoEl.textContent = `Última atualização: ${reportAtual.horaConsulta}${situacao ? ` · ${situacao}` : ""}`;
+}
+
+function renderPainel(report, { pendente = false } = {}) {
+  const mesmoRelatorio = reportAtual?.geradoEmISO === report.geradoEmISO && reportAtual?.cidade.chave === report.cidade.chave;
   reportAtual = report;
-  ultimaAtualizacaoEl.textContent = `Última atualização: ${report.horaConsulta}`;
+  cidadeAtivaChave = report.cidade.chave;
+  mostrarUltimaAtualizacao(pendente ? "atualização pendente" : "");
+  if (mesmoRelatorio) return; // nada novo: não re-renderiza (preserva rolagem e foco)
   document.getElementById("tempo-atual").innerHTML = Dashboard.currentWeather(report);
   conteudo.innerHTML = Dashboard.home(report);
-  cidadeAtivaChave = report.cidade.chave;
-  if (document.getElementById("detalhes").open) abrirDetalhes(detalheAtivo);
+  renderCorRio({ atualizarDetalhes: false });
+  const detalhes = document.getElementById("detalhes");
+  if (detalhes.open) {
+    const rolagem = detalhes.scrollTop;
+    abrirDetalhes(detalheAtivo);
+    detalhes.scrollTop = rolagem;
+  }
 }
 
 function renderListaDestinatariosPainel(responsaveis) {
@@ -101,6 +118,7 @@ async function popularSeletorBase() {
   const escolhidaNaUrl = baseNaUrl();
   const inicial = escolhidaNaUrl || dados.ativa;
 
+  basesComCorRio = new Set(dados.disponiveis.filter((c) => c.corRio).map((c) => c.chave));
   seletorBaseEl.innerHTML = dados.disponiveis
     .map((c) => `<option value="${esc(c.chave)}">${esc(c.nome)} — ${esc(c.uf)}</option>`)
     .join("");
@@ -111,7 +129,63 @@ async function popularSeletorBase() {
 seletorBaseEl.addEventListener("change", () => {
   definirBaseNaUrl(seletorBaseEl.value);
   carregarPreview();
+  carregarCorRio();
 });
+
+// ---------------------------------------------------------------------
+// Comunicados e estágio do COR-Rio (só bases com integração, hoje o
+// município do Rio). Consultado ao abrir o painel / trocar de base e depois
+// a cada intervalo de atualização, sem recarregar a página. Em falha, a
+// última resposta válida continua na tela marcada como desatualizada.
+// ---------------------------------------------------------------------
+let basesComCorRio = new Set();
+let estadoCorRio = null; // { chave, carregando, falhaServidor, resposta }
+let proximaConsultaCorRio = 0;
+let corRioRequest = 0;
+
+function renderCorRio({ atualizarDetalhes = true } = {}) {
+  const slot = document.getElementById("cor-rio-slot");
+  if (slot) {
+    slot.innerHTML = Dashboard.corRio(estadoCorRio);
+    Dashboard.aplicarCoresEstagio(slot);
+  }
+  if (atualizarDetalhes && String(detalheAtivo).startsWith("cor-rio") && document.getElementById("detalhes").open) {
+    const dialog = document.getElementById("detalhes");
+    const rolagem = dialog.scrollTop;
+    abrirDetalhes(detalheAtivo);
+    dialog.scrollTop = rolagem;
+  }
+}
+
+async function carregarCorRio() {
+  const chave = seletorBaseEl.value;
+  const request = ++corRioRequest;
+  if (!basesComCorRio.has(chave)) {
+    estadoCorRio = null;
+    proximaConsultaCorRio = 0;
+    renderCorRio();
+    return;
+  }
+  if (estadoCorRio?.chave !== chave) {
+    estadoCorRio = { chave, carregando: true, falhaServidor: false, resposta: null };
+    renderCorRio();
+  }
+  try {
+    const resp = await fetch(`/api/cor-rio?cidade=${encodeURIComponent(chave)}`, { cache: "no-store", signal: AbortSignal.timeout(60 * 1000) });
+    const dados = await resp.json();
+    if (request !== corRioRequest) return;
+    if (!dados.ok || !dados.aplicavel) throw new Error(dados.erro || "Resposta inválida do COR-Rio.");
+    const { ok, aplicavel, ...resposta } = dados;
+    // estágio, textos e cores mudam juntos, num único render
+    estadoCorRio = { chave, carregando: false, falhaServidor: false, resposta };
+    proximaConsultaCorRio = Date.now() + intervaloAtualizacaoMs;
+  } catch (erro) {
+    if (request !== corRioRequest) return;
+    estadoCorRio = { ...estadoCorRio, carregando: false, falhaServidor: true };
+    proximaConsultaCorRio = Date.now() + Math.min(NOVA_TENTATIVA_MS, intervaloAtualizacaoMs);
+  }
+  renderCorRio();
+}
 
 let previewRequest = 0;
 let previewAbort;
@@ -128,17 +202,24 @@ async function carregarPreview() {
     ultimaAtualizacaoEl.textContent = "Atualizando dados…";
     conteudo.innerHTML = '<p role="status">Carregando dados meteorológicos…</p><div class="cim-loading-grid" aria-hidden="true">' + '<div class="cim-loading-card"></div>'.repeat(7) + '</div>'; 
     if (document.getElementById("detalhes").open) abrirDetalhes(detalheAtivo);
-    } else { ultimaAtualizacaoEl.textContent = "Atualizando dados…"; }
+    } else { mostrarUltimaAtualizacao("atualizando…"); }
+  ultimaVerificacao = Date.now();
   try {
     const cidade = seletorBaseEl.value;
-    const resp = await fetch(`/api/preview?cidade=${encodeURIComponent(cidade)}`, { signal: previewAbort.signal });
+    const sinal = AbortSignal.any
+      ? AbortSignal.any([previewAbort.signal, AbortSignal.timeout(PREVIEW_TIMEOUT_MS)])
+      : previewAbort.signal;
+    const resp = await fetch(`/api/preview?cidade=${encodeURIComponent(cidade)}`, { signal: sinal, cache: "no-store" });
     const dados = await resp.json();
     if (request !== previewRequest) return;
     if (!dados.ok) throw new Error(dados.erro || "Falha ao carregar dados.");
-    renderPainel(dados.report);
+    if (dados.atualizacao?.intervaloMs > 0) intervaloAtualizacaoMs = dados.atualizacao.intervaloMs;
+    renderPainel(dados.report, { pendente: Boolean(dados.atualizacao?.pendente) });
+    agendarProximaVerificacao(dados.report, Boolean(dados.atualizacao?.pendente));
   } catch (erro) {
-    if (request !== previewRequest || erro.name === "AbortError") return;
-    if (manterDados) { ultimaAtualizacaoEl.textContent = "Falha na atualização · exibindo dados anteriores"; return; }
+    if (request !== previewRequest || (erro.name === "AbortError" && previewAbort.signal.aborted)) return;
+    agendarProximaVerificacao(null, true);
+    if (manterDados) { mostrarUltimaAtualizacao("atualização pendente"); return; }
     conteudo.innerHTML = `<div class="erro" role="alert">Não foi possível carregar os dados meteorológicos: ${Dashboard.escape(erro.message)} <button id="tentar-novamente">Tentar novamente</button></div>`;
     document.getElementById("tempo-atual").textContent = "Condições atuais indisponíveis";
     ultimaAtualizacaoEl.textContent = "Atualização indisponível";
@@ -147,10 +228,44 @@ async function carregarPreview() {
   }
 }
 
+// ---------------------------------------------------------------------
+// Atualização automática. O servidor renova os dados sozinho a cada
+// intervalo; o painel busca a versão nova logo depois. Navegadores
+// atrasam ou congelam temporizadores de abas em segundo plano, então a
+// próxima busca é um horário absoluto conferido por um "pulso" de 1 min
+// e também ao voltar para a aba, recuperar o foco ou a rede.
+// ---------------------------------------------------------------------
+const FOLGA_APOS_SERVIDOR_MS = 2 * 60 * 1000; // tempo para o ciclo do servidor concluir
+const NOVA_TENTATIVA_MS = 5 * 60 * 1000;
+let proximaVerificacao = 0;
+let ultimaVerificacao = 0;
+
+function agendarProximaVerificacao(report, pendente) {
+  const consultadoEm = Date.parse(report?.geradoEmISO || reportAtual?.geradoEmISO || "") || 0;
+  const aposServidor = consultadoEm + intervaloAtualizacaoMs + FOLGA_APOS_SERVIDOR_MS;
+  const minimo = Date.now() + Math.min(pendente ? NOVA_TENTATIVA_MS : 60 * 1000, intervaloAtualizacaoMs);
+  proximaVerificacao = Math.max(aposServidor, minimo);
+}
+
+function verificarSeVencido() {
+  if (!seletorBaseEl.value) return iniciar();
+  // Requisição presa (ex.: rede caiu no meio): o timeout acima a encerra.
+  if (Date.now() >= proximaVerificacao && Date.now() - ultimaVerificacao > 30 * 1000) carregarPreview();
+  if (basesComCorRio.has(seletorBaseEl.value) && Date.now() >= proximaConsultaCorRio) carregarCorRio();
+}
+
+setInterval(verificarSeVencido, 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") verificarSeVencido(); });
+window.addEventListener("focus", verificarSeVencido);
+window.addEventListener("online", verificarSeVencido);
+window.addEventListener("pageshow", (e) => { if (e.persisted) verificarSeVencido(); });
+document.addEventListener("resume", verificarSeVencido); // aba descongelada (Chrome)
+
 async function iniciar() {
   try {
     const inicial = await popularSeletorBase();
     definirBaseNaUrl(inicial);
+    carregarCorRio();
     await carregarPreview();
   } catch (erro) {
     conteudo.setAttribute("aria-busy", "false");
@@ -158,7 +273,6 @@ async function iniciar() {
   }
 }
 iniciar();
-setInterval(() => seletorBaseEl.value ? carregarPreview() : iniciar(), REFRESH_MS);
 
 // ---------------------------------------------------------------------
 // Modal de senha / geração + envio manual
@@ -441,9 +555,16 @@ let detalheAtivo = 'monitoramento';
 function abrirDetalhes(tipo) {
   detalheAtivo = tipo;
   const dialog = document.getElementById('detalhes');
-  document.getElementById('detalhes-titulo').textContent = Dashboard.detailsTitle(reportAtual, tipo);
   const corpo = document.getElementById('detalhes-conteudo');
-  corpo.innerHTML = Dashboard.details(reportAtual, tipo);
+  if (String(tipo).startsWith('cor-rio')) {
+    const id = String(tipo).slice('cor-rio:'.length);
+    document.getElementById('detalhes-titulo').textContent = Dashboard.corRioTitulo(estadoCorRio, id);
+    corpo.innerHTML = Dashboard.corRioDetalhes(estadoCorRio, id);
+    Dashboard.aplicarCoresEstagio(corpo);
+  } else {
+    document.getElementById('detalhes-titulo').textContent = Dashboard.detailsTitle(reportAtual, tipo);
+    corpo.innerHTML = Dashboard.details(reportAtual, tipo);
+  }
   if (!dialog.open) dialog.showModal();
   else dialog.scrollTop = 0; // trocou de conteúdo com o diálogo aberto
   if (tipo === 'monitoramento' && reportAtual) carregarDestinatariosPainel();

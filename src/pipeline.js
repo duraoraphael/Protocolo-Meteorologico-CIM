@@ -8,6 +8,7 @@ const ged = require("./integrations/sharepointGed");
 const { resumo, compararComManha } = require("./logic/scheduledReport");
 const { obterMonitorSecas } = require("./sources/monitorSecas");
 const { obterPrevisaoProximosDias } = require("./sources/previsaoProximosDias");
+const { anexarCorRioAoRelatorio } = require("./sources/corRio");
 
 const PASTA_SAIDA = path.join(__dirname, "..", "output");
 
@@ -124,6 +125,10 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
     report.avisosColeta.push("Open-Meteo (previsão dos próximos 3 dias): não foi possível atualizar esta fonte.");
   }
 
+  // COR-Rio (só município do Rio): mesmo serviço/cache do painel, então site,
+  // PDF baixado e anexo do e-mail mostram a mesma consulta. Nunca lança.
+  await anexarCorRioAoRelatorio(report, cidade);
+
   let pdfBuffer;
   console.log("[RELATORIO] Gerando HTML");
   console.log("[RELATORIO] Gerando PDF");
@@ -143,12 +148,24 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   const { caminhoArquivo, aviso } = copiaLocal;
   if (aviso) report.avisosColeta.push(aviso);
 
+  // PDF anexado ao e-mail: na base Rio, o card do COR-Rio traz só o
+  // comunicado do dia (o PDF salvo/baixado pelo site segue completo). Nas
+  // demais bases o anexo é o mesmo PDF.
+  let pdfAnexoEmail = pdfBuffer;
+  if (enviarEmail && report.corRio) {
+    try {
+      pdfAnexoEmail = await gerarPdfBuffer(report, { corRioSomenteDoDia: true });
+    } catch (erro) {
+      throw erroDaEtapa("pdf", "GERACAO_PDF_EMAIL", "gerarPdfBuffer", erro);
+    }
+  }
+
   let envio = null;
   if (enviarEmail) {
     console.log("[RELATORIO] Preparando e-mail");
     console.log("[RELATORIO] Enviando SMTP");
     try {
-      envio = await enviarRelatorioPorEmail(report, pdfBuffer);
+      envio = await enviarRelatorioPorEmail(report, pdfAnexoEmail);
     } catch (erro) {
       throw erroDaEtapa("email", "SMTP", "enviarRelatorioPorEmail", erro);
     }

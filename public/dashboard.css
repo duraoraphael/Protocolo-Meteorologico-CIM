@@ -506,3 +506,69 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 }
 .det-resumo .nivel-chip { justify-self:start; }
 .tables-grid.tabela-unica { grid-template-columns:1fr; }
+
+/* ------------------------------------------------------------------------
+   Comunicados COR-Rio + estágio operacional (base Rio de Janeiro).
+   As cores dos estágios vêm de ESTAGIOS_COR_RIO (dashboard-components.js),
+   aplicadas como --estagio / --estagio-tinta. Sem estágio válido o painel
+   usa o tom neutro abaixo — nunca a cor de um estágio.
+   ------------------------------------------------------------------------ */
+#cor-rio-slot:empty { display:none; }
+.cor-rio, .cor-rio-estagio, .cor-rio-escala li, .cor-rio-det-estagio, .cor-rio-det-resumo { --estagio:#7f948e; --estagio-tinta:#0B1A12; }
+.cor-rio { display:grid; grid-template-columns:minmax(0,1fr) minmax(250px,300px); gap:14px 22px; align-items:stretch; padding:15px 16px 15px 18px; border:1px solid color-mix(in srgb,var(--estagio) 42%,transparent); border-left:5px solid var(--estagio); border-radius:10px; background:linear-gradient(160deg,color-mix(in srgb,var(--estagio) 8%,#04342a) 0%,#03251e 72%); }
+.cor-rio.sem-estagio { border-style:solid; border-color:var(--border-medium); border-left:5px solid #5d726c; }
+.cor-rio-principal { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.cor-rio-cabecalho { display:flex; align-items:center; gap:10px; }
+.cor-rio-icone { display:inline-grid; place-items:center; width:32px; height:32px; flex:none; border-radius:8px; background:color-mix(in srgb,var(--estagio) 18%,transparent); border:1px solid color-mix(in srgb,var(--estagio) 55%,transparent); }
+.cor-rio-icone .icon { width:19px; height:19px; color:var(--estagio); stroke-width:1.9; }
+.cor-rio-titulo { margin:0; font-size:12px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#e3eee9; padding-bottom:3px; border-bottom:2px solid var(--estagio); }
+.cor-rio-comunicado { display:flex; flex-direction:column; gap:9px; min-width:0; }
+.cor-rio-com-titulo { margin:0; font-size:17px; font-weight:650; line-height:1.3; color:var(--text-primary); overflow-wrap:anywhere; }
+.cor-rio-resumo { margin:0; font-size:13px; line-height:1.55; color:#d7e3de; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.cor-rio-meta { grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),auto)); gap:4px 18px; }
+.cor-rio-acoes { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin-top:2px; }
+.cor-rio-botao { display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border-radius:6px; border:1px solid var(--estagio); border-left-width:4px; background:color-mix(in srgb,var(--estagio) 12%,transparent); color:var(--text-primary); font-size:12.5px; font-weight:650; }
+.cor-rio-botao span { color:var(--estagio); font-weight:800; }
+.cor-rio-botao:hover { background:color-mix(in srgb,var(--estagio) 26%,transparent); }
+.cor-rio-vazio { display:flex; align-items:flex-start; gap:9px; margin:0; padding:10px 13px; border:1px solid var(--border-soft); border-radius:8px; background:rgba(4,52,42,.45); color:var(--text-secondary); font-size:13px; line-height:1.5; }
+.cor-rio-vazio .icon { width:18px; height:18px; color:#64d99b; margin-top:1px; }
+.cor-rio-vazio.cor-rio-falha { border-style:dashed; border-color:rgba(232,199,102,.55); color:#e8d9a6; }
+.cor-rio-vazio.cor-rio-falha .icon { color:#e8c766; }
+.cor-rio-flag { align-self:flex-start; margin:0; line-height:1.45; overflow-wrap:anywhere; }
+
+.cor-rio-estagio { display:flex; flex-direction:column; gap:9px; min-width:0; padding:12px 13px; border:1px solid color-mix(in srgb,var(--estagio) 50%,transparent); border-radius:9px; background:rgba(2,15,12,.55); }
+.cor-rio-estagio.sem-estagio { border:1px dashed rgba(166,189,183,.4); }
+.cor-rio-estagio-rotulo { margin:0; font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#b9cdc6; }
+.cor-rio-estagio-atual { margin:0; font-size:20px; font-weight:750; color:#c2d2cc; }
+.cor-rio-estagio-chip { display:inline-block; padding:4px 13px; border-radius:7px; background:var(--estagio); color:var(--estagio-tinta); font-size:19px; font-weight:800; letter-spacing:.05em; line-height:1.25; }
+.cor-rio-escala { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; margin:0; padding:0; list-style:none; }
+.cor-rio-escala li { position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0; padding:5px 0 4px; border-radius:6px; border:1px solid rgba(166,189,183,.22); border-top:3px solid var(--estagio); background:rgba(4,52,42,.5); color:#b9cdc6; }
+.cor-rio-num { font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.2; }
+.cor-rio-escala li.atual { background:var(--estagio); border-color:var(--estagio); color:var(--estagio-tinta); box-shadow:0 0 0 2px rgba(2,15,12,.9), 0 0 0 4px var(--estagio); }
+.cor-rio-escala li.atual .cor-rio-num { font-size:16px; font-weight:850; }
+.cor-rio-atual-txt { font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; line-height:1.1; }
+.cor-rio-estagio.sem-estagio .cor-rio-escala li { border-top-color:rgba(166,189,183,.35); }
+.cor-rio-estagio-meta { margin:0; font-size:11.5px; line-height:1.5; color:#b3c8c1; overflow-wrap:anywhere; }
+
+/* Diálogo "Ver comunicado". */
+.cor-rio-det-resumo { border-left:4px solid var(--estagio); }
+.details-dialog .cor-rio-det-titulo { margin:0; color:var(--text-primary); font-size:17px; line-height:1.35; }
+.cor-rio-conteudo .cor-rio-par { margin:10px 0 0; white-space:pre-line; color:#d7e3de; }
+.cor-rio-conteudo .cor-rio-par.destaque { color:var(--text-primary); font-weight:650; margin-top:16px; }
+.cor-rio-lista { margin:8px 0 0; padding-left:20px; }
+.cor-rio-lista li { white-space:pre-line; }
+.cor-rio-link { display:inline-flex; align-items:center; gap:6px; color:#7fd9b0; text-decoration:underline; }
+.cor-rio-link .icon { width:15px; height:15px; color:currentColor; }
+.cor-rio-det-estagio { display:grid; gap:10px; padding:12px 14px; border:1px solid color-mix(in srgb,var(--estagio) 55%,transparent); border-left:5px solid var(--estagio); border-radius:8px; background:var(--bg-main); }
+.cor-rio-det-estagio .cor-rio-estagio-chip { justify-self:start; }
+.details-dialog .cor-rio-nota { font-size:12.5px; margin:4px 0 10px; }
+.cor-rio-item { border-left-color:var(--border-medium); }
+
+@media (max-width:860px) {
+  .cor-rio { grid-template-columns:1fr; padding:13px 13px 14px 14px; }
+}
+@media (max-width:700px) {
+  .cor-rio-com-titulo { font-size:16px; }
+  .cor-rio-acoes .text-link { white-space:normal; text-align:left; }
+  .cor-rio-botao { width:100%; justify-content:center; }
+}

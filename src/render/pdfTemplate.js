@@ -4,6 +4,8 @@ const { ordenarEventosParaExibicao } = require("./eventOrdering");
 const { consolidarAvisosInmet } = require("../sources/inmet");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const monitorSecas = require("../sources/monitorSecas");
+const CorRio = require("../../public/cor-rio-compartilhado");
+const { comunicadoDoDia } = require("./corRioEmail");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -105,6 +107,165 @@ function blocoAvisosColeta(r) {
     <strong>⚠ Avisos de coleta automática</strong>
     ${listaHtml(avisosColeta)}
   </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Card "Comunicado oficial COR-Rio" (só relatórios com r.corRio — município do
+// Rio). r.corRio é o mesmo estado de /api/cor-rio; cores e leitura do estado
+// vêm de public/cor-rio-compartilhado.js, também usado pelo painel.
+// Comunicados longos são divididos em partes de cerca de meia página (cada uma
+// inteira numa página, duas por página), identificadas como continuação —
+// nada é cortado nem omitido, e o vazio deixado ao mover uma parte para a
+// página seguinte fica limitado. Medidas calibradas no PDF renderizado
+// (10,5 pt, ~105 caracteres por linha útil do card).
+// ---------------------------------------------------------------------------
+// Até este volume de texto o card inteiro (com cabeçalho, dados e estágio)
+// cabe numa página: fica num bloco só, movido para a página seguinte se preciso.
+const LINHAS_CARD_INTEIRO = 30;
+const LINHAS_PRIMEIRA_PARTE = 13;
+const LINHAS_DEMAIS_PARTES = 17;
+const CARACTERES_POR_LINHA = 105;
+
+const linhasTexto = (texto) => String(texto).split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / CARACTERES_POR_LINHA)), 0);
+
+// Parágrafo maior que uma parte inteira: quebra por linhas e depois por frases.
+function fatiarParagrafo(p, limite) {
+  if (linhasTexto(p.texto) <= limite) return [p];
+  const pedacos = [];
+  let atual = "";
+  const unidades = p.texto.split("\n").flatMap((linha) => linhasTexto(linha) > limite ? linha.match(/[^.!?;]+[.!?;]*\s*/g) || [linha] : [linha + "\n"]);
+  for (const u of unidades) {
+    if (atual && linhasTexto(atual + u) > limite) { pedacos.push(atual.trim()); atual = ""; }
+    atual += u;
+  }
+  if (atual.trim()) pedacos.push(atual.trim());
+  return pedacos.map((texto) => ({ ...p, texto }));
+}
+
+const LINHAS_BLOCO_ESTAGIO = 7;
+function dividirEmPartes(paragrafos) {
+  const pesoTotal = LINHAS_BLOCO_ESTAGIO + (paragrafos || []).reduce((n, p) => n + linhasTexto(p.texto) + 0.4 + (p.destaque ? 0.4 : 0), 0);
+  if (pesoTotal <= LINHAS_CARD_INTEIRO) return [paragrafos || []];
+  const partes = [[]];
+  let usadas = 0;
+  for (const original of paragrafos || []) {
+    const limite = () => (partes.length === 1 ? LINHAS_PRIMEIRA_PARTE : LINHAS_DEMAIS_PARTES);
+    for (const p of fatiarParagrafo(original, LINHAS_DEMAIS_PARTES)) {
+      const peso = linhasTexto(p.texto) + 0.4 + (p.destaque ? 0.4 : 0);
+      if (usadas + peso > limite() && partes.at(-1).length) { partes.push([]); usadas = 0; }
+      partes.at(-1).push(p);
+      usadas += peso;
+    }
+  }
+  return partes;
+}
+
+function paragrafosCorRioHtml(paragrafos) {
+  let html = "";
+  let lista = [];
+  const fechar = () => { if (lista.length) html += `<ul class="cor-lista">${lista.join("")}</ul>`; lista = []; };
+  for (const p of paragrafos) {
+    if (p.item) { lista.push(`<li>${textoOficialHtml(p.texto)}</li>`); continue; }
+    fechar();
+    html += `<p class="cor-par${p.destaque ? " cor-par-destaque" : ""}">${textoOficialHtml(p.texto)}</p>`;
+  }
+  fechar();
+  return html;
+}
+
+function dataHoraBrasilia(iso) {
+  const texto = formatarDataBrasilia(iso);
+  return texto ? `${texto} (Brasília)` : "horário indisponível";
+}
+
+function linkCorRioHtml(url, texto) {
+  return /^https:\/\/cor\.rio\//.test(url || "") ? `<a href="${escAtributo(url)}">${esc(texto)}</a>` : "";
+}
+
+// somenteDoDia: versão do PDF anexada ao e-mail — só o comunicado do dia, com
+// o conteúdo referente ao dia (mesma seleção do corpo do e-mail) e sem a
+// lista de outros comunicados. O PDF baixado pelo site usa a versão completa.
+function blocoCorRio(r, { somenteDoDia = false } = {}) {
+  const estado = r.corRio;
+  if (!estado) return "";
+  const s = CorRio.situacao(estado);
+  const doDia = somenteDoDia && s.comunicados === "disponivel"
+    ? comunicadoDoDia(s.itens, { geradoEm: r.geradoEmISO || Date.now() })
+    : null;
+  const semComunicadoDoDia = somenteDoDia && s.comunicados !== "indisponivel" && !doDia;
+  const est = estado.estagio || {};
+  const com = estado.comunicados || {};
+  const cor = s.estagio ? s.estagio.cor : CorRio.NEUTRO.cor;
+  const fundo = s.estagio ? CorRio.tomClaro(cor, 0.1) : CorRio.NEUTRO.fundo;
+  const selo = s.nivel
+    ? `<span class="cor-selo" style="background:${cor};color:${CorRio.TINTA};">ESTÁGIO ${s.nivel}</span>`
+    : `<span class="cor-selo cor-selo-neutro">ESTÁGIO INDISPONÍVEL</span>`;
+  const abrirCard = (titulo, extraClasse = "") => `<div class="evento-card cor-card${extraClasse}" style="border-color:${cor};background:${fundo};">
+    <div class="cor-topo"><div class="cor-titulo">${titulo}</div>${selo}</div>`;
+  const desatualizado = (rotulo, iso) => `<p class="cor-desatualizado"><strong>Dados desatualizados</strong> — a consulta ao COR-Rio falhou nesta geração. Última consulta bem-sucedida ${rotulo}: ${esc(dataHoraBrasilia(iso))}.</p>`;
+
+  // Estágio: informação própria, com seus horários.
+  const linhaEstagio = s.nivel
+    ? `<p class="evento-linha"><strong>Estágio operacional da cidade:</strong> Estágio ${s.nivel}${est.dados.vigenteDesde ? `, em vigor desde ${esc(dataHoraBrasilia(est.dados.vigenteDesde))}` : ""}. Consulta à fonte: ${esc(dataHoraBrasilia(est.consultadoEm))}.</p>
+      ${(est.dados.mensagens || []).map((m) => `<p class="evento-linha"><strong>Mensagem oficial do COR-Rio:</strong> ${textoOficialHtml(m)}</p>`).join("")}
+      ${s.estagioDesatualizado ? desatualizado("do estágio", est.consultadoEm) : ""}`
+    : `<p class="evento-linha"><strong>Estágio indisponível</strong> — não há consulta válida ao estágio operacional do COR-Rio${est.falha ? ` (${esc(est.falha)})` : ""}. Nenhum estágio é presumido.</p>`;
+
+  const linkEstagios = linkCorRioHtml(est.dados?.urlPublica || "https://cor.rio/estagios-operacionais-da-cidade/", "Estágios operacionais no cor.rio");
+
+  if (s.comunicados !== "disponivel" || semComunicadoDoDia) {
+    const texto = semComunicadoDoDia
+      ? `<p class="cor-com-titulo"><strong>Nenhum comunicado do dia disponível até o horário da consulta.</strong></p>
+         <p class="evento-linha">Consulta à fonte: ${esc(dataHoraBrasilia(com.consultadoEm))}.</p>
+         ${s.comunicadosDesatualizados ? desatualizado("dos comunicados", com.consultadoEm) : ""}`
+      : s.comunicados === "nenhum"
+      ? `<p class="cor-com-titulo"><strong>Nenhum comunicado vigente disponibilizado pela fonte.</strong></p>
+         <p class="evento-linha">O COR-Rio não publicou nem atualizou comunicados nas últimas ${esc(com.janelaHoras)} h. Consulta à fonte: ${esc(dataHoraBrasilia(com.consultadoEm))}.</p>
+         ${s.comunicadosDesatualizados ? desatualizado("dos comunicados", com.consultadoEm) : ""}`
+      : `<p class="cor-com-titulo"><strong>Não foi possível consultar os comunicados do COR-Rio nesta geração${com.falha ? ` (${esc(com.falha)})` : ""}.</strong></p>`;
+    return `${abrirCard("Comunicado oficial COR-Rio", s.nivel ? "" : " cor-card-neutro")}
+      ${texto}
+      <div class="cor-separador"></div>
+      ${linhaEstagio}
+      <p class="evento-linha"><strong>Abrangência:</strong> ${esc(estado.abrangencia || "Município do Rio de Janeiro")} &nbsp;|&nbsp; <strong>Fonte:</strong> COR-Rio${linkEstagios ? ` &nbsp;|&nbsp; ${linkEstagios}` : ""}</p>
+    </div>`;
+  }
+
+  const c = somenteDoDia ? doDia : s.itens[0];
+  const outros = somenteDoDia ? [] : s.itens.slice(1);
+  const partes = dividirEmPartes(c.paragrafos?.length ? c.paragrafos : [{ texto: c.resumo || "" }]);
+  const atualizado = c.atualizadoEm && formatarDataBrasilia(c.atualizadoEm) !== formatarDataBrasilia(c.publicadoEm)
+    ? ` · atualizado em ${esc(dataHoraBrasilia(c.atualizadoEm))}` : "";
+  const anteriorAoEstagio = s.nivel && est.dados.vigenteDesde && Date.parse(c.publicadoEm) < Date.parse(est.dados.vigenteDesde);
+  const relacao = `<p class="cor-nota">O selo indica o estágio da cidade informado pelo COR-Rio na consulta de ${esc(dataHoraBrasilia(est.consultadoEm || com.consultadoEm))}; estágio e comunicado são publicados separadamente.${anteriorAoEstagio ? ` <strong>Este comunicado foi publicado antes do início do estágio atual</strong> e não deve ser lido como o comunicado desse estágio.` : ""}</p>`;
+  const linkPublicacao = linkCorRioHtml(c.link, "Consultar publicação oficial");
+  const total = partes.length;
+  const outrosHtml = outros.length
+    ? `<div class="cor-outros" style="border-left-color:${cor};"><strong>Outros comunicados vigentes do COR-Rio</strong> (consulta em ${esc(dataHoraBrasilia(com.consultadoEm))}):<ul>${outros.map((o) => `<li>${esc(o.titulo)} — publicado em ${esc(dataHoraBrasilia(o.publicadoEm))}${linkCorRioHtml(o.link, "Consultar publicação oficial") ? ` · ${linkCorRioHtml(o.link, "Consultar publicação oficial")}` : ""}</li>`).join("")}</ul></div>`
+    : "";
+
+  return partes.map((paragrafos, i) => {
+    const primeira = i === 0;
+    const ultima = i === total - 1;
+    const titulo = primeira ? "Comunicado oficial COR-Rio" : `Comunicado oficial COR-Rio — continuação (parte ${i + 1} de ${total})`;
+    return `${abrirCard(titulo, primeira ? "" : " cor-card-continuacao")}
+      <p class="cor-com-titulo"><strong>${esc(c.titulo)}</strong>${primeira ? "" : " <span class=\"cor-cont\">(continuação)</span>"}</p>
+      ${primeira ? `<table class="cor-meta"><tbody>
+        <tr><th>Abrangência</th><td>${esc(c.abrangencia || estado.abrangencia)}</td></tr>
+        <tr><th>Publicação</th><td>${esc(dataHoraBrasilia(c.publicadoEm))}${atualizado}</td></tr>
+        <tr><th>Fonte</th><td>${esc(estado.fonte || "COR-Rio — Centro de Operações e Resiliência (Prefeitura do Rio)")}</td></tr>
+        <tr><th>Consulta à fonte</th><td>${esc(dataHoraBrasilia(com.consultadoEm))}</td></tr>
+        <tr><th>Publicação oficial</th><td>${linkPublicacao || "Link não disponibilizado pela fonte"}</td></tr>
+      </tbody></table>
+      ${s.comunicadosDesatualizados ? desatualizado("dos comunicados", com.consultadoEm) : ""}
+      <p class="cor-rotulo">Conteúdo divulgado pelo COR-Rio${total > 1 ? ` (parte 1 de ${total})` : ""}:</p>` : ""}
+      ${paragrafosCorRioHtml(paragrafos)}
+      ${ultima ? `${total > 1 && linkPublicacao ? `<p class="evento-linha">Fim do comunicado · ${linkPublicacao}</p>` : ""}
+      <div class="cor-separador"></div>
+      ${linhaEstagio}
+      ${relacao}` : `<p class="cor-continua">Continua na próxima parte.</p>`}
+    </div>`;
+  }).join("") + outrosHtml;
 }
 
 function blocoAvisosInmet(avisos) {
@@ -576,7 +737,12 @@ function cabecalhoPdfHtml({ titulo, linhaLocal }) {
   <div class="divisor-amarelo"></div>`;
 }
 
-function renderPdfHtml(r) {
+/**
+ * @param {object} [opcoes]
+ * @param {boolean} [opcoes.corRioSomenteDoDia] card do COR-Rio só com o
+ *   comunicado do dia (PDF anexado ao e-mail).
+ */
+function renderPdfHtml(r, opcoes = {}) {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -603,6 +769,8 @@ function renderPdfHtml(r) {
     margin-top: 26px;
   }
   h4.subsecao {
+    break-after: avoid;
+    page-break-after: avoid;
     font-weight: bold;
     font-size: 12pt;
     margin-bottom: 8px;
@@ -659,6 +827,29 @@ function renderPdfHtml(r) {
     font-size: 10pt;
   }
   .aviso-inmet { break-inside: avoid; page-break-inside: avoid; }
+  .cor-card { border-width: 1.5px; border-left-width: 7px; border-radius: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #1F2A26; }
+  .cor-card-continuacao { margin-top: 10px; }
+  .cor-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+  .cor-titulo { font-size: 15pt; font-weight: 700; line-height: 1.3; color: #1F2A26; }
+  .cor-selo { flex: none; padding: 4px 12px; border-radius: 5px; font-size: 10.5pt; font-weight: 800; letter-spacing: 0.6px; white-space: nowrap; }
+  .cor-selo-neutro { background: #DDE3E1; color: #2B3431; border: 1px dashed #8A9894; }
+  .cor-com-titulo { margin: 0 0 8px 0; font-size: 12pt; line-height: 1.4; }
+  .cor-cont { font-weight: normal; font-size: 10pt; color: #555; }
+  table.cor-meta { margin: 6px 0 10px 0; font-size: 9.5pt; background: rgba(255,255,255,0.65); }
+  table.cor-meta th { background: transparent; color: #1F2A26; width: 26%; padding: 4px 8px; vertical-align: top; border-bottom: 1px solid rgba(0,0,0,0.08); }
+  table.cor-meta td { padding: 4px 8px; border-bottom: 1px solid rgba(0,0,0,0.08); overflow-wrap: anywhere; }
+  .cor-card a, .cor-outros a { color: ${brand.verdeEscuro}; font-weight: 600; text-decoration: underline; }
+  .cor-rotulo { margin: 10px 0 2px 0; font-weight: 700; font-size: 10pt; }
+  .cor-par { margin: 6px 0 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+  .cor-par-destaque { font-weight: 700; margin-top: 10px; }
+  .cor-lista { margin: 6px 0 0 0; }
+  .cor-lista li { margin-bottom: 3px; }
+  .cor-separador { border-top: 1px solid rgba(0,0,0,0.12); margin: 12px 0 2px 0; }
+  .cor-nota { margin: 8px 0 0 0; font-size: 9.5pt; color: #3A4541; line-height: 1.5; }
+  .cor-desatualizado { margin: 8px 0 0 0; padding: 6px 10px; border: 1px dashed #B7791F; background: #FFF8E6; font-size: 9.5pt; }
+  .cor-continua { margin: 10px 0 0 0; font-size: 9pt; font-style: italic; color: #555; text-align: right; }
+  .cor-outros { margin: -4px 0 16px 0; padding: 8px 14px; border: 1px solid ${brand.cinzaBorda}; border-left: 4px solid; border-radius: 5px; font-size: 9.5pt; break-inside: avoid; page-break-inside: avoid; }
+  .cor-outros ul { margin: 4px 0 0 0; }
   ul { margin: 8px 0 14px 0; padding-left: 20px; }
   li { margin-bottom: 6px; line-height: 1.45; }
   .fontes { font-size: 9pt; color: #555; margin-top: 10px; }
@@ -730,6 +921,7 @@ function renderPdfHtml(r) {
   ${tabelaQualidadeAr(r.qualidadeAr)}
   ${blocoEventoExtremo(r)}
   ${blocoClimaSaude(r)}
+  ${blocoCorRio(r, { somenteDoDia: opcoes.corRioSomenteDoDia })}
   ${blocoAvisosInmet(r.avisosInmet)}
   ${blocoRecomendacoesPorFenomeno(r)}
   ${blocoMonitorSecas(r)}

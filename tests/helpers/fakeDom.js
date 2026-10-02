@@ -44,12 +44,13 @@ function carregarPainel({ responder = () => ({}) } = {}) {
   const contexto = {
     console,
     document,
-    window: { location: { search: "", href: "http://painel.local/" }, history: { replaceState() {} } },
+    window: { location: { search: "", href: "http://painel.local/" }, history: { replaceState() {} }, addEventListener: () => {} },
     location: { search: "", href: "http://painel.local/" },
     URL,
     URLSearchParams,
     Intl,
     AbortController,
+    AbortSignal,
     setInterval: () => 0,
     setTimeout: () => 0,
     clearTimeout: () => {},
@@ -57,7 +58,7 @@ function carregarPainel({ responder = () => ({}) } = {}) {
     fetch: async (url, opcoes) => ({ ok: true, json: async () => responder(String(url), opcoes) }),
   };
   vm.createContext(contexto);
-  for (const arquivo of ["dashboard-components.js", "dashboard.js"]) {
+  for (const arquivo of ["cor-rio-compartilhado.js", "dashboard-components.js", "dashboard.js"]) {
     const codigo = fs.readFileSync(path.join(__dirname, "..", "..", "public", arquivo), "utf-8");
     vm.runInContext(codigo, contexto, { filename: arquivo });
   }

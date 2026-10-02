@@ -12,12 +12,14 @@ const path = require("path");
 const fs = require("fs");
 
 const { getCidade, CIDADES } = require("./src/config/cities");
-const { montarRelatorio } = require("./src/logic/reportBuilder");
 const { executarPipeline, PASTA_SAIDA } = require("./src/pipeline");
+const { criarAtualizadorDados } = require("./src/logic/atualizacaoDados");
+const { servicoCorRioPadrao } = require("./src/sources/corRio");
 const {
   iniciarAgendamentoDiario,
   agendarEnvioUnicoHoje,
   iniciarMonitorAlertas,
+  iniciarAtualizacaoAutomatica,
 } = require("./src/scheduler");
 const responsaveis = require("./src/config/recipients");
 const { arquivosLogos } = require("./src/config/logos");
@@ -43,6 +45,8 @@ function criarApp({
   trustProxy = process.env.TRUST_PROXY,
   opcoesTentativas = {},
   executarPipelineRelatorio = executarPipeline,
+  atualizadorDados = criarAtualizadorDados(),
+  servicoCorRio = servicoCorRioPadrao(),
 } = {}) {
   const senhaConfere = criarComparadorSenha(senhaPainel);
   const app = express();
@@ -65,13 +69,11 @@ function criarApp({
   const CIDADE_ATIVA = cidadeAtiva; // usada como base padrão do seletor
 
   // -----------------------------------------------------------------------
-  // Cache curto do "preview" (cards do painel na TV), por base, para não
-  // bater nas APIs externas a cada auto-refresh do navegador. Cada base tem
-  // sua própria entrada porque o painel agora deixa escolher qual visualizar.
+  // Dados do painel (cards da TV), por base. O servidor renova este cache
+  // sozinho a cada INTERVALO_ATUALIZACAO_MIN (iniciarAtualizacaoAutomatica em
+  // src/scheduler.js); o navegador só lê o que já está pronto.
   // -----------------------------------------------------------------------
-  const previewCachePorBase = new Map();
-  const previewEmAndamento = new Map();
-  const PREVIEW_TTL_MS = 10 * 60 * 1000; // 10 minutos
+  app.locals.atualizadorDados = atualizadorDados;
 
   // Respostas de erro das rotas (V-10/V-09): só mensagens marcadas como
   // públicas (fixas, sem dado interno) vão para o cliente; o resto vira uma
@@ -84,21 +86,6 @@ function criarApp({
     return res.status(500).json({ ok: false, erro: mensagemGenerica });
   }
 
-  async function obterPreview(cidade) {
-    const agora = Date.now();
-    const cache = previewCachePorBase.get(cidade.chave);
-    if (cache && agora - cache.timestamp < PREVIEW_TTL_MS) {
-      return cache.dados;
-    }
-    if (previewEmAndamento.has(cidade.chave)) return previewEmAndamento.get(cidade.chave);
-    const tarefa = montarRelatorio(cidade).then(report => {
-      previewCachePorBase.set(cidade.chave, { dados: report, timestamp: Date.now() });
-      return report;
-    }).finally(() => previewEmAndamento.delete(cidade.chave));
-    previewEmAndamento.set(cidade.chave, tarefa);
-    return tarefa;
-  }
-
   app.get("/api/preview", async (req, res) => {
     let cidade;
     try {
@@ -107,11 +94,36 @@ function criarApp({
       return res.status(400).json({ ok: false, erro: "Base inválida." });
     }
     try {
-      const report = await obterPreview(cidade);
-      res.json({ ok: true, report });
+      // `atualizacao` informa o horário da última consulta bem-sucedida e se
+      // a renovação está pendente (falha nas fontes: dados anteriores mantidos).
+      const { report, ...atualizacao } = await atualizadorDados.obter(cidade);
+      res.set("Cache-Control", "no-store");
+      res.json({ ok: true, report, atualizacao });
     } catch (erro) {
       console.error("[CIM] Erro ao montar o preview:", erro);
       res.status(502).json({ ok: false, erro: "Não foi possível obter os dados meteorológicos agora." });
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // Comunicados e estágio operacional do COR-Rio — só para bases com
+  // integracaoCorRio (município do Rio). Estágio e comunicados vêm com status,
+  // horário da última consulta válida e motivo da falha, cada um separado.
+  // -----------------------------------------------------------------------
+  app.get("/api/cor-rio", async (req, res) => {
+    let cidade;
+    try {
+      cidade = getCidade(req.query.cidade || CIDADE_ATIVA);
+    } catch (erro) {
+      return res.status(400).json({ ok: false, erro: "Base inválida." });
+    }
+    res.set("Cache-Control", "no-store");
+    if (!cidade.integracaoCorRio) return res.json({ ok: true, aplicavel: false });
+    try {
+      res.json({ ok: true, aplicavel: true, ...(await servicoCorRio.obter()) });
+    } catch (erro) {
+      console.error("[CIM] Erro ao consultar o COR-Rio:", erro);
+      res.status(502).json({ ok: false, erro: "Não foi possível consultar o COR-Rio agora." });
     }
   });
 
@@ -205,7 +217,7 @@ function criarApp({
     try {
       const resultado = await executarPipelineRelatorio({ cidadeChave, enviarEmail: true });
       // atualiza o cache dessa base na hora, sem esperar o próximo /api/preview
-      previewCachePorBase.set(resultado.report.cidade.chave, { dados: resultado.report, timestamp: Date.now() });
+      atualizadorDados.registrar(resultado.report);
       // Link de download com token aleatório, válido por 24 h (V-07).
       const link = resultado.arquivoPdf ? linksRelatorio.gerar(resultado.arquivoPdf) : null;
       res.json({
@@ -250,7 +262,12 @@ function criarApp({
   app.get("/api/cidades", (req, res) => {
     res.json({
       ativa: CIDADE_ATIVA || require("./src/config/cities").CIDADE_PADRAO,
-      disponiveis: Object.values(CIDADES).map((c) => ({ chave: c.chave, nome: c.nome, uf: c.uf })),
+      disponiveis: Object.values(CIDADES).map((c) => ({
+        chave: c.chave,
+        nome: c.nome,
+        uf: c.uf,
+        ...(c.integracaoCorRio ? { corRio: true } : {}),
+      })),
     });
   });
 
@@ -385,6 +402,7 @@ function iniciarServidor() {
     iniciarAgendamentoDiario();
     agendarEnvioUnicoHoje();
     iniciarMonitorAlertas();
+    iniciarAtualizacaoAutomatica(app.locals.atualizadorDados);
   };
   const hostLog = rede.host || "localhost";
 

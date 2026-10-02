@@ -7,6 +7,8 @@
 // Códigos e coordenadas conferidos em servicodados.ibge.gov.br e OpenStreetMap.
 // climaSaudeUrl: página municipal pública conferida por HTTP 200 e título da
 // localidade. Campo manual; não derivar URL automaticamente da chave da base.
+// integracaoCorRio: exibe o painel de comunicados e estágio do COR-Rio. O
+// COR-Rio cobre só o município do Rio de Janeiro — não habilitar em outras bases.
 
 const CIDADES = {
   rio_de_janeiro: {
@@ -18,6 +20,7 @@ const CIDADES = {
     longitude: -43.1729,
     codigoIbge: "3304557",
     climaSaudeUrl: "https://clima.saude.gov.br/rj/rio-de-janeiro?modo=ehf",
+    integracaoCorRio: true,
     links: {
       inmet: "https://previsao.inmet.gov.br/3304557",
       alertaRio:

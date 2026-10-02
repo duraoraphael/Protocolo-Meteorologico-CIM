@@ -1,0 +1,406 @@
+From: =?UTF-8?Q?Protocolo_Meteorol=C3=B3gico_CIM?=
+ <verificacao@example.invalid>
+To: raphael.durao.prestserv@petrobras.com.br, duraocelso@gmail.com,
+ duraocelso@hotmail.com, viviany.silva.prestserv@petrobras.com.br,
+ eduardo.santos@normatel.com.br
+Subject: =?UTF-8?Q?Informativo_Meteorol=C3=B3gico_=E2=80=94?=
+ =?UTF-8?Q?_Rio_de_Janeiro_=E2=80=94_02/10/2026?=
+Message-ID: <78309e7d-1549-c324-ecdb-49f1134466ab@example.invalid>
+Date: Fri, 02 Oct 2026 18:13:17 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="--_NmP-4ec24555df45fefc-Part_1"
+
+----_NmP-4ec24555df45fefc-Part_1
+Content-Type: multipart/related; type="text/html";
+ boundary="--_NmP-4ec24555df45fefc-Part_2"
+
+----_NmP-4ec24555df45fefc-Part_2
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<!doctype html>
+<html lang=3D"pt-BR">
+<head><meta charset=3D"utf-8"><meta =
+name=3D"viewport" content=3D"width=3Ddevice-width,initial-scale=3D1"><meta =
+name=3D"color-scheme" content=3D"light only"><meta name=3D"supported-color-=
+schemes" content=3D"light only"></head>
+<body bgcolor=3D"#FFFFFF" =
+style=3D"margin:0;padding:0;background:#FFFFFF;background-color:#FFFFFF;col=
+or:#222222;font-family:Arial,sans-serif;">
+  <table role=3D"presentation" =
+width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF" =
+style=3D"width:100%;background:#FFFFFF;background-color:#FFFFFF;">
+    <tr><td align=3D"center" bgcolor=3D"#FFFFFF" style=3D"padding:8px =
+6px;background:#FFFFFF;">
+      <!--[if mso]><table role=3D"presentation" =
+width=3D"850" cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF"><tr><=
+td bgcolor=3D"#FFFFFF"><![endif]-->
+      <table role=3D"presentation" =
+width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF" =
+style=3D"width:100%;max-width:850px;background:#FFFFFF;background-color:#FF=
+FFFF;color:#222222;border:1px solid #D5DBD8;">
+        <tr =
+data-email-header=3D"true"><td bgcolor=3D"#047C3E" style=3D"background:#047=
+C3E;padding:16px 22px;">
+    <table role=3D"presentation" width=3D"100%" =
+cellpadding=3D"0" cellspacing=3D"0" style=3D"width:100%;border-collapse:col=
+lapse;"><tr>
+      <td data-email-header-cim=3D"true" width=3D"31%" =
+valign=3D"middle" align=3D"left" style=3D"width:31%;color:#ffffff;"><table =
+role=3D"presentation" cellpadding=3D"0" cellspacing=3D"0" =
+style=3D"border-collapse:collapse;"><tr>
+    <td valign=3D"middle" =
+style=3D"padding:0 11px 0 0;color:#ffffff;font-family:'Arial Black','Arial =
+Bold',Arial,sans-serif;font-size:42px;font-weight:900;line-height:42px;lett=
+er-spacing:-3px;white-space:nowrap;mso-line-height-rule:exactly;"><span =
+style=3D"color:#ffffff;">C</span><span style=3D"color:#FEBF0A;">I</span><sp=
+an style=3D"color:#ffffff;">M</span></td>
+    <td valign=3D"middle" =
+style=3D"border-left:2px solid #ffffff;padding:1px 0 1px =
+11px;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:=
+bold;line-height:15px;white-space:nowrap;mso-line-height-rule:exactly;">Cen=
+tro Integrado<br>de Monitoramento<br><span style=3D"color:#ffffff;font-weig=
+ht:normal;font-size:12px;letter-spacing:1.2px;">COMPARTILHADO</span></td>
+  </tr></table></td>
+      <td data-email-header-title=3D"true" =
+width=3D"47%" valign=3D"middle" align=3D"center" style=3D"width:47%;color:#=
+ffffff;padding:0 10px;text-align:center;">
+        <div =
+style=3D"color:#ffffff;font-family:Arial,sans-serif;font-size:21px;font-wei=
+ght:bold;line-height:25px;letter-spacing:0.3px;text-align:center;">INFORMAT=
+IVO METEOROL=C3=93GICO</div>
+        <div data-email-header-local=3D"true" =
+style=3D"color:#ffffff;font-family:Arial,sans-serif;font-size:13px;line-hei=
+ght:18px;margin-top:6px;text-align:center;">Rio de Janeiro =E2=80=94 RJ =
+=E2=80=94 sexta-feira, 2 de outubro de 2026</div>
+      </td>
+      <td data-email-header-petrobras=3D"true" width=3D"22%" =
+valign=3D"middle" align=3D"right" style=3D"width:22%;text-align:right;line-=
+height:0;"><img src=3D"cid:logo-petrobras-header@cim" width=3D"150" =
+height=3D"30" alt=3D"Petrobras" style=3D"display:block;width:150px;height:a=
+uto;max-width:100%;border:0;outline:none;text-decoration:none;color:#ffffff=
+;font:italic bold 20px/1.2 Arial,sans-serif;"></td>
+    </tr></table>
+  </td></tr>
+  <tr data-email-header-stripe=3D"true"><td =
+bgcolor=3D"#FFCC00" style=3D"height:4px;background:#FFCC00;font-size:0;line=
+-height:4px;mso-line-height-rule:exactly;">&nbsp;</td></tr>
+        <tr><td class=3D"email-pad" bgcolor=3D"#FFFFFF" =
+style=3D"background:#FFFFFF;padding:11px 25px 3px;color:#222222;font:16px/1=
+.4 Arial,sans-serif;"><strong>Hora da consulta:</strong> 15:13 =
+(Hor=C3=A1rio de Bras=C3=ADlia)</td></tr>
+        <tr><td =
+class=3D"email-pad" bgcolor=3D"#FFFFFF" style=3D"background:#FFFFFF;padding=
+:5px 20px;"><table role=3D"presentation" width=3D"100%" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#FFFFFF" style=3D"width:100%;background:#FFFFF=
+F;border:1px solid #D5DBD8;border-bottom:0;border-collapse:separate;">
+    <tr>
+      <td width=3D"33.33%" valign=3D"middle" align=3D"center" =
+bgcolor=3D"#FFFFFF" style=3D"width:33.33%;background:#FFFFFF;border-right:1=
+px solid #D5DBD8;border-bottom:1px solid #D5DBD8;padding:13px 8px =
+12px;text-align:center;">
+    <div style=3D"color:#5F6B66;font:13px/1.3 =
+Arial,sans-serif;text-transform:uppercase;">TEMP. M=C3=8DN/M=C3=81X</div>
+    <div style=3D"color:#222222;font:bold 25px/1.2 Arial,=
+sans-serif;margin-top:3px;">20=C2=B0 / 24=C2=B0C</div>
+  </td>
+      <td width=3D"33.33%" valign=3D"middle" align=3D"center" =
+bgcolor=3D"#FFFFFF" style=3D"width:33.33%;background:#FFFFFF;border-right:1=
+px solid #D5DBD8;border-bottom:1px solid #D5DBD8;padding:13px 8px =
+12px;text-align:center;">
+    <div style=3D"color:#5F6B66;font:13px/1.3 =
+Arial,sans-serif;text-transform:uppercase;">UMIDADE M=C3=8DN/M=C3=81X</div>
+    <div style=3D"color:#222222;font:bold 25px/1.2 Arial,=
+sans-serif;margin-top:3px;">77% / 98%</div>
+  </td>
+      <td width=3D"33.33%" valign=3D"middle" align=3D"center" =
+bgcolor=3D"#FFFFFF" style=3D"width:33.33%;background:#FFFFFF;border-right:0=
+;border-bottom:1px solid #D5DBD8;padding:13px 8px 12px;text-align:center;">
+    <div style=3D"color:#5F6B66;font:13px/1.3 Arial,=
+sans-serif;text-transform:uppercase;">RAJADA PREVISTA</div>
+    <div style=3D"color:#222222;font:bold 25px/1.2 Arial,=
+sans-serif;margin-top:3px;">48 km/h</div>
+  </td>
+    </tr>
+    <tr>
+      <td width=3D"33.33%" valign=3D"middle" align=3D"center" =
+bgcolor=3D"#FFFFFF" style=3D"width:33.33%;background:#FFFFFF;border-right:1=
+px solid #D5DBD8;border-bottom:1px solid #D5DBD8;padding:13px 8px =
+12px;text-align:center;">
+    <div style=3D"color:#5F6B66;font:13px/1.3 =
+Arial,sans-serif;text-transform:uppercase;">QUALIDADE DO AR</div>
+    <div style=3D"color:#222222;font:bold 25px/1.2 Arial,=
+sans-serif;margin-top:3px;">Moderada</div>
+  </td>
+      <td width=3D"33.=
+33%" valign=3D"middle" align=3D"center" bgcolor=3D"#FFFFFF" =
+style=3D"width:33.33%;background:#FFFFFF;border-right:1px solid =
+#D5DBD8;border-bottom:1px solid #D5DBD8;padding:13px 8px =
+12px;text-align:center;">
+    <div style=3D"color:#5F6B66;font:13px/1.3 =
+Arial,sans-serif;text-transform:uppercase;">CHUVA ACUMULADA</div>
+    <div style=3D"color:#222222;font:bold 25px/1.2 Arial,=
+sans-serif;margin-top:3px;">15.6 mm</div>
+  </td>
+      <td width=3D"33.=
+33%" valign=3D"middle" align=3D"center" bgcolor=3D"#FFFFFF" =
+style=3D"width:33.33%;background:#FFFFFF;border-right:0;border-bottom:1px =
+solid #D5DBD8;padding:13px 8px 12px;text-align:center;">
+    <div style=3D"color:#5F6B66;font:13px/1.3 Arial,=
+sans-serif;text-transform:uppercase;">=C3=8DNDICE UV</div>
+    <div style=3D"color:#222222;font:bold 25px/1.2 Arial,=
+sans-serif;margin-top:3px;">2.6 <span style=3D"font:16px/1.2 Arial,=
+sans-serif;white-space:nowrap;">(Baixo)</span></div>
+  </td>
+    </tr>
+  </table></td></tr>
+        <tr><td class=3D"email-pad" =
+bgcolor=3D"#FFFFFF" style=3D"background:#FFFFFF;padding:3px 20px 0;"><table=
+ role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" =
+bgcolor=3D"#FFFFFF" style=3D"width:100%;background:#FFFFFF;">
+    <tr>
+      <td class=3D"email-stack" width=3D"50%" valign=3D"top" =
+style=3D"width:50%;padding-right:4px;"><table role=3D"presentation" =
+width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF" =
+style=3D"width:100%;background:#FFFFFF;border:1px solid #D5DBD8;">
+    <tr><td align=3D"center" bgcolor=3D"#FFFFFF" style=3D"padding:11px 8px =
+10px;text-align:center;background:#FFFFFF;">
+      <div =
+style=3D"color:#5F6B66;font:13px/1.3 Arial,sans-serif;text-transform:upperc=
+ase;">MAR =E2=80=94 ALTURA M=C3=81X. DE ONDA</div>
+      <div =
+style=3D"color:#222222;font:bold 22px/1.25 Arial,sans-serif;margin-top:3px;=
+">1 m</div>
+      <div style=3D"color:#222222;font:15px/1.3 Arial,=
+sans-serif;margin-top:2px;">Leve</div>
+    </td></tr>
+  </table></td>
+      <td class=3D"email-stack" width=3D"50%" valign=3D"top" =
+style=3D"width:50%;padding-left:4px;"><table role=3D"presentation" =
+width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF" =
+style=3D"width:100%;background:#FFFFFF;border:1px solid #D5DBD8;">
+    <tr><td align=3D"center" bgcolor=3D"#FFFFFF" style=3D"padding:11px 8px =
+10px;text-align:center;background:#FFFFFF;">
+      <div =
+style=3D"color:#5F6B66;font:13px/1.3 Arial,sans-serif;text-transform:upperc=
+ase;">CONDI=C3=87=C3=83O GERAL</div>
+      <div style=3D"color:#222222;font=
+:bold 22px/1.25 Arial,sans-serif;margin-top:3px;">Pancadas de chuva =
+moderadas</div>
+      <div style=3D"color:#222222;font:15px/1.3 Arial,=
+sans-serif;margin-top:2px;">Previs=C3=A3o para o dia</div>
+    </td></tr>
+  </table></td>
+    </tr>
+  </table></td></tr>
+        <tr><td =
+class=3D"email-pad" bgcolor=3D"#FFFFFF" style=3D"background:#FFFFFF;padding=
+:2px 20px 0;"><table role=3D"presentation" width=3D"100%" cellpadding=3D"0"=
+ cellspacing=3D"0" bgcolor=3D"#FFFFFF" style=3D"width:100%;background:#FFFF=
+FF;border:1.5px solid #D32F2F;border-left:5px solid =
+#D32F2F;margin-top:9px;">
+    <tr><td bgcolor=3D"#FFFFFF" =
+style=3D"padding:13px 18px 14px;background:#FFFFFF;color:#222222;font:15px/=
+1.5 Arial,sans-serif;">
+      <div style=3D"color:#D32F2F;font:bold 20px/1.=
+25 Arial,sans-serif;margin-bottom:5px;">ALERTA =E2=80=94 VENTO</div>
+      <div>Rajada prevista: 48 km/h</div><div style=3D"margin-top:3px;"><em=
+>Janela prevista:</em> Tarde</div><div style=3D"margin-top:3px;">Fonte de =
+dados: Open-Meteo</div>
+    </td></tr>
+  </table><table =
+role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" =
+bgcolor=3D"#FFFFFF" style=3D"width:100%;background:#FFFFFF;border:1.5px =
+solid #2E7D32;border-left:5px solid #2E7D32;margin-top:9px;">
+    <tr><td bgcolor=3D"#FFFFFF" style=3D"padding:13px 18px =
+14px;background:#FFFFFF;color:#222222;font:15px/1.5 Arial,sans-serif;">
+      <div style=3D"color:#2E7D32;font:bold 20px/1.25 Arial,=
+sans-serif;margin-bottom:5px;">NORMAL =E2=80=94 CALOR / RISCO =C3=80 =
+SA=C3=9ADE</div>
+      <div>EHF: Sem excesso =C2=B7 Temperatura m=C3=A1xima=
+ prevista: 37.5 =C2=B0C</div><div style=3D"margin-top:3px;">RISCO COMBINADO=
+ =C3=80 SA=C3=9ADE: Sem Risco</div><div style=3D"margin-top:3px;">Fonte de =
+dados: Clima e Sa=C3=BAde =E2=80=94 Minist=C3=A9rio da Sa=C3=BAde</div>
+    </td></tr>
+  </table></td></tr>
+        <tr><td class=3D"email-pad" =
+bgcolor=3D"#FFFFFF" style=3D"background:#FFFFFF;padding:0 20px;"><table =
+role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" =
+bgcolor=3D"#E9F9EF" style=3D"width:100%;background:#E9F9EF;border:1.5px =
+solid #22C55E;border-left:7px solid #22C55E;border-radius:8px;border-collap=
+se:separate;margin-top:9px;">
+    <tr><td bgcolor=3D"#E9F9EF" =
+style=3D"padding:13px 18px 14px;background:#E9F9EF;color:#1F2A26;font:15px/=
+1.5 Arial,sans-serif;">
+      <table role=3D"presentation" width=3D"100%" =
+cellpadding=3D"0" cellspacing=3D"0" style=3D"width:100%;"><tr>
+        <td valign=3D"top" style=3D"color:#1F2A26;font:bold 20px/1.25 Arial=
+,sans-serif;padding:0 10px 8px 0;">Comunicado oficial COR-Rio</td>
+        <td valign=3D"top" align=3D"right" style=3D"text-align:right;paddin=
+g-bottom:8px;"><span style=3D"display:inline-block;background:#22C55E;color=
+:#0B1A12;font:bold 14px/1.2 Arial,sans-serif;letter-spacing:0.=
+5px;padding:5px 12px;border-radius:5px;white-space:nowrap;">EST=C3=81GIO =
+1</span></td>
+      </tr></table>
+      <div style=3D"font:bold 17px/1.35 =
+Arial,sans-serif;color:#1F2A26;">Sexta-feira (2/10) com previs=C3=A3o de =
+chuva e ventos fracos a moderados | Predom=C3=ADnio de c=C3=A9u =
+encoberto</div>
+      <div style=3D"margin-top:6px;">Segundo o Alerta Rio, =
+nesta sexta-feira (2/10), o tempo ficar=C3=A1 inst=C3=A1vel na cidade do =
+Rio por conta do transporte de umidade do oceano em conjunto com a =
+atua=C3=A7=C3=A3o de =C3=A1reas de instabilidade. O predom=C3=ADnio =
+ser=C3=A1 de c=C3=A9u encoberto e h=C3=A1 previs=C3=A3o de chuva fraca a =
+moderada. Os ventos estar=C3=A3o fracos (at=C3=A9 18,5 km/h) a moderados =
+(de 18,5km/h a 51,9km/h) e as temperaturas em decl=C3=ADnio, com =
+m=C3=ADnima prevista de 18=C2=B0C e m=C3=A1xima prevista de 25=C2=B0C.=
+</div>
+      <div style=3D"margin-top:10px;padding-top:8px;border-top:1px =
+solid rgba(0,0,0,0.12);font:14px/1.45 Arial,sans-serif;">
+        <div style=3D"margin-top:3px;"><strong>Abrang=C3=AAncia:</strong> =
+Munic=C3=ADpio do Rio de Janeiro</div>
+        <div =
+style=3D"margin-top:3px;"><strong>Publica=C3=A7=C3=A3o:</strong> 02/10/2026=
+ 05:51 (Bras=C3=ADlia)</div>
+        <div style=3D"margin-top:3px;"><strong=
+>Fonte:</strong> COR-Rio =E2=80=94 Centro de Opera=C3=A7=C3=B5es e =
+Resili=C3=AAncia (Prefeitura do Rio)</div>
+        <div =
+style=3D"margin-top:3px;"><strong>Consulta =C3=A0 fonte:</strong> =
+02/10/2026 15:13 (Bras=C3=ADlia)</div>
+        <div =
+style=3D"margin-top:6px;"><a href=3D"https://cor.rio/sexta-feira-2-10-com-p=
+revisao-de-chuva-e-ventos-fracos-a-moderados-predominio-de-ceu-encoberto/" =
+style=3D"color:#00612C;font-weight:bold;text-decoration:underline;">Consult=
+ar publica=C3=A7=C3=A3o oficial</a></div>
+      </div>
+      <div style=3D"margin-top:10px;font:14px/1.45 Arial,=
+sans-serif;"><strong>Est=C3=A1gio operacional da cidade:</strong> =
+Est=C3=A1gio 1, em vigor desde 30/09/2026 05:00 (Bras=C3=ADlia). Consulta =
+=C3=A0 fonte: 02/10/2026 15:13 (Bras=C3=ADlia). Est=C3=A1gio e comunicado =
+s=C3=A3o publicados separadamente pelo COR-Rio.</div>
+      =20
+     =20
+    </td></tr>
+  </table><table role=3D"presentation" width=3D"100%" =
+cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF" =
+style=3D"width:100%;background:#FFFFFF;border:1.5px solid =
+#D32F2F;border-left:5px solid #D32F2F;margin-top:9px;">
+    <tr><td bgcolor=3D"#FFFFFF" style=3D"padding:13px 18px =
+14px;background:#FFFFFF;color:#222222;font:15px/1.5 Arial,sans-serif;">
+      <div style=3D"color:#D32F2F;font:bold 20px/1.25 Arial,=
+sans-serif;margin-bottom:5px;">AVISO OFICIAL INMET</div>
+      <div style=3D"color:#222222;">Tempestade =E2=80=94 <strong =
+style=3D"color:#222222;">Perigo Potencial</strong></div><div =
+style=3D"margin-top:3px;">Vig=C3=AAncia: 2026-10-02 00:00 at=C3=A9 =
+2026-10-02 23:59</div><div style=3D"margin-top:3px;"><strong>Motivo do =
+aviso:</strong> Chuva entre 20 e 30 mm/h ou at=C3=A9 50 mm/dia, ventos =
+intensos (40-60 km/h), e queda de granizo. Baixo risco de corte de energia =
+el=C3=A9trica, estragos em planta=C3=A7=C3=B5es, queda de galhos de =
+=C3=A1rvores e de alagamentos.</div><div style=3D"margin-top:3px;"><strong>=
+Instru=C3=A7=C3=B5es oficiais:</strong><br>Em caso de rajadas de vento: =
+(n=C3=A3o se abrigue debaixo de =C3=A1rvores, pois h=C3=A1 leve risco de =
+queda e descargas el=C3=A9tricas e n=C3=A3o estacione ve=C3=ADculos =
+pr=C3=B3ximos a torres de transmiss=C3=A3o e placas de propaganda).=
+<br>Evite usar aparelhos eletr=C3=B4nicos ligados =C3=A0 tomada.<br>Obtenha=
+ mais informa=C3=A7=C3=B5es junto =C3=A0 Defesa Civil (telefone 199) e ao =
+Corpo de Bombeiros (telefone 193).</div><div style=3D"margin-top:3px;">Font=
+e: INMET</div>
+    </td></tr>
+  </table><table role=3D"presentation" =
+width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF" =
+style=3D"width:100%;background:#FFFFFF;border:1.5px solid =
+#D32F2F;border-left:5px solid #D32F2F;margin-top:9px;">
+    <tr><td bgcolor=3D"#FFFFFF" style=3D"padding:13px 18px =
+14px;background:#FFFFFF;color:#222222;font:15px/1.5 Arial,sans-serif;">
+      <div style=3D"color:#D32F2F;font:bold 20px/1.25 Arial,=
+sans-serif;margin-bottom:5px;">AVISO OFICIAL INMET</div>
+      <div style=3D"color:#222222;">Acumulado de Chuva =E2=80=94 <strong =
+style=3D"color:#222222;">Perigo</strong></div><div style=3D"margin-top:3px;=
+">Vig=C3=AAncia: 2026-10-02 09:00 at=C3=A9 2026-10-02 23:59</div><div =
+style=3D"margin-top:3px;"><strong>Motivo do aviso:</strong> Chuva entre 30 =
+a 60 mm/h ou 50 a 100 mm/dia. Risco de alagamentos, deslizamentos de =
+encostas, transbordamentos de rios, em cidades com tais =C3=A1reas de risco=
+.</div><div style=3D"margin-top:3px;"><strong>Instru=C3=A7=C3=B5es =
+oficiais:</strong><br>Evite enfrentar o mau tempo.<br>Observe =
+altera=C3=A7=C3=A3o nas encostas.<br>Se poss=C3=ADvel, desligue aparelhos =
+el=C3=A9tricos e quadro geral de energia.<br>Em caso de situa=C3=A7=C3=A3o =
+de inunda=C3=A7=C3=A3o, ou similar, proteja seus pertences da =C3=A1gua =
+envoltos em sacos pl=C3=A1sticos.<br>Obtenha mais informa=C3=A7=C3=B5es =
+junto =C3=A0 Defesa Civil (telefone 199) e ao Corpo de Bombeiros (telefone =
+193).</div><div style=3D"margin-top:3px;">Fonte: INMET</div>
+    </td></tr>
+  </table></td></tr>
+        <tr><td bgcolor=3D"#FFFFFF" =
+style=3D"padding:11px 25px 2px;background:#FFFFFF;">
+    <div style=3D"color:#00843D;font:bold 19px/1.3 Arial,=
+sans-serif;margin-bottom:5px;">Recomenda=C3=A7=C3=B5es - Protocolo =
+Meteorol=C3=B3gico do COMPARTILHADO</div>
+    <table role=3D"presentation" =
+width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" bgcolor=3D"#FFFFFF" =
+style=3D"width:100%;background:#FFFFFF;"><tr><td class=3D"email-stack" =
+width=3D"100%" valign=3D"top" style=3D"width:100%;padding:4px 15px 7px =
+4px;color:#222222;font:14px/1.4 Arial,sans-serif;">
+      <div style=3D"color:#D32F2F;font:bold 16px/1.3 Arial,=
+sans-serif;margin-bottom:5px;">VENTO:</div>
+      <ul =
+style=3D"margin:0;padding-left:20px;"><li style=3D"margin-bottom:3px;">Mant=
+er o monitoramento durante o dia.</li><li style=3D"margin-bottom:3px;">Para=
+lisar atividades externas gerais, incluindo ro=C3=A7agem, capina, =
+jardinagem, manuten=C3=A7=C3=A3o civil externa e obras civis.</li><li =
+style=3D"margin-bottom:3px;">Suspender trabalho em altura e em telhados.=
+</li><li style=3D"margin-bottom:3px;">Suspender i=C3=A7amentos.</li><li =
+style=3D"margin-bottom:3px;">Suspender servi=C3=A7os a c=C3=A9u aberto.=
+</li><li style=3D"margin-bottom:3px;">Interditar =C3=A1reas sob risco de =
+queda de objetos ou =C3=A1rvores.</li><li style=3D"margin-bottom:3px;">Inte=
+nsificar o controle de quedas de objetos.</li><li style=3D"margin-bottom:3p=
+x;">Direcionar pessoas para =C3=A1reas internas seguras.</li></ul>
+    </td></tr></table>
+  </td></tr>
+        <tr><td class=3D"email-pad" =
+bgcolor=3D"#FFFFFF" style=3D"background:#FFFFFF;padding:10px 25px =
+6px;color:#222222;font:14px/1.4 Arial,sans-serif;"><strong>Fontes de =
+dados:</strong><br>Open-Meteo | Open-Meteo Air Quality | Open-Meteo Marine =
+| INMET | Clima e Sa=C3=BAde =E2=80=94 Minist=C3=A9rio da =
+Sa=C3=BAde</td></tr>
+        <tr><td class=3D"email-pad" =
+bgcolor=3D"#FFFFFF" style=3D"background:#FFFFFF;padding:0 20px =
+10px;"><table role=3D"presentation" width=3D"100%" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#FFFFFF" style=3D"width:100%;background:#FFFFF=
+F;border:1px solid #D5DBD8;border-left:4px solid #00843D;"><tr><td =
+bgcolor=3D"#FFFFFF" style=3D"padding:11px 17px;background:#FFFFFF;color:#33=
+3333;font:14px/1.4 Arial,sans-serif;">Relat=C3=B3rio completo com todas as =
+tabelas, avisos oficiais, fontes consultadas e recomenda=C3=A7=C3=B5es =
+detalhadas em anexo (PDF).</td></tr></table></td></tr>
+        <tr><td bgcolor=3D"#FFCC00" style=3D"height:3px;background:#FFCC00;=
+font-size:0;line-height:3px;">&nbsp;</td></tr>
+        <tr><td =
+align=3D"center" bgcolor=3D"#FFFFFF" style=3D"padding:8px 20px =
+10px;background:#FFFFFF;color:#222222;text-align:center;font:12px/1.25 =
+Arial,sans-serif;"><strong style=3D"font-size:16px;color:#00843D;">CIM</str=
+ong><br>Centro Integrado de Monitoramento<br>COMPARTILHADO<br><span =
+style=3D"color:#5F6B66;">Informativo gerado automaticamente pelo Protocolo =
+Meteorol=C3=B3gico do COMPARTILHADO.</span></td></tr>
+      </table>
+      <!--[if mso]></td></tr></table><![endif]-->
+    </td></tr>
+  </table>
+</body>
+</html>
+----_NmP-4ec24555df45fefc-Part_2
+Content-Type: image/png; name=petrobras-header.png
+Content-ID: <logo-petrobras-header@cim>
+Content-Transfer-Encoding: base64
+Content-Disposition: inline; filename=petrobras-header.png
+
+----_NmP-4ec24555df45fefc-Part_2--
+
+----_NmP-4ec24555df45fefc-Part_1
+Content-Type: application/pdf;
+ name=Informativo_Meteorologico_RIODEJANEIRO_2026-10-02.pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename=Informativo_Meteorologico_RIODEJANEIRO_2026-10-02.pdf
+
+NwolJUVPRgo=
+----_NmP-4ec24555df45fefc-Part_1--

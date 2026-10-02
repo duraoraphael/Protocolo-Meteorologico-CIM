@@ -22,6 +22,8 @@ const Dashboard = (() => {
     pin: '<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6m10-6v6M3 11h18"/>',
     globe: '<circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><path d="M2 12h20"/>',
+    megaphone: '<path d="M3 10v4a1 1 0 0 0 1 1h3l8 5V4L7 9H4a1 1 0 0 0-1 1Z"/><path d="M7 15l1.5 5h3L10 16.5M19 9a4 4 0 0 1 0 6"/>',
+    external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   };
   const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.cloud}</svg>`;
   const weatherIcon = (code, day = true) => code == null ? 'cloud' : code >= 95 ? 'storm' : (code >= 71 && code <= 77) || code === 85 || code === 86 ? 'snow' : code >= 51 ? 'rain' : code >= 45 ? 'fog' : code < 2 ? (day == null ? 'cloud' : day ? 'sun' : 'moon') : 'cloud';
@@ -217,7 +219,7 @@ const Dashboard = (() => {
     return {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[type] || 'Detalhes';
   }
   function details(r, type) {
-    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: Windy Point (previsão, ondas e PM2,5 quando disponível), Open-Meteo (previsão numérica, condições atuais, mar, UV e qualidade do ar) e INMET (previsão oficial e avisos de perigo).</p><p>Atualização automática a cada 10 minutos. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
+    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: Windy Point (previsão, ondas e PM2,5 quando disponível), Open-Meteo (previsão numérica, condições atuais, mar, UV e qualidade do ar) e INMET (previsão oficial e avisos de perigo).</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática a cada 10 minutos. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
     if (!r) return '<p>Os dados desta base ainda não estão disponíveis.</p>';
     if (String(type).startsWith('ocorrencia:')) return occurrenceDetails(r, type.slice(11));
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;
@@ -240,5 +242,172 @@ const Dashboard = (() => {
         : '<p>Nenhum aviso vigente do INMET para esta base.</p>';
     return `<h3>Status de todas as APIs</h3><p class="api-status-note">Última coleta desta base: ${escape(r.horaConsulta)} (Brasília).</p><div class="api-monitor-grid">${apiCards || '<p>Status das APIs indisponível nesta versão do relatório.</p>'}</div><h3>Ocorrências ativas</h3>${resumoEventos}<h3>Avisos oficiais INMET</h3>${avisos}${r.avisosColeta?.length ? `<h3>Falhas e avisos da coleta</h3>${list(r.avisosColeta)}` : ''}${r.divergencias?.length ? `<h3>Divergências entre fontes</h3>${list(r.divergencias)}` : ''}<h3>Destinatários desta base</h3><div id="lista-destinatarios-painel">Carregando…</div><h3>Fonte por campo</h3>${list(Object.entries(r.fontesPorCampo || {}).filter(([campo]) => fieldLabel(campo)).map(([campo,fonte]) => `${fieldLabel(campo)}: ${fonte}`))}<h3>Fontes automatizadas que responderam</h3>${list((r.fontesAutomatizadas || []).map(f => `${f.nome}: ${f.uso}`))}`;
   }
-  return { escape, icon, currentWeather, details, detailsTitle, home: r => `${occurrences(r)}${metrics(r)}<div class="tables-grid${marAplicavel(r) ? '' : ' tabela-unica'}">${marAplicavel(r) ? marine(r) : ''}${windRain(r)}</div>` };
+  // ---------------------------------------------------------------------
+  // Comunicados e estágio operacional do COR-Rio (só bases do município do
+  // Rio). Cores e leitura do estado vêm de cor-rio-compartilhado.js (o mesmo
+  // módulo usado no PDF). O CSS lê --estagio/--estagio-tinta, aplicadas por
+  // aplicarCoresEstagio() via CSSOM (a CSP não permite estilo inline no HTML).
+  // O estágio vem apenas do COR-Rio; sem dado válido o painel fica neutro —
+  // nunca assume o estágio 1.
+  // ---------------------------------------------------------------------
+  const ESTAGIOS_COR_RIO = CorRio.ESTAGIOS;
+  const TINTA_SOBRE_ESTAGIO = CorRio.TINTA;
+
+  function aplicarCoresEstagio(raiz) {
+    const alvos = [raiz, ...(raiz?.querySelectorAll?.('[data-cor-estagio]') || [])];
+    for (const el of alvos) {
+      const estagio = ESTAGIOS_COR_RIO[el?.dataset?.corEstagio];
+      if (!estagio || !el.style?.setProperty) continue;
+      el.style.setProperty('--estagio', estagio.cor);
+      el.style.setProperty('--estagio-tinta', TINTA_SOBRE_ESTAGIO);
+    }
+  }
+
+  // Estado montado em dashboard.js: { carregando, falhaServidor, resposta }.
+  // `resposta` é o JSON de /api/cor-rio (última resposta válida do servidor).
+  function corRioPartes(st) {
+    const d = st?.resposta;
+    const s = CorRio.situacao(d, { falhaServidor: Boolean(st?.falhaServidor) });
+    return {
+      d, est: d?.estagio, com: d?.comunicados, nivel: s.nivel,
+      estagioDesatualizado: s.estagioDesatualizado,
+      comunicadosDesatualizados: s.comunicadosDesatualizados,
+    };
+  }
+  const motivoFalhaCor = (parte, st) => parte?.falha || (st?.falhaServidor ? 'o servidor do painel não respondeu' : '');
+
+  function corRioEscala(nivel) {
+    return `<ol class="cor-rio-escala" aria-label="Escala de estágios operacionais, de 1 a 5">${[1, 2, 3, 4, 5].map(n => {
+      const atual = n === nivel;
+      return `<li data-cor-estagio="${n}" class="${atual ? 'atual' : ''}"${atual ? ' aria-current="step"' : ''}><span class="cor-rio-num" aria-hidden="true">${n}</span><span class="sr-only">Estágio ${n}${atual ? ' (atual)' : ''}</span>${atual ? '<span class="cor-rio-atual-txt" aria-hidden="true">Atual</span>' : ''}</li>`;
+    }).join('')}</ol>`;
+  }
+
+  function corRioEstagio(st, p) {
+    const { est, nivel } = p;
+    if (!nivel) {
+      const carregando = st.carregando && !p.d;
+      const motivo = motivoFalhaCor(est, st);
+      return `<aside class="cor-rio-estagio sem-estagio" aria-label="Estágio operacional do COR-Rio">
+        <p class="cor-rio-estagio-rotulo">Estágio operacional</p>
+        <p class="cor-rio-estagio-atual">${carregando ? 'Consultando…' : 'Estágio indisponível'}</p>
+        ${corRioEscala(null)}
+        <p class="cor-rio-estagio-meta">${carregando ? 'Consultando o COR-Rio.' : `Não foi possível obter o estágio no COR-Rio${motivo ? `: ${escape(motivo)}` : ''}. Nova tentativa automática.`}</p>
+      </aside>`;
+    }
+    const desde = dateTimeBrasilia(est.dados.vigenteDesde);
+    const consulta = dateTimeBrasilia(est.consultadoEm);
+    const motivo = motivoFalhaCor(est, st);
+    return `<aside class="cor-rio-estagio" data-cor-estagio="${nivel}" aria-label="Estágio operacional do COR-Rio: estágio ${nivel}">
+      <p class="cor-rio-estagio-rotulo">Estágio operacional</p>
+      <p class="cor-rio-estagio-atual"><span class="cor-rio-estagio-chip">ESTÁGIO ${nivel}</span></p>
+      ${corRioEscala(nivel)}
+      <p class="cor-rio-estagio-meta">${desde ? `Em vigor desde ${escape(desde)}<br>` : ''}${p.estagioDesatualizado ? '' : `Consultado em ${escape(consulta || 'horário indisponível')}`}</p>
+      ${p.estagioDesatualizado ? `<p class="oc-flag cor-rio-flag">Desatualizado · última consulta válida: ${escape(consulta || 'horário indisponível')}${motivo ? ` (${escape(motivo)})` : ''}</p>` : ''}
+    </aside>`;
+  }
+
+  function corRioPublicacao(c) {
+    const publicado = dateTimeBrasilia(c.publicadoEm) || 'horário indisponível';
+    const atualizado = dateTimeBrasilia(c.atualizadoEm);
+    return `Publicado em ${escape(publicado)}${atualizado && atualizado !== publicado ? ` · atualizado em ${escape(atualizado)}` : ''}`;
+  }
+
+  function corRioComunicado(st, p) {
+    const { com } = p;
+    const motivo = motivoFalhaCor(com, st);
+    if (st.carregando && !p.d) return '<p class="cor-rio-vazio" role="status">Consultando os comunicados do COR-Rio…</p>';
+    if (!com?.consultadoEm) {
+      return `<p class="cor-rio-vazio cor-rio-falha">${icon('alert')}<span>Não foi possível consultar a fonte de comunicados do COR-Rio${motivo ? ` (${escape(motivo)})` : ''}. Nova tentativa automática.</span></p>`;
+    }
+    const consulta = escape(dateTimeBrasilia(com.consultadoEm) || 'horário indisponível');
+    const flagDesatualizado = p.comunicadosDesatualizados
+      ? `<p class="oc-flag cor-rio-flag">Comunicados desatualizados · última consulta válida: ${consulta}${motivo ? ` (${escape(motivo)})` : ''}</p>`
+      : '';
+    const itens = com.itens || [];
+    if (!itens.length) {
+      return `<p class="cor-rio-vazio">${icon('check')}<span>Nenhum comunicado vigente: o COR-Rio não publicou nem atualizou comunicados nas últimas ${escape(com.janelaHoras)} h${p.comunicadosDesatualizados ? ' (última consulta válida)' : ''}.</span></p>${flagDesatualizado}`;
+    }
+    const c = itens[0];
+    const outros = itens.length - 1;
+    return `<article class="cor-rio-comunicado" aria-labelledby="cor-rio-com-${escape(c.id)}">
+      <h3 class="cor-rio-com-titulo" id="cor-rio-com-${escape(c.id)}">${escape(c.titulo)}</h3>
+      ${c.resumo ? `<p class="cor-rio-resumo">${escape(c.resumo)}</p>` : ''}
+      <div class="oc-meta cor-rio-meta">
+        <span>${icon('pin')}<span>Abrangência: ${escape(c.abrangencia || p.d.abrangencia)}</span></span>
+        <span>${icon('clock')}<span>${corRioPublicacao(c)}</span></span>
+        <span>${icon('globe')}<span>Fonte: COR-Rio</span></span>
+      </div>
+      ${flagDesatualizado}
+      <div class="cor-rio-acoes">
+        <button class="cor-rio-botao" data-detail="cor-rio:${escape(c.id)}">Ver comunicado <span aria-hidden="true">→</span></button>
+        ${outros ? `<button class="text-link" data-detail="cor-rio">Ver ${outros === 1 ? 'outro comunicado vigente' : `outros ${outros} comunicados vigentes`} <span aria-hidden="true">→</span></button>` : ''}
+      </div>
+    </article>`;
+  }
+
+  function corRio(st) {
+    if (!st) return '';
+    const p = corRioPartes(st);
+    return `<section class="cor-rio${p.nivel ? '' : ' sem-estagio'}"${p.nivel ? ` data-cor-estagio="${p.nivel}"` : ''} aria-labelledby="titulo-cor-rio">
+      <div class="cor-rio-principal">
+        <div class="cor-rio-cabecalho"><span class="cor-rio-icone">${icon('megaphone')}</span><h2 id="titulo-cor-rio" class="cor-rio-titulo">Comunicados COR-Rio</h2></div>
+        ${corRioComunicado(st, p)}
+      </div>
+      ${corRioEstagio(st, p)}
+    </section>`;
+  }
+
+  function corRioParagrafos(paragrafos) {
+    let html = '', lista = [];
+    const fecharLista = () => { if (lista.length) html += `<ul class="cor-rio-lista">${lista.join('')}</ul>`; lista = []; };
+    for (const b of paragrafos || []) {
+      if (b.item) { lista.push(`<li>${escape(b.texto)}</li>`); continue; }
+      fecharLista();
+      html += `<p class="cor-rio-par${b.destaque ? ' destaque' : ''}">${escape(b.texto)}</p>`;
+    }
+    fecharLista();
+    return html;
+  }
+
+  function corRioTitulo(st, id) {
+    const c = id && (st?.resposta?.comunicados?.itens || []).find(item => item.id === id);
+    return c ? 'Comunicado COR-Rio' : 'Comunicados COR-Rio';
+  }
+
+  function corRioDetalhes(st, id) {
+    if (!st?.resposta) return '<p>Os dados do COR-Rio ainda não estão disponíveis.</p>';
+    const p = corRioPartes(st);
+    const itens = p.com?.itens || [];
+    const c = id ? itens.find(item => item.id === id) : null;
+    const linkOriginal = (url, texto) => /^https:\/\/cor\.rio\//.test(url || '') ? `<a class="cor-rio-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${icon('external')}${texto}</a>` : '';
+    const estagio = p.nivel
+      ? `<div class="cor-rio-det-estagio" data-cor-estagio="${p.nivel}"><span class="cor-rio-estagio-chip">ESTÁGIO ${p.nivel}</span><dl class="det-lista">
+          ${p.est.dados.vigenteDesde ? `<div><dt>Em vigor desde</dt><dd>${escape(dateTimeBrasilia(p.est.dados.vigenteDesde))}</dd></div>` : ''}
+          <div><dt>Consulta ao COR-Rio</dt><dd>${escape(dateTimeBrasilia(p.est.consultadoEm) || 'horário indisponível')}${p.estagioDesatualizado ? ' — última consulta válida (dado desatualizado)' : ''}</dd></div>
+          ${(p.est.dados.mensagens || []).map(m => `<div><dt>Mensagem do COR-Rio</dt><dd>${escape(m)}</dd></div>`).join('')}
+        </dl></div>`
+      : '<p class="det-indisponivel">Estágio indisponível: não há consulta válida ao COR-Rio.</p>';
+    const blocoEstagio = `<section class="det-bloco"><h3>Estágio operacional da cidade</h3><p class="cor-rio-nota">O estágio é publicado pelo COR-Rio separadamente dos comunicados e pode ter sido definido em outro horário.</p>${estagio}<p class="det-fonte">Fonte: COR-Rio · ${linkOriginal(p.est?.dados?.urlPublica || 'https://cor.rio/estagios-operacionais-da-cidade/', 'Estágios operacionais no cor.rio')}</p></section>`;
+    const lista = (excluir) => itens.filter(i => i.id !== excluir).map(i => `<article class="aviso-item cor-rio-item"><strong>${escape(i.titulo)}</strong><p>${corRioPublicacao(i)}</p><button class="text-link det-link" data-detail="cor-rio:${escape(i.id)}">Ver comunicado <span aria-hidden="true">→</span></button></article>`).join('');
+    if (id && !c) return `<p>Este comunicado não está mais entre os vigentes na atualização atual.</p>${itens.length ? `<h3>Comunicados vigentes</h3>${lista()}` : ''}${blocoEstagio}`;
+    if (!c) {
+      const vazio = !p.com?.consultadoEm
+        ? '<p class="det-indisponivel">Não foi possível consultar a fonte de comunicados do COR-Rio.</p>'
+        : `<p>Nenhum comunicado vigente: o COR-Rio não publicou nem atualizou comunicados nas últimas ${escape(p.com.janelaHoras)} h.</p>`;
+      return `<h3>Comunicados vigentes</h3>${itens.length ? lista() : vazio}${blocoEstagio}`;
+    }
+    const outros = lista(c.id);
+    return `<div class="det-resumo cor-rio-det-resumo"${p.nivel ? ` data-cor-estagio="${p.nivel}"` : ''}>
+        <h3 class="cor-rio-det-titulo">${escape(c.titulo)}</h3>
+        <p class="det-meta">${corRioPublicacao(c)} · Abrangência: ${escape(c.abrangencia || p.d.abrangencia)} · Fonte: COR-Rio</p>
+        ${p.comunicadosDesatualizados ? `<p class="oc-flag cor-rio-flag">Comunicados desatualizados · última consulta válida: ${escape(dateTimeBrasilia(p.com.consultadoEm) || 'horário indisponível')}</p>` : ''}
+      </div>
+      <section class="det-bloco cor-rio-conteudo">${corRioParagrafos(c.paragrafos) || `<p>${escape(c.resumo)}</p>`}
+        <p class="det-fonte">${linkOriginal(c.link, 'Abrir a publicação original no cor.rio')}</p></section>
+      ${outros ? `<h3>Outros comunicados vigentes</h3>${outros}` : ''}
+      ${blocoEstagio}`;
+  }
+
+  return { escape, icon, currentWeather, details, detailsTitle, corRio, corRioDetalhes, corRioTitulo, aplicarCoresEstagio, ESTAGIOS_COR_RIO, home: r => `${occurrences(r)}<div id="cor-rio-slot"></div>${metrics(r)}<div class="tables-grid${marAplicavel(r) ? '' : ' tabela-unica'}">${marAplicavel(r) ? marine(r) : ''}${windRain(r)}</div>` };
 })();

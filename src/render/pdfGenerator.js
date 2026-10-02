@@ -49,13 +49,13 @@ async function getBrowser() {
   throw ultimoErro;
 }
 
-async function gerarPdfBuffer(report) {
+async function gerarPdfBuffer(report, opcoes = {}) {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
     // V-12: sem JavaScript e sem rede (só data: e about:).
     await prepararPaginaIsolada(page);
-    await page.setContent(renderPdfHtml(report), {
+    await page.setContent(renderPdfHtml(report, opcoes), {
       waitUntil: "load",
       timeout: 60000,
     });
