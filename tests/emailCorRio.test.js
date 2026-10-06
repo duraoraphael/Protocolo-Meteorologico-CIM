@@ -131,10 +131,10 @@ test("e-mail: só o comunicado do dia, sem próximos dias e sem outros comunicad
   assert.match(texto, /Fonte: COR-Rio/);
   assert.match(texto, /Consulta à fonte: 02\/10\/2026 10:56 \(Brasília\)/);
   assert.equal(td.find('a[href="https://cor.rio/post-1/"]').text(), "Consultar publicação oficial");
-  const selo = td.find("span").filter((_, el) => $(el).text() === "ESTÁGIO 2");
+  const selo = td.find("span").filter((_, el) => $(el).text() === "Estágio 2");
   assert.match(selo.attr("style"), /background:#FACC15;color:#0B1A12;/);
-  assert.equal(td.find("span").filter((_, el) => $(el).text() === "ESTÁGIO DE CALOR 3").length, 1);
-  assert.match(texto, /Estágio de calor: Estágio de Calor 3\. Consulta à fonte: 02\/10\/2026 10:57/);
+  assert.equal(td.find("span").filter((_, el) => $(el).text() === "Calor 3").length, 1);
+  assert.match(texto, /Estágio de calor: Calor 3\. Consulta à fonte: 02\/10\/2026 10:57/);
   assert.match($("table").filter((_, el) => /border-left:7px solid #FACC15/.test($(el).attr("style") || "")).attr("style"), /background:#FFFAE8;.*border-radius:8px/);
 });
 
@@ -143,7 +143,7 @@ test("e-mail sem publicação do dia: mensagem própria, estágio válido mantid
   const { texto } = cardEmail(renderEmailHtml(relatorio(estado(lista, { nivel: 1 }))));
   assert.match(texto, /Nenhum comunicado do dia disponível até o horário da consulta\./);
   assert.doesNotMatch(texto, /Quinta \(1\/10\) com chuva/);
-  assert.match(texto, /ESTÁGIO 1/);
+  assert.match(texto, /Estágio 1/);
   assert.match(texto, /Estágio 1, em vigor desde 30\/09\/2026 05:00 \(Brasília\)/);
 });
 
@@ -152,7 +152,7 @@ test("e-mail: falha da fonte ≠ ausência do comunicado do dia; sem estágio fi
   assert.match(texto, /Não foi possível consultar os comunicados do COR-Rio/);
   assert.doesNotMatch(texto, /Nenhum comunicado do dia/);
   assert.match(texto, /ESTÁGIO INDISPONÍVEL/);
-  assert.doesNotMatch(texto, /ESTÁGIO [1-5]/);
+  assert.doesNotMatch(texto, /Estágio [1-5]/);
 });
 
 test("PDF do mesmo relatório continua completo (alteração restrita ao e-mail)", () => {
@@ -208,7 +208,7 @@ test("PDF do anexo sem publicação do dia: mensagem própria, sem publicação 
   const texto = cheerio.load(renderPdfHtml(relatorio(estado(lista, { nivel: 3 })), { corRioSomenteDoDia: true }))(".cor-card").text().replace(/\s+/g, " ");
   assert.match(texto, /Nenhum comunicado do dia disponível até o horário da consulta\./);
   assert.doesNotMatch(texto, /Quinta \(1\/10\) com chuva/);
-  assert.match(texto, /ESTÁGIO 3/);
+  assert.match(texto, /Estágio 3/);
   assert.match(texto, /Estágio 3, em vigor desde 30\/09\/2026 05:00 \(Brasília\)/);
 });
 

@@ -150,17 +150,41 @@ test("PDF: seção ao final, com unidades nos títulos e 'Não disponível' em v
   const titulo = html.indexOf("4. Previsão para os próximos 3 dias");
   assert.ok(titulo > html.indexOf("Seção final existente"), "seção depois das existentes");
   const secao = html.slice(titulo);
-  for (const cabecalho of ["Data", "Temperatura Máx./Mín. (°C)", "Rajada prevista (km/h)", "Chuva acumulada (mm)", "Índice UV (máx.)", "Condição geral"]) {
-    assert.ok(secao.includes(`${cabecalho}</th>`), cabecalho);
-  }
+  const cabecalhos = ["Data", "Temperatura Máx./Mín. (°C)", "Rajada prevista (km/h)", "Chuva acumulada (mm)", "Índice UV (máx.)", "Calor", "Condição geral"];
+  const posicoes = cabecalhos.map((cabecalho) => secao.indexOf(`${cabecalho}</th>`));
+  assert.ok(posicoes.every((p) => p >= 0), "todas as colunas presentes");
+  assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes, "ordem: Data, Temperatura, Rajada, Chuva, UV, Calor, Condição");
   assert.ok(secao.includes("<strong>02/10/2026</strong>"));
   assert.ok(secao.includes("<strong>04/10/2026</strong>"));
   assert.ok(!secao.includes("01/10/2026</strong>"), "dia atual não entra");
   assert.ok(secao.includes(">55,3<"));
   assert.ok(secao.includes(">0,0<"), "zero real exibido como zero");
+  assert.ok(secao.includes(">4,6<") && secao.includes(">8,6<"), "UV real de cada data");
   assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 1, "só o UV ausente");
-  assert.ok(secao.includes("Fonte:</strong> Open-Meteo"));
+  assert.ok(secao.includes("índice UV = máximo previsto no dia"));
+  assert.equal((secao.match(/class="calor-nd">Indisponível</g) || []).length, 3, "sem fonte de calor: indisponível, não Normal");
+  assert.ok(secao.includes('<p class="fonte-tabela">Fonte de dados meteorológicos: Open-Meteo'));
+  assert.ok(secao.includes("Fonte de dados de calor:"));
   assert.ok(secao.includes("Macaé — RJ"));
+});
+
+test("PDF: calor por data segue a fonte Clima e Saúde, sem repetir o nível de hoje", async (t) => {
+  silenciar(t);
+  const previsao = await p3d.obterPrevisaoProximosDias(CIDADES.macae, { agora: AGORA, fetchImpl: fetchFalso(respostaOpenMeteo({ time: DATAS_MACAE })) });
+  const html = renderPdfHtml({ ...reportMinimo(previsao), climaSaude: { status: "operacional", dados: {
+    source: "Clima e Saúde — Ministério da Saúde", dataConsulta: "2026-10-01", ehf: { classificacao: "Severo" },
+    previsaoDias: [
+      { data: "2026-10-01", classificacao: "Severo" },
+      { data: "2026-10-02", classificacao: "Baixo" },
+      { data: "2026-10-03", classificacao: "Sem excesso" },
+    ],
+  } } });
+  const secao = html.slice(html.indexOf("4. Previsão para os próximos 3 dias"));
+  const linhas = secao.split("<tr").slice(2);
+  assert.match(linhas[0], /color:#[0-9A-F]{6};">Atenção</i, "02/10: Baixo → Atenção");
+  assert.match(linhas[1], /color:#2E7D32;">Normal</, "03/10: Sem excesso → Normal");
+  assert.match(linhas[2], /class="calor-nd">Indisponível</, "04/10 sem dado na fonte");
+  assert.doesNotMatch(secao.slice(0, secao.indexOf("</table>")), /Alerta/, "o Alerta de hoje não é repetido");
 });
 
 test("PDF: fonte indisponível mantém a seção com as datas", async (t) => {
@@ -173,4 +197,5 @@ test("PDF: fonte indisponível mantém a seção com as datas", async (t) => {
   assert.ok(secao.includes("Fonte indisponível nesta emissão"));
   assert.equal((secao.match(/<strong>0[234]\/10\/2026<\/strong>/g) || []).length, 3);
   assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 15);
+  assert.equal((secao.match(/class="calor-nd">Indisponível</g) || []).length, 3);
 });

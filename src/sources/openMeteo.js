@@ -57,37 +57,49 @@ function direcaoCardinal(graus) {
   return pontos[idx];
 }
 
+// Classifica o VENTO (velocidade sustentada a 10 m), nunca a rajada: rajada
+// é outra grandeza, exibida na sua própria coluna.
 function classificarIntensidadeVento(kmh) {
-  if (kmh >= 60) return "Muito forte, com rajadas severas";
-  if (kmh >= 40) return "Forte, com rajadas";
+  if (!Number.isFinite(kmh)) return "Sem dado";
+  if (kmh >= 60) return "Muito forte";
+  if (kmh >= 40) return "Forte";
   if (kmh >= 20) return "Moderado";
   return "Fraco";
 }
 
-// Divide as horas do dia corrente em três períodos operacionais.
+// Divide as horas de hoje em três períodos operacionais. São as mesmas
+// janelas no painel e nos PDFs das 05h e das 15h (hoje, das 05h até 00h).
+const INICIO_JANELA_HOJE = 5;
 const PERIODOS = {
   manha: { label: "Manhã", horaInicio: 5, horaFim: 12 },
   tarde: { label: "Tarde", horaInicio: 12, horaFim: 18 },
   noite: { label: "Noite", horaInicio: 18, horaFim: 24 },
 };
 
-function resumirPeriodo(horas, chave, { dataReferencia = null, inicioHora = 6 } = {}) {
+const hh = (hora) => `${String(hora % 24).padStart(2, "0")}h`;
+
+function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANELA_HOJE } = {}) {
   const { horaInicio, horaFim } = PERIODOS[chave];
+  const inicio = Math.max(horaInicio, inicioHora);
+  // Os horários da Open-Meteo vêm no fuso pedido ("AAAA-MM-DDTHH:MM", sem
+  // offset): compara-se o texto, sem depender do fuso da máquina.
   const idxs = horas.time
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => {
-      const h = dataReferencia ? Number(t.slice(11, 13)) : new Date(t).getHours();
-      return (!dataReferencia || t.slice(0, 10) === dataReferencia) &&
-        h >= Math.max(horaInicio, inicioHora) && h < horaFim;
+      const h = Number(t.slice(11, 13));
+      return t.slice(0, 10) === dataReferencia && h >= inicio && h < horaFim;
     })
     .map(({ i }) => i);
+  const janela = { inicioHora: inicio, fimHora: horaFim, janela: `${hh(inicio)}–${hh(horaFim)}` };
 
   if (idxs.length === 0) {
     return {
       periodo: PERIODOS[chave].label,
+      ...janela,
       direcao: "—",
       intensidadeVento: "Sem dado",
       velocidadeMediaKmh: null,
+      velocidadeMaxKmh: null,
       rajadaMaxKmh: null,
       probabilidadeChuva: null,
       precipitacaoMm: 0,
@@ -105,9 +117,14 @@ function resumirPeriodo(horas, chave, { dataReferencia = null, inicioHora = 6 } 
 
   const velocidadeMediaKmh =
     velocidades.reduce((a, b) => a + b, 0) / velocidades.length;
+  const velocidadeMaxKmh = Math.max(...velocidades);
   const rajadaMaxKmh = Math.max(...rajadas);
-  const direcaoMedia =
-    direcoes.reduce((a, b) => a + b, 0) / direcoes.length;
+  // Média vetorial: a aritmética dos graus erra perto do norte (350° e 10°
+  // dariam 180°).
+  const direcaoMedia = (Math.atan2(
+    direcoes.reduce((a, d) => a + Math.sin((d * Math.PI) / 180), 0),
+    direcoes.reduce((a, d) => a + Math.cos((d * Math.PI) / 180), 0)
+  ) * 180 / Math.PI + 360) % 360;
   const probabilidadeChuva = Math.max(...probs);
   const precipitacaoMm = precs.reduce((a, b) => a + b, 0);
   const precipitacoesValidas = precs.filter(Number.isFinite);
@@ -118,9 +135,11 @@ function resumirPeriodo(horas, chave, { dataReferencia = null, inicioHora = 6 } 
 
   return {
     periodo: PERIODOS[chave].label,
+    ...janela,
     direcao: direcaoCardinal(direcaoMedia),
-    intensidadeVento: classificarIntensidadeVento(rajadaMaxKmh),
+    intensidadeVento: `${classificarIntensidadeVento(Math.round(velocidadeMaxKmh))} (até ${Math.round(velocidadeMaxKmh)} km/h)`,
     velocidadeMediaKmh: Math.round(velocidadeMediaKmh),
+    velocidadeMaxKmh: Math.round(velocidadeMaxKmh),
     rajadaMaxKmh: Math.round(rajadaMaxKmh),
     probabilidadeChuva: Math.round(probabilidadeChuva),
     precipitacaoMm: Math.round(precipitacaoMm * 10) / 10,
@@ -132,9 +151,21 @@ function resumirPeriodo(horas, chave, { dataReferencia = null, inicioHora = 6 } 
   };
 }
 
+/**
+ * @param {object} [opcoes]
+ * @param {number} [opcoes.inicioHora=5] início da janela de hoje (hora local).
+ * @param {number} [opcoes.diasPrevisao=1] hoje + dias seguintes.
+ * @param {boolean} [opcoes.agregarJanela=false] temperatura, umidade e
+ *   condição de hoje calculadas só na janela (relatórios agendados); sem
+ *   isso, usam o agregado diário da fonte.
+ * @param {string} [opcoes.fuso] fuso da localidade: horários e agregados
+ *   diários seguem o dia civil desse fuso.
+ */
 async function buscarOpenMeteo(latitude, longitude, {
-  inicioHora = 6,
+  inicioHora = INICIO_JANELA_HOJE,
   diasPrevisao = 1,
+  agregarJanela = false,
+  fuso = "America/Sao_Paulo",
   fetchImpl = fetch,
   timeoutMs = OPEN_METEO_TIMEOUT_MS,
   esperarFn,
@@ -147,7 +178,7 @@ async function buscarOpenMeteo(latitude, longitude, {
       "temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code",
     daily:
       "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code",
-    timezone: "America/Sao_Paulo",
+    timezone: fuso,
     forecast_days: String(diasPrevisao),
   });
 
@@ -163,19 +194,18 @@ async function buscarOpenMeteo(latitude, longitude, {
   const horas = json.hourly;
   const dia = json.daily;
   const dataReferencia = dia.time[0];
-  const relatorioAgendado = inicioHora !== 6 || diasPrevisao !== 1;
   const indicesJanela = horas.time.map((instante, i) => ({ instante, i }))
     .filter(({ instante }) => instante.slice(0, 10) === dataReferencia && Number(instante.slice(11, 13)) >= inicioHora)
     .map(({ i }) => i);
-  if (relatorioAgendado && !indicesJanela.length) throw new Error("Open-Meteo não retornou horas para a janela solicitada.");
+  if (agregarJanela && !indicesJanela.length) throw new Error("Open-Meteo não retornou horas para a janela solicitada.");
   const valoresJanela = (campo) => indicesJanela.map((i) => horas[campo]?.[i]).filter(Number.isFinite);
   const minimoJanela = (campo) => valoresJanela(campo).length ? Math.min(...valoresJanela(campo)) : null;
   const maximoJanela = (campo) => valoresJanela(campo).length ? Math.max(...valoresJanela(campo)) : null;
 
   const periodos = {
-    manha: resumirPeriodo(horas, "manha", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
-    tarde: resumirPeriodo(horas, "tarde", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
-    noite: resumirPeriodo(horas, "noite", { dataReferencia: relatorioAgendado ? dataReferencia : null, inicioHora }),
+    manha: resumirPeriodo(horas, "manha", { dataReferencia, inicioHora }),
+    tarde: resumirPeriodo(horas, "tarde", { dataReferencia, inicioHora }),
+    noite: resumirPeriodo(horas, "noite", { dataReferencia, inicioHora }),
   };
 
   const umidades = horas.relative_humidity_2m;
@@ -183,8 +213,8 @@ async function buscarOpenMeteo(latitude, longitude, {
   const temTempestadeHoje = listaPeriodos.some((p) => p.tempestade);
 
   // Importante: os totais/máximos abaixo são derivados dos MESMOS períodos
-  // (Manhã/Tarde/Noite, 06h-24h) exibidos nas tabelas — nunca do agregado
-  // "dia inteiro" bruto da Open-Meteo (que inclui a madrugada 00h-06h já
+  // (Manhã/Tarde/Noite, 05h-24h) exibidos nas tabelas — nunca do agregado
+  // "dia inteiro" bruto da Open-Meteo (que inclui a madrugada 00h-05h já
   // encerrada). Misturar as duas janelas gerava alarmes de "chuva intensa"
   // baseados em picos de madrugada que já haviam passado na hora da consulta.
   const precipitacaoTotalMm =
@@ -194,13 +224,15 @@ async function buscarOpenMeteo(latitude, longitude, {
   );
   const probabilidadeChuvaMax = Math.max(...listaPeriodos.map((p) => p.probabilidadeChuva ?? 0));
   const rajadaMaxKmh = Math.max(...listaPeriodos.map((p) => p.rajadaMaxKmh ?? 0));
-  const velocidadeMaxKmh = Math.max(...listaPeriodos.map((p) => p.velocidadeMediaKmh ?? 0));
+  const velocidadeMaxKmh = Math.max(...listaPeriodos.map((p) => p.velocidadeMaxKmh ?? 0));
 
   return {
     fonte: "Open-Meteo",
     url,
     dataReferencia: dia.time[0],
-    condicaoGeral: inicioHora === 6
+    fuso,
+    janelaHoje: { inicioHora, fimHora: 24, rotulo: `${hh(inicioHora)}–00h` },
+    condicaoGeral: !agregarJanela
       ? descreverCodigo(dia.weather_code[0])
       : descreverCodigo(horas.weather_code[indicesJanela[0]]),
     atual: json.current ? {
@@ -210,10 +242,10 @@ async function buscarOpenMeteo(latitude, longitude, {
       dia: json.current.is_day === 1,
       horario: json.current.time,
     } : null,
-    tempMin: inicioHora === 6 ? Math.round(dia.temperature_2m_min[0]) : minimoJanela("temperature_2m"),
-    tempMax: inicioHora === 6 ? Math.round(dia.temperature_2m_max[0]) : maximoJanela("temperature_2m"),
-    umidadeMin: inicioHora === 6 ? Math.round(Math.min(...umidades)) : minimoJanela("relative_humidity_2m"),
-    umidadeMax: inicioHora === 6 ? Math.round(Math.max(...umidades)) : maximoJanela("relative_humidity_2m"),
+    tempMin: !agregarJanela ? Math.round(dia.temperature_2m_min[0]) : minimoJanela("temperature_2m"),
+    tempMax: !agregarJanela ? Math.round(dia.temperature_2m_max[0]) : maximoJanela("temperature_2m"),
+    umidadeMin: !agregarJanela ? Math.round(Math.min(...umidades)) : minimoJanela("relative_humidity_2m"),
+    umidadeMax: !agregarJanela ? Math.round(Math.max(...umidades)) : maximoJanela("relative_humidity_2m"),
     precipitacaoTotalMm,
     precipitacaoHorariaMaxMm,
     probabilidadeChuvaMax,
@@ -226,8 +258,10 @@ async function buscarOpenMeteo(latitude, longitude, {
       condicao: descreverCodigo(dia.weather_code[i]),
       tempMin: dia.temperature_2m_min[i],
       tempMax: dia.temperature_2m_max[i],
-      chuvaMm: dia.precipitation_sum[i],
-      rajadaKmh: dia.wind_gusts_10m_max[i],
+      // Agregado diário da fonte no dia civil local (00h–24h).
+      janela: "00h–24h",
+      chuvaMm: Number.isFinite(dia.precipitation_sum[i]) ? Math.round(dia.precipitation_sum[i] * 10) / 10 : null,
+      rajadaKmh: Number.isFinite(dia.wind_gusts_10m_max[i]) ? Math.round(dia.wind_gusts_10m_max[i]) : null,
     })),
   };
 }
@@ -236,6 +270,8 @@ module.exports = {
   buscarOpenMeteo,
   direcaoCardinal,
   classificarIntensidadeVento,
+  INICIO_JANELA_HOJE,
+  PERIODOS,
   OPEN_METEO_TIMEOUT_MS,
   OPEN_METEO_TENTATIVAS,
 };

@@ -10,6 +10,7 @@ const {
   classificarCondicoesMeteorologicas,
 } = require("./inmetAlertRules");
 const { formatarTitulo } = require("../../public/alert-title");
+const { grauAvisoInmet } = require("../sources/inmet");
 
 const LIMIARES = {
   // Contrato legado do relatório semanal. O informativo diário não usa estes
@@ -37,10 +38,11 @@ function textoAvisos(avisos, regex) {
   return avisos.some((a) => regex.test(a.descricao || ""));
 }
 
+// Período com a janela horária, quando conhecida: "Tarde (12h–18h)".
 function primeiraJanela(periodos, testeFn) {
   for (const chave of ["manha", "tarde", "noite"]) {
     const p = periodos[chave];
-    if (p && testeFn(p)) return p.periodo;
+    if (p && testeFn(p)) return p.janela ? `${p.periodo} (${p.janela})` : p.periodo;
   }
   return null;
 }
@@ -198,7 +200,9 @@ function avaliarRiscos(consolidado) {
     if (!jaCoberto) {
       candidatos.push({
         tipo: "avisoInmet",
-        nivel: /grande perigo/i.test(aviso.severidade) ? 5 : /perigo/i.test(aviso.severidade) ? 4 : 2,
+        // Severidade oficial → nível pelo mapeamento único do projeto
+        // ("Perigo Potencial" é ATENÇÃO; antes /perigo/ o elevava a ALERTA).
+        nivel: NIVEL_POR_GRAU[grauAvisoInmet(aviso.severidade)] || 2,
         janela: `${aviso.inicio} até ${aviso.fim}`,
         // Texto oficial do próprio aviso — nunca um encaminhamento genérico.
         descricao: aviso.riscos?.length

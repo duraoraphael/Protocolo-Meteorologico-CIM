@@ -193,9 +193,10 @@ function detectarAlertasGraves(report) {
 
   for (const evento of eventosProtocolo) {
     const chuvaIntensa = evento.assinatura === "chuva";
-    const periodo = chuvaIntensa
-      ? chuva.find((p) => p.precipitacaoHorariaMaxMm === intensidadeHoraria)?.periodo
-      : (report.ventoPorPeriodo || []).find((p) => p.rajadaMaxKmh === rajada)?.periodo;
+    const linhaPeriodo = chuvaIntensa
+      ? chuva.find((p) => p.precipitacaoHorariaMaxMm === intensidadeHoraria)
+      : (report.ventoPorPeriodo || []).find((p) => p.rajadaMaxKmh === rajada);
+    const periodo = linhaPeriodo && (linhaPeriodo.janela ? `${linhaPeriodo.periodo} (${linhaPeriodo.janela})` : linhaPeriodo.periodo);
     achados.push({
       origem: "INMET",
       fonteDados: fontesDoDado(
@@ -350,8 +351,13 @@ function basesMonitoradas() {
  *
  * @returns {Promise<{porBase: Array, totalNovos: number, falhas: Array}>}
  */
-async function verificarAlertas() {
-  const estado = limparExpirados(carregarEstado());
+/**
+ * @param {object} [opcoes]
+ * @param {boolean} [opcoes.ignorarHistorico=false] trata todos os alertas
+ *   ativos como novos (envio de teste). O histórico não é lido nem alterado.
+ */
+async function verificarAlertas({ ignorarHistorico = false } = {}) {
+  const estado = ignorarHistorico ? {} : limparExpirados(carregarEstado());
   const porBase = [];
   const falhas = [];
 

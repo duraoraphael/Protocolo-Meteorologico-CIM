@@ -5,9 +5,10 @@ const EMAIL_HEADER_VERDE = HEADER_VERDE;
 const EMAIL_HEADER_AMARELO = HEADER_AMARELO;
 // Amarelo do "I" na marca original (Logo/Logo_PDF.png).
 const EMAIL_CIM_AMARELO = "#FEBF0A";
-// petrobras-header.png tem 640x126; exibida a 150px de largura.
+// petrobras-header.png tem 640x165 (logo colorida em cartão branco);
+// exibida a 150px de largura.
 const EMAIL_PETROBRAS_LARGURA = 150;
-const EMAIL_PETROBRAS_ALTURA = 30;
+const EMAIL_PETROBRAS_ALTURA = 39;
 
 const EMAIL_STATUS = Object.freeze({
   NORMAL: Object.freeze({ cor: "#2E7D32", fundo: "#E8F5E9", selo: "#2E7D32", textoSelo: "#FFFFFF" }),
@@ -56,8 +57,9 @@ function identidadeCimHtml() {
 }
 
 function petrobrasHtml() {
-  // Imagem com o mesmo verde do header (sem caixa, contorno ou fundo branco),
-  // anexada inline por Content-ID — ver src/config/headerAssets.js.
+  // Logo em cartão branco embutido na própria imagem (aparece igual em
+  // Gmail e Outlook), anexada inline por Content-ID — ver
+  // src/config/headerAssets.js e scripts/gerarLogosHeader.js.
   const src = srcLogoEmail("petrobras");
   if (src) {
     return `<img src="${src}" width="${EMAIL_PETROBRAS_LARGURA}" height="${EMAIL_PETROBRAS_ALTURA}" alt="Petrobras" style="display:block;width:${EMAIL_PETROBRAS_LARGURA}px;height:auto;max-width:100%;border:0;outline:none;text-decoration:none;color:#ffffff;font:italic bold 20px/1.2 Arial,sans-serif;">`;

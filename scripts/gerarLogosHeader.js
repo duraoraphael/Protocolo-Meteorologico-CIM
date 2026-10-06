@@ -1,8 +1,13 @@
 // Gera as logos do cabeçalho institucional (e-mail e PDF) a partir dos
 // arquivos originais em Logo/:
 //   - Logo/Logo_PDF.png  -> src/assets/header/cim-header.png
-//   - Logo/petrobras.png -> src/assets/header/petrobras-header.png
+//   - Logo/Petrobras_horizontal_logo.svg.png -> src/assets/header/petrobras-header.png
 //
+// Petrobras: a logo colorida (fundo transparente) vai num cartão branco de
+// cantos arredondados, embutido na própria imagem — assim o cartão aparece
+// igual em Gmail, Outlook e no PDF, sem depender de padding/border-radius.
+//
+// CIM:
 // O verde de fundo de cada logo é substituído exatamente pelo verde do
 // cabeçalho (o fundo do próprio petrobras.png), para que as imagens fiquem
 // integradas ao header sem retângulo de cor diferente. Bordas suavizadas são
@@ -20,8 +25,58 @@ const DESTINO = path.join(RAIZ, "src", "assets", "header");
 
 const TRABALHOS = [
   { origem: "Logo/Logo_PDF.png", destino: "cim-header.png", larguraFinal: 960, folga: 0.05 },
-  { origem: "Logo/petrobras.png", destino: "petrobras-header.png", larguraFinal: 640, folga: 0.03 },
 ];
+
+const CARTAO_PETROBRAS = {
+  origem: "Logo/Petrobras_horizontal_logo.svg.png",
+  destino: "petrobras-header.png",
+  larguraFinal: 640,
+  margemX: 40,
+  margemY: 28,
+  raio: 18,
+};
+
+async function cartaoBranco(pagina, { origem, larguraFinal, margemX, margemY, raio }) {
+  const uri = `data:image/png;base64,${fs.readFileSync(path.join(RAIZ, origem)).toString("base64")}`;
+  return pagina.evaluate(async ({ uri, larguraFinal, margemX, margemY, raio }) => {
+    const img = new Image();
+    img.src = uri;
+    await img.decode();
+    const tela = document.createElement("canvas");
+    tela.width = img.width;
+    tela.height = img.height;
+    const ctx = tela.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    // Recorta as margens transparentes, preservando a proporção da marca.
+    const d = ctx.getImageData(0, 0, img.width, img.height).data;
+    let minX = img.width, minY = img.height, maxX = 0, maxY = 0;
+    for (let y = 0; y < img.height; y++) {
+      for (let x = 0; x < img.width; x++) {
+        if (d[(y * img.width + x) * 4 + 3] > 8) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    const sw = maxX - minX + 1, sh = maxY - minY + 1;
+    const larguraLogo = larguraFinal - 2 * margemX;
+    const alturaLogo = Math.round(sh * (larguraLogo / sw));
+    const saida = document.createElement("canvas");
+    saida.width = larguraFinal;
+    saida.height = alturaLogo + 2 * margemY;
+    const s = saida.getContext("2d");
+    s.fillStyle = "#ffffff";
+    s.beginPath();
+    s.roundRect(0, 0, saida.width, saida.height, raio);
+    s.fill();
+    s.imageSmoothingEnabled = true;
+    s.imageSmoothingQuality = "high";
+    s.drawImage(tela, minX, minY, sw, sh, margemX, margemY, larguraLogo, alturaLogo);
+    return { png: saida.toDataURL("image/png").split(",")[1], largura: saida.width, altura: saida.height };
+  }, { uri, larguraFinal, margemX, margemY, raio });
+}
 
 function hexParaRgb(hex) {
   const n = parseInt(hex.replace("#", ""), 16);
@@ -133,6 +188,9 @@ async function processar(pagina, { origem, larguraFinal, folga }) {
       fs.writeFileSync(path.join(DESTINO, trabalho.destino), Buffer.from(r.png, "base64"));
       console.log(`${trabalho.destino}: ${r.largura}x${r.altura} (fundo original rgb(${r.fundoOriginal}), tintas ${JSON.stringify(r.tintas)})`);
     }
+    const cartao = await cartaoBranco(pagina, CARTAO_PETROBRAS);
+    fs.writeFileSync(path.join(DESTINO, CARTAO_PETROBRAS.destino), Buffer.from(cartao.png, "base64"));
+    console.log(`${CARTAO_PETROBRAS.destino}: ${cartao.largura}x${cartao.altura} (cartão branco)`);
   } finally {
     await navegador.close();
   }

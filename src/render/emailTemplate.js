@@ -5,6 +5,7 @@ const { consolidarAvisosInmet } = require("../sources/inmet");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
 const AlertTitle = require("../../public/alert-title");
+const { calorPorData, dataLocal } = require("../logic/calorPorData");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
 // bgcolor + background) para que nenhum cliente herde áreas escuras. Só o
@@ -74,11 +75,17 @@ function celulaMetrica(rotulo, valor, ultimaColuna = false) {
   </td>`;
 }
 
+// Card "CALOR": classificação de hoje do Clima e Saúde (EHF), na cor do
+// nível. Sem classificação para a data → "Indisponível", nunca "Normal".
+function valorCalor(r) {
+  const hoje = dataLocal(r.geradoEmISO || Date.now(), r.cidade?.fuso);
+  const calor = calorPorData(r.climaSaude, hoje);
+  if (!calor) return `<span style="color:${COR.secundario};font:bold 21px/1.2 Arial,sans-serif;">Indisponível</span>`;
+  return `<span style="color:${corTexto(corGrau(calor.grau))};">${esc(calor.rotulo)}</span>`;
+}
+
 function resumoMeteorologico(r) {
   const rajada = rajadaMaxima(r);
-  const uv = Number.isFinite(r.qualidadeAr?.uvMax)
-    ? `${esc(r.qualidadeAr.uvMax)}${presente(r.qualidadeAr?.uvClassificacao?.nivel) ? ` <span style="font:16px/1.2 Arial,sans-serif;white-space:nowrap;">(${esc(r.qualidadeAr.uvClassificacao.nivel)})</span>` : ""}`
-    : "—";
   const ar = texto(r.qualidadeAr?.pm25Classificacao?.nivel);
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-bottom:0;border-collapse:separate;">
     <tr>
@@ -89,7 +96,7 @@ function resumoMeteorologico(r) {
     <tr>
       ${celulaMetrica("QUALIDADE DO AR", ar)}
       ${celulaMetrica("CHUVA ACUMULADA", numeroUnidade(r.precipitacaoTotalMm, "mm"))}
-      ${celulaMetrica("ÍNDICE UV", uv, true)}
+      ${celulaMetrica("CALOR", valorCalor(r), true)}
     </tr>
   </table>`;
 }
@@ -235,7 +242,6 @@ function fontesDeDados(r, eventos) {
     const periodo = String(rajada.periodo || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     adicionar(porCampo[`periodos.${periodo}.rajadaMaxKmh`] || porCampo.rajadaMaxKmh);
   }
-  if (Number.isFinite(r.qualidadeAr?.uvMax)) adicionar(porCampo["ar.uvMax"] || r.qualidadeAr.fonte);
   if (Number.isFinite(r.qualidadeAr?.pm25Medio)) adicionar(porCampo["ar.pm25Medio"] || r.qualidadeAr.fonte);
   if (Number.isFinite(r.mar?.alturaMaxDiaM)) adicionar(porCampo["mar.alturaMaxDiaM"] || r.mar.fonte);
   eventos.forEach((evento) => adicionar(evento.fonteDados));

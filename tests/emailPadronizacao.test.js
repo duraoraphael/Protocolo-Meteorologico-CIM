@@ -52,8 +52,8 @@ function validarCabecalho(html, titulo) {
   assert.equal(centro.find('[data-email-header-local="true"]').length, 1);
   assert.doesNotMatch(centro.text(), /Horário de Brasília/);
   assert.match(html, /letter-spacing:-3px/);
-  // Petrobras sem caixa branca: a imagem já tem o verde do header e vai por Content-ID.
-  assert.match(petrobras.html(), /<img src="cid:logo-petrobras-header@cim" width="150" height="30" alt="Petrobras"/);
+  // Petrobras em cartão branco embutido na imagem (não em CSS), por Content-ID.
+  assert.match(petrobras.html(), /<img src="cid:logo-petrobras-header@cim" width="150" height="39" alt="Petrobras"/);
   assert.doesNotMatch(petrobras.html(), /background|border:\s*[1-9]/);
   assert.doesNotMatch(cabecalho.html(), /src="data:|localhost|file:/);
 }

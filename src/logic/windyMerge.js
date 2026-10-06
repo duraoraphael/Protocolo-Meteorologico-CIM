@@ -12,11 +12,18 @@ function integrarWindy(base, mar, qualidadeAr, pacote, fonteBase) {
     return out;
   };
   const weather=pacote.weather;
-  base=merge(base,weather,['condicaoGeral','tempMin','tempMax','umidadeMin','umidadeMax','rajadaMaxKmh','precipitacaoTotalMm'],'',fonteBase);
+  // Vento, rajada e chuva por período (e os totais do dia derivados deles)
+  // vêm de uma única série: a horária da Open-Meteo, com as janelas 05h–12h,
+  // 12h–18h e 18h–24h usadas no painel e nos PDFs. Misturar o Windy (amostras
+  // de 3 h, outro modelo) só no painel fazia o mesmo período mostrar valores
+  // diferentes em cada lugar. Sem Open-Meteo, o Windy segue como alternativa.
+  const seriePeriodos=fonteBase==='Open-Meteo'?null:weather;
+  base=merge(base,weather,['condicaoGeral','tempMin','tempMax','umidadeMin','umidadeMax'],'',fonteBase);
+  base=merge(base,seriePeriodos,['rajadaMaxKmh','precipitacaoTotalMm'],'',fonteBase);
   fontesPorCampo.precipitacaoHorariaMaxMm=base.precipitacaoHorariaMaxMm!=null?fonteBase:'Indisponível';
   base.periodos={...base.periodos};
   for(const k of ['manha','tarde','noite']) {
-    base.periodos[k]=merge(base.periodos[k],weather?{...weather.periodos[k],fonte:weather.fonte}:null,['direcao','intensidadeVento','rajadaMaxKmh','precipitacaoMm'],`periodos.${k}.`,fonteBase);
+    base.periodos[k]=merge(base.periodos[k],seriePeriodos?{...seriePeriodos.periodos[k],fonte:seriePeriodos.fonte}:null,['direcao','intensidadeVento','rajadaMaxKmh','precipitacaoMm'],`periodos.${k}.`,fonteBase);
     base.periodos[k].tempestade=Boolean(base.periodos[k].tempestade||weather?.periodos[k].tempestade);
     fontesPorCampo[`periodos.${k}.probabilidadeChuva`]=base.periodos[k].probabilidadeChuva==null?'Indisponível':'Open-Meteo';
   }

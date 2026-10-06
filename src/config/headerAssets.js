@@ -1,9 +1,9 @@
 // Identidade do cabeçalho institucional compartilhada por e-mails e PDFs.
 //
-// As imagens em src/assets/header/ são derivadas de Logo/Logo_PDF.png e
-// Logo/petrobras.png por scripts/gerarLogosHeader.js: o fundo verde de cada
-// logo foi trocado exatamente por HEADER_VERDE (o verde original do
-// petrobras.png), então elas se integram ao header sem caixa ou contorno.
+// As imagens em src/assets/header/ são geradas por scripts/gerarLogosHeader.js:
+// a do CIM (Logo/Logo_PDF.png) tem o fundo trocado exatamente por
+// HEADER_VERDE; a da Petrobras (Logo/Petrobras_horizontal_logo.svg.png) é a
+// logo colorida num cartão branco de cantos arredondados.
 const fs = require("fs");
 const path = require("path");
 

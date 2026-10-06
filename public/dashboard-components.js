@@ -92,8 +92,8 @@ const Dashboard = (() => {
     const cards = [
       metric('Temperatura', pair(r.tempMin, r.tempMax, '°'), 'Mínima / máxima · °C', 'thermometer', '', sources('tempMin','tempMax')),
       metric('Umidade relativa', pair(r.umidadeMin, r.umidadeMax, '%'), 'Mínima / máxima prevista', 'drop', '', sources('umidadeMin','umidadeMax')),
-      metric('Rajada prevista', unit(gusts.length ? Math.max(...gusts) : null, ' <small>km/h</small>'), 'Pico previsto no dia', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
-      metric('Chuva acumulada', unit(r.precipitacaoTotalMm, ' <small>mm</small>'), 'Acumulado previsto no dia', 'rain', '', sources('precipitacaoTotalMm')),
+      metric('Rajada prevista', unit(gusts.length ? Math.max(...gusts) : null, ' <small>km/h</small>'), 'Pico previsto hoje, 05h–00h', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
+      metric('Chuva acumulada', unit(r.precipitacaoTotalMm, ' <small>mm</small>'), 'Acumulado previsto hoje, 05h–00h', 'rain', '', sources('precipitacaoTotalMm')),
       metric('Índice UV máx.', escape(aq?.uvMax), aq?.uvClassificacao?.nivel || 'Dado indisponível', 'sun', `uv-${['baixo','moderado','alto','muito_alto','extremo'].includes(aq?.uvClassificacao?.categoria) ? aq.uvClassificacao.categoria : 'ausente'}`, sources('ar.uvMax')),
       metric('Condição geral', escape(r.condicaoGeral), fields.condicaoGeral?.startsWith('Windy') ? 'Previsão no horário de referência' : 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
       metric('Qualidade do ar', escape(aq?.pm25Classificacao?.nivel), '', 'leaf', 'air', sources('ar.pm25Medio')),
@@ -110,9 +110,10 @@ const Dashboard = (() => {
     return table('Condições de mar por período', 'waves', ['Período', 'Estado do mar', 'Altura máx.', 'Período de onda', 'Direção', 'Marulho'], (r.mar?.periodos || []).map(p => [escape(p.periodo), escape(p.estadoMar), unit(p.alturaMaxM,' m'), unit(p.periodoOndaS,' s'), escape(p.direcaoOnda), unit(p.marulhoMaxM,' m')]), 'mar');
   }
   function windRain(r) {
-    return table('Vento e chuva por período', 'wind', ['Período', 'Vento', 'Rajada prevista', 'Chance de chuva', 'Acumulado'], (r.ventoPorPeriodo || []).map(v => {
+    // Mesmas janelas e mesmo cálculo do PDF: vento = velocidade média, rajada = pico.
+    return table('Vento e chuva por período', 'wind', ['Período', 'Vento (velocidade média)', 'Rajada prevista (máx.)', 'Chance de chuva', 'Acumulado'], (r.ventoPorPeriodo || []).map(v => {
       const c = r.chuvaPorPeriodo?.find(p => p.periodo === v.periodo);
-      return [escape(v.periodo), `${escape(v.direcao)} · ${escape(v.intensidade)}`, unit(v.rajadaMaxKmh,' km/h'), unit(c?.probabilidade,'%'), unit(c?.precipitacaoMm,' mm')];
+      return [`${escape(v.periodo)}${v.janela ? ` <small>${escape(v.janela)}</small>` : ''}`, `${escape(v.direcao)} · ${escape(v.intensidade)}`, unit(v.rajadaMaxKmh,' km/h'), unit(c?.probabilidade,'%'), unit(c?.precipitacaoMm,' mm')];
     }), 'vento');
   }
 
@@ -304,7 +305,7 @@ const Dashboard = (() => {
     const motivo = motivoFalhaCor(est, st);
     return `<aside class="cor-rio-estagio" data-cor-estagio="${nivel}" aria-label="Estágio operacional do COR-Rio: estágio ${nivel}">
       <p class="cor-rio-estagio-rotulo">Estágio operacional</p>
-      <p class="cor-rio-estagio-atual"><span class="cor-rio-estagio-chip">ESTÁGIO ${nivel}</span></p>
+      <p class="cor-rio-estagio-atual"><span class="cor-rio-estagio-chip">Estágio ${nivel}</span></p>
       ${corRioEscala(nivel)}
       <p class="cor-rio-estagio-meta">${desde ? `Em vigor desde ${escape(desde)}<br>` : ''}${p.estagioDesatualizado ? '' : `Consultado em ${escape(consulta || 'horário indisponível')}`}</p>
       ${p.estagioDesatualizado ? `<p class="oc-flag cor-rio-flag">Desatualizado · última consulta válida: ${escape(consulta || 'horário indisponível')}${motivo ? ` (${escape(motivo)})` : ''}</p>` : ''}
@@ -328,7 +329,7 @@ const Dashboard = (() => {
     const motivo = motivoFalhaCor(parte, st);
     return `<aside class="cor-rio-estagio" data-cor-estagio="${nivel}" aria-label="Estágio de calor do COR-Rio: ${nivel}">
       <p class="cor-rio-estagio-rotulo">Estágio de calor</p>
-      <p class="cor-rio-estagio-atual"><span class="cor-rio-estagio-chip">ESTÁGIO DE CALOR ${nivel}</span></p>
+      <p class="cor-rio-estagio-atual"><span class="cor-rio-estagio-chip">Calor ${nivel}</span></p>
       ${corRioEscala(nivel).replace('estágios operacionais', 'estágios de calor')}
       <p class="cor-rio-estagio-meta">${p.calorDesatualizado ? '' : `Consultado em ${escape(consulta || 'horário indisponível')}`}</p>
       ${p.calorDesatualizado ? `<p class="oc-flag cor-rio-flag">Desatualizado · última consulta válida: ${escape(consulta || 'horário indisponível')}${motivo ? ` (${escape(motivo)})` : ''}</p>` : ''}
@@ -361,7 +362,7 @@ const Dashboard = (() => {
     return `<article class="cor-rio-comunicado" aria-labelledby="cor-rio-com-${escape(c.id)}">
       <h3 class="cor-rio-com-titulo" id="cor-rio-com-${escape(c.id)}">${escape(c.titulo)}</h3>
       ${c.resumo ? `<p class="cor-rio-resumo">${escape(c.resumo)}</p>` : ''}
-      <div class="oc-meta cor-rio-meta">
+      <div class="cor-rio-meta">
         <span>${icon('pin')}<span>Abrangência: ${escape(c.abrangencia || p.d.abrangencia)}</span></span>
         <span>${icon('clock')}<span>${corRioPublicacao(c)}</span></span>
         <span>${icon('globe')}<span>Fonte: COR-Rio</span></span>
@@ -369,7 +370,7 @@ const Dashboard = (() => {
       ${flagDesatualizado}
       <div class="cor-rio-acoes">
         <button class="cor-rio-botao" data-detail="cor-rio:${escape(c.id)}">Ver comunicado <span aria-hidden="true">→</span></button>
-        ${outros ? `<button class="text-link" data-detail="cor-rio">Ver ${outros === 1 ? 'outro comunicado vigente' : `outros ${outros} comunicados vigentes`} <span aria-hidden="true">→</span></button>` : ''}
+        ${outros ? `<button class="text-link cor-rio-outros" data-detail="cor-rio">${outros === 1 ? 'Outro comunicado vigente' : `Outros ${outros} comunicados vigentes`} <span aria-hidden="true">→</span></button>` : ''}
       </div>
     </article>`;
   }
@@ -410,7 +411,7 @@ const Dashboard = (() => {
     const c = id ? itens.find(item => item.id === id) : null;
     const linkOriginal = (url, texto) => /^https:\/\/cor\.rio\//.test(url || '') ? `<a class="cor-rio-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${icon('external')}${texto}</a>` : '';
     const estagio = p.nivel
-      ? `<div class="cor-rio-det-estagio" data-cor-estagio="${p.nivel}"><span class="cor-rio-estagio-chip">ESTÁGIO ${p.nivel}</span><dl class="det-lista">
+      ? `<div class="cor-rio-det-estagio" data-cor-estagio="${p.nivel}"><span class="cor-rio-estagio-chip">Estágio ${p.nivel}</span><dl class="det-lista">
           ${p.est.dados.vigenteDesde ? `<div><dt>Em vigor desde</dt><dd>${escape(dateTimeBrasilia(p.est.dados.vigenteDesde))}</dd></div>` : ''}
           <div><dt>Consulta ao COR-Rio</dt><dd>${escape(dateTimeBrasilia(p.est.consultadoEm) || 'horário indisponível')}${p.estagioDesatualizado ? ' — última consulta válida (dado desatualizado)' : ''}</dd></div>
           ${(p.est.dados.mensagens || []).map(m => `<div><dt>Mensagem do COR-Rio</dt><dd>${escape(m)}</dd></div>`).join('')}
@@ -418,7 +419,7 @@ const Dashboard = (() => {
       : '<p class="det-indisponivel">Estágio indisponível: não há consulta válida ao COR-Rio.</p>';
     const blocoEstagio = `<section class="det-bloco"><h3>Estágio operacional da cidade</h3><p class="cor-rio-nota">O estágio é publicado pelo COR-Rio separadamente dos comunicados e pode ter sido definido em outro horário.</p>${estagio}<p class="det-fonte">Fonte: COR-Rio · ${linkOriginal(p.est?.dados?.urlPublica || 'https://cor.rio/estagios-operacionais-da-cidade/', 'Estágios operacionais no cor.rio')}</p></section>`;
     const calor = p.nivelCalor
-      ? `<div class="cor-rio-det-estagio" data-cor-estagio="${p.nivelCalor}"><span class="cor-rio-estagio-chip">ESTÁGIO DE CALOR ${p.nivelCalor}</span><dl class="det-lista"><div><dt>Consulta ao COR-Rio</dt><dd>${escape(dateTimeBrasilia(p.calor.consultadoEm) || 'horário indisponível')}${p.calorDesatualizado ? ' — última consulta válida (dado desatualizado)' : ''}</dd></div></dl></div>`
+      ? `<div class="cor-rio-det-estagio" data-cor-estagio="${p.nivelCalor}"><span class="cor-rio-estagio-chip">Calor ${p.nivelCalor}</span><dl class="det-lista"><div><dt>Consulta ao COR-Rio</dt><dd>${escape(dateTimeBrasilia(p.calor.consultadoEm) || 'horário indisponível')}${p.calorDesatualizado ? ' — última consulta válida (dado desatualizado)' : ''}</dd></div></dl></div>`
       : '<p class="det-indisponivel">Estágio de calor indisponível: não há consulta válida ao COR-Rio.</p>';
     const blocoCalor = `<section class="det-bloco"><h3>Estágio de calor</h3><p class="cor-rio-nota">O Protocolo de Calor é publicado separadamente do estágio operacional da cidade.</p>${calor}<p class="det-fonte">Fonte: COR-Rio · ${linkOriginal(p.calor?.dados?.urlPublica || 'https://cor.rio/niveis-de-calor/', 'Níveis de calor no cor.rio')}</p></section>`;
     const lista = (excluir) => itens.filter(i => i.id !== excluir).map(i => `<article class="aviso-item cor-rio-item"><strong>${escape(i.titulo)}</strong><p>${corRioPublicacao(i)}</p><button class="text-link det-link" data-detail="cor-rio:${escape(i.id)}">Ver comunicado <span aria-hidden="true">→</span></button></article>`).join('');

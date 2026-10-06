@@ -3,6 +3,7 @@
 // endpoint de previsão do INMET usado pelo projeto não fornece chuva horária
 // nem rajada numérica.
 const { formatarTitulo } = require("../../public/alert-title");
+const { fenomenoAvisoInmet, grauAvisoInmet, normalizarComparacao } = require("../sources/inmet");
 
 const GRAUS = Object.freeze({
   NORMAL: 0,
@@ -105,6 +106,26 @@ function recomendacoes(fenomeno, grau) {
 }
 
 /**
+ * Recomendações de chuva para um aviso oficial do INMET aplicável à base.
+ * Vale para avisos de chuva e para os de tempestade cujo texto oficial cita
+ * chuva ou alagamento. O nível vem só da severidade oficial, pelo mesmo
+ * mapeamento do restante do projeto (Perigo Potencial → ATENÇÃO, Perigo →
+ * ALERTA, Grande Perigo → EMERGÊNCIA); severidade não reconhecida não gera
+ * recomendação. Retorna null quando o aviso não é de chuva.
+ */
+function recomendacoesChuvaAvisoInmet(aviso) {
+  if (!aviso) return null;
+  const evento = aviso.descricao || aviso.event || aviso.evento || aviso.headline;
+  const fenomeno = fenomenoAvisoInmet(evento);
+  const textoOficial = normalizarComparacao([evento, aviso.riscos, aviso.description].flat().filter(Boolean).join(" "));
+  const deChuva = fenomeno === "chuva" || (fenomeno === "tempestade" && /chuva|alagamento/.test(textoOficial));
+  if (!deChuva) return null;
+  const grau = grauAvisoInmet(aviso.severidade ?? aviso.severity);
+  if (!grau) return null;
+  return { fenomeno: "chuva", grau, recomendacoes: recomendacoes("chuva", grau) };
+}
+
+/**
  * Classifica, em uma única passagem, os gatilhos numéricos usados pelo
  * informativo e pelo monitor de alertas. Os limites continuam definidos
  * somente em LIMITES_ALERTA_INMET.
@@ -182,5 +203,6 @@ module.exports = {
   classificarRajada,
   maiorGrau,
   recomendacoes,
+  recomendacoesChuvaAvisoInmet,
   classificarCondicoesMeteorologicas,
 };

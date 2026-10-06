@@ -263,7 +263,7 @@ test("cada estágio aplica sua cor ao painel, ao indicador e à escala; só o at
     const { html, painel } = renderizar({ resposta: resposta({ nivel }) });
     assert.match(html, new RegExp(`<section class="cor-rio" data-cor-estagio="${nivel}"`));
     assert.match(html, new RegExp(`<aside class="cor-rio-estagio" data-cor-estagio="${nivel}"`));
-    assert.match(html, new RegExp(`ESTÁGIO ${nivel}<`));
+    assert.match(html, new RegExp(`>Estágio ${nivel}<`));
     assert.equal((html.match(/cor-rio-atual-txt/g) || []).length, 2);
     assert.equal((html.match(/aria-current="step"/g) || []).length, 2);
     assert.match(html, new RegExp(`<li data-cor-estagio="${nivel}" class="atual" aria-current="step">`));
@@ -290,9 +290,10 @@ test("comunicado: título, resumo, abrangência, data, fonte e botão Ver comuni
   assert.match(html, /Publicado em 02\/10\/2026 10:00</, "atualização anterior à publicação não é exibida");
   assert.match(html, /Fonte: COR-Rio/);
   assert.match(html, /data-detail="cor-rio:21">Ver comunicado/);
-  assert.match(html, /data-detail="cor-rio">Ver outro comunicado vigente/);
+  assert.match(html, /data-detail="cor-rio">Outro comunicado vigente/);
   assert.match(html, /Em vigor desde 02\/10\/2026 07:00/, "horário do estágio separado do comunicado");
-  assert.match(html, /ESTÁGIO DE CALOR 2/);
+  assert.match(html, />Calor 2</);
+  assert.doesNotMatch(html, /ESTÁGIO DE CALOR/);
   assert.match(html, /Consultado em 02\/10\/2026 11:35/);
 });
 
@@ -309,18 +310,18 @@ test("estados vazios e de falha são distintos", () => {
   assert.match(semEstagio, /<section class="cor-rio sem-estagio" aria-labelledby/);
   assert.doesNotMatch(semEstagio, /<section[^>]*data-cor-estagio/);
   assert.match(semEstagio, /Estágio indisponível/);
-  assert.doesNotMatch(semEstagio, /ESTÁGIO \d|class="atual"/, "sem estágio padrão");
+  assert.doesNotMatch(semEstagio, /cor-rio-estagio-chip|class="atual"/, "sem estágio padrão");
 });
 
 test("falha mantém o último estágio, marcado como desatualizado com o horário da consulta válida", () => {
   const html = renderizar({ resposta: resposta({ nivel: 4, estagioStatus: "desatualizado", comStatus: "desatualizado" }) }).html;
-  assert.match(html, /ESTÁGIO 4/);
+  assert.match(html, />Estágio 4</);
   assert.match(html, /Desatualizado · última consulta válida: 02\/10\/2026 11:30 \(a fonte não respondeu a tempo\)/);
   assert.match(html, /Comunicados desatualizados · última consulta válida: 02\/10\/2026 11:00/);
 
   // servidor do painel inacessível: mesmo dado, também desatualizado
   const offline = renderizar({ resposta: resposta({ nivel: 2 }), falhaServidor: true }).html;
-  assert.match(offline, /ESTÁGIO 2/);
+  assert.match(offline, />Estágio 2</);
   assert.match(offline, /Desatualizado · última consulta válida/);
 });
 
@@ -334,7 +335,7 @@ test("detalhes: conteúdo completo, link original e estágio identificado como i
   assert.match(det, /href="https:\/\/cor\.rio\/post-20\/" target="_blank" rel="noopener noreferrer"/);
   assert.match(det, /Outros comunicados vigentes[\s\S]*cor-rio:21/);
   assert.match(det, /publicado pelo COR-Rio separadamente dos comunicados/);
-  assert.match(det, /ESTÁGIO DE CALOR 2/);
+  assert.match(det, />Calor 2</);
   assert.equal(painel.executar("Dashboard.corRioTitulo(__estado, '20')"), "Comunicado COR-Rio");
   assert.match(painel.executar("Dashboard.corRioDetalhes(__estado, '999')"), /não está mais entre os vigentes/);
 });

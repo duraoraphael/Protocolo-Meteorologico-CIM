@@ -12,6 +12,8 @@ const { anexarCorRioAoRelatorio } = require("./sources/corRio");
 
 const PASTA_SAIDA = path.join(__dirname, "..", "output");
 
+
+
 const MENSAGENS_PUBLICAS_ETAPA = Object.freeze({
   weather: "Não foi possível obter os dados meteorológicos.",
   pdf: "Não foi possível gerar o PDF.",
@@ -93,7 +95,11 @@ async function salvarCopiaLocal(pdfBuffer, nomeBase) {
  * @param {string} [opcoes.cidadeChave] chave em src/config/cities.js
  * @param {boolean} [opcoes.enviarEmail=true]
  */
-async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null } = {}) {
+/**
+ * @param {boolean} [opcoes.teste=false] envio de teste: assunto "[TESTE …]",
+ *   PDF com sufixo _TESTE (não sobrescreve o real) e sem gravação no GED.
+ */
+async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false } = {}) {
   const cidade = getCidade(cidadeChave);
   let report;
   console.log("[RELATORIO] Buscando dados meteorológicos");
@@ -108,6 +114,10 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
     if (horarioAgendado === "15:00") {
       report.mudancasDia = compararComManha(comparacaoAnterior, resumo(report));
     }
+  }
+  if (teste) {
+    report.envioTeste = true;
+    report.nomeArquivoBase += "_TESTE";
   }
 
   // Monitor de Secas (ANA): mensal e em cache por competência. Nunca lança —
@@ -182,7 +192,7 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // Indisponibilidade do GED nunca derruba o e-mail, que já foi enviado
   // (ou está sendo, em paralelo) com o buffer em memória.
   let ged_ = null;
-  if (enviarEmail && ged.destinoConfigurado()) {
+  if (enviarEmail && !teste && ged.destinoConfigurado()) {
     try {
       ged_ = await ged.enviarInformativo(pdfBuffer, `${report.nomeArquivoBase}.pdf`, report.cidade.nome);
     } catch (erro) {

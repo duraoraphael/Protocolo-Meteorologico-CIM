@@ -11,7 +11,11 @@ const { anexosLogosEmail } = require("../config/headerAssets");
  * rápido — o relatório completo já foi enviado de manhã. Seguem apenas as
  * logos do cabeçalho, inline por Content-ID.
  */
-async function enviarAlertaPorEmail(base) {
+/**
+ * @param {object} [opcoes]
+ * @param {boolean} [opcoes.teste=false] assunto marcado como [TESTE].
+ */
+async function enviarAlertaPorEmail(base, { teste = false } = {}) {
   const destinatarios = listaDestinatarios(base.chave);
   if (destinatarios.length === 0) {
     throw new Error(
@@ -26,7 +30,7 @@ async function enviarAlertaPorEmail(base) {
     // entrada que não é a mensagem de rotina.
     from: `"Alerta CIM" <${enderecoRemetente().email}>`,
     to: destinatarios.join(", "),
-    subject: assuntoAlerta(base),
+    subject: `${teste ? "[TESTE] " : ""}${assuntoAlerta(base)}`,
     html,
     attachments: anexosLogosEmail(html),
     // Prioridade alta: alguns clientes destacam a mensagem na lista.

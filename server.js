@@ -254,8 +254,10 @@ function criarApp({
     const { petrobras, cim } = arquivosLogos();
     res.json({
       ok: true,
-      petrobras: petrobras ? `/logo/${petrobras}` : null,
-      cim: cim ? `/logo/${cim}` : null,
+      // Nome codificado: arquivos com espaço/acentos (ex.: "CIM logo.png")
+      // continuam resolvendo.
+      petrobras: petrobras ? `/logo/${encodeURIComponent(petrobras)}` : null,
+      cim: cim ? `/logo/${encodeURIComponent(cim)}` : null,
     });
   });
 

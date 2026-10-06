@@ -7,6 +7,10 @@
 //   node src/cliAlertas.js --enviar     -> envia de verdade e registra
 //   node src/cliAlertas.js --limpar     -> apaga o histórico de "já avisado"
 //   node src/cliAlertas.js --bases=a,b  -> restringe as bases
+//   node src/cliAlertas.js --teste      -> considera TODOS os alertas ativos,
+//                                          mesmo sem mudança; com --enviar,
+//                                          envia com assunto "[TESTE]" e NÃO
+//                                          registra no histórico
 
 require("dotenv").config({ quiet: true });
 require("./security/certificados");
@@ -31,15 +35,16 @@ function argumento(nome) {
   }
 
   const enviar = process.argv.includes("--enviar");
+  const teste = process.argv.includes("--teste");
   const basesArg = argumento("bases");
   if (basesArg) process.env.BASES_MONITOR_ALERTAS = basesArg;
 
   console.log(
-    `[CIM] Verificando alertas${enviar ? " (MODO ENVIO)" : " (simulação — nada será enviado)"}...`
+    `[CIM] Verificando alertas${teste ? " — TESTE: alertas ativos, ignorando o histórico" : ""}${enviar ? " (MODO ENVIO)" : " (simulação — nada será enviado)"}...`
   );
 
   // A verificação nunca altera o estado; o registro acontece após o SMTP.
-  const resultado = await verificarAlertas();
+  const resultado = await verificarAlertas({ ignorarHistorico: teste });
 
   console.log("");
   if (resultado.totalNovos === 0) {
@@ -69,9 +74,10 @@ function argumento(nome) {
     const { enviarAlertaPorEmail } = require("./email/sendAlert");
     for (const base of resultado.porBase) {
       try {
-        const envio = await enviarAlertaPorEmail(base);
-        marcarAlertasEnviados(base);
-        console.log(`[CIM] Alerta enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`);
+        const envio = await enviarAlertaPorEmail(base, { teste });
+        // Envio de teste não altera o histórico do monitor automático.
+        if (!teste) marcarAlertasEnviados(base);
+        console.log(`[CIM] Alerta${teste ? " de TESTE" : ""} enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`);
       } catch (erro) {
         console.error(`[CIM] Falha ao enviar (${base.chave}): ${erro.message}`);
       }

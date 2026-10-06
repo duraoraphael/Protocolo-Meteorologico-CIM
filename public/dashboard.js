@@ -28,9 +28,16 @@ async function carregarLogos() {
     if (!dados.ok) return;
 
     const logoPetrobrasCard = document.getElementById("logo-petrobras-card");
+    const logoPetrobras = document.getElementById("logo-petrobras");
     if (dados.petrobras) {
-      document.getElementById("logo-petrobras").src = dados.petrobras;
-      logoPetrobrasCard.classList.remove("oculto");
+      // O card só aparece depois que a imagem carrega: caminho inválido não
+      // deixa um quadro branco vazio nem o ícone de imagem quebrada.
+      logoPetrobras.addEventListener("load", () => logoPetrobrasCard.classList.remove("oculto"), { once: true });
+      logoPetrobras.addEventListener("error", () => {
+        logoPetrobrasCard.classList.add("oculto");
+        console.warn(`[CIM] Logo Petrobras não carregou: ${dados.petrobras}`);
+      }, { once: true });
+      logoPetrobras.src = dados.petrobras;
     }
   } catch (erro) {
     // Sem logo cadastrado ainda (pasta Logo/ vazia) — painel segue normal, só sem as imagens.

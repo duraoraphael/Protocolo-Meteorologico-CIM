@@ -1,6 +1,6 @@
 const { buscarPacoteWindy } = require('../sources/windy');
 const { integrarWindy } = require('./windyMerge');
-const { buscarOpenMeteo } = require("../sources/openMeteo");
+const { buscarOpenMeteo, INICIO_JANELA_HOJE, PERIODOS: PERIODOS_HOJE } = require("../sources/openMeteo");
 const { buscarPrevisaoInmet, buscarAvisosInmet, deduplicarAvisosInmet } = require("../sources/inmet");
 const { montarOcorrencias } = require("./ocorrenciasPainel");
 const { buscarMarComFallback } = require("../sources/marine");
@@ -24,6 +24,15 @@ const {
 } = require("./riskEngine");
 
 function agora() { return new Date(); }
+
+// Relatórios agendados (05h e 15h): a seção "1. Previsão" cobre só hoje, das
+// 05h até 00h. Os três dias seguintes ficam na seção própria do PDF
+// ("Previsão para os próximos 3 dias", src/sources/previsaoProximosDias.js).
+const PERIODO_COBERTO_AGENDADO = "hoje, das 05h até 00h";
+const janelaPeriodo = (chave) => {
+  const { horaInicio, horaFim } = PERIODOS_HOJE[chave];
+  return `${String(horaInicio).padStart(2, "0")}h–${String(horaFim % 24).padStart(2, "0")}h`;
+};
 
 function slugCidade(nome) {
   return nome
@@ -80,11 +89,13 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   let openMeteo, inmetPrevisao, inmetAvisos;
 
   try {
-    openMeteo = await buscarOpenMeteo(
-      cidade.latitude,
-      cidade.longitude,
-      horarioAgendado ? { inicioHora: horarioAgendado === "15:00" ? 15 : 5, diasPrevisao: horarioAgendado === "15:00" ? 2 : 4 } : undefined
-    );
+    // Painel e PDFs (05h e 15h) usam a mesma janela de hoje (05h–00h), no
+    // fuso da base. Os agendados trazem também os 3 dias seguintes.
+    openMeteo = await buscarOpenMeteo(cidade.latitude, cidade.longitude, {
+      inicioHora: INICIO_JANELA_HOJE,
+      fuso: cidade.fusoHorario || "America/Sao_Paulo",
+      ...(horarioAgendado ? { agregarJanela: true } : {}),
+    });
   } catch (erro) {
     falhasApi.openMeteo = erro;
     registrarFalha("OPEN-METEO", erro);
@@ -170,9 +181,9 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     // exibir "0 km/h" / "0%" como se fossem previsões reais de calmaria,
     // quando na verdade o dado não existe — o painel renderiza null como "—".
     periodos: {
-      manha: { periodo: "Manhã", direcao: inmetPrevisao?.periodos?.manha?.direcaoVento || "—", intensidadeVento: inmetPrevisao?.periodos?.manha?.intensidadeVento || "—", rajadaMaxKmh: null, probabilidadeChuva: null, precipitacaoMm: null, tempestade: false },
-      tarde: { periodo: "Tarde", direcao: inmetPrevisao?.periodos?.tarde?.direcaoVento || "—", intensidadeVento: inmetPrevisao?.periodos?.tarde?.intensidadeVento || "—", rajadaMaxKmh: null, probabilidadeChuva: null, precipitacaoMm: null, tempestade: false },
-      noite: { periodo: "Noite", direcao: inmetPrevisao?.periodos?.noite?.direcaoVento || "—", intensidadeVento: inmetPrevisao?.periodos?.noite?.intensidadeVento || "—", rajadaMaxKmh: null, probabilidadeChuva: null, precipitacaoMm: null, tempestade: false },
+      manha: { periodo: "Manhã", janela: janelaPeriodo("manha"), direcao: inmetPrevisao?.periodos?.manha?.direcaoVento || "—", intensidadeVento: inmetPrevisao?.periodos?.manha?.intensidadeVento || "—", rajadaMaxKmh: null, probabilidadeChuva: null, precipitacaoMm: null, tempestade: false },
+      tarde: { periodo: "Tarde", janela: janelaPeriodo("tarde"), direcao: inmetPrevisao?.periodos?.tarde?.direcaoVento || "—", intensidadeVento: inmetPrevisao?.periodos?.tarde?.intensidadeVento || "—", rajadaMaxKmh: null, probabilidadeChuva: null, precipitacaoMm: null, tempestade: false },
+      noite: { periodo: "Noite", janela: janelaPeriodo("noite"), direcao: inmetPrevisao?.periodos?.noite?.direcaoVento || "—", intensidadeVento: inmetPrevisao?.periodos?.noite?.intensidadeVento || "—", rajadaMaxKmh: null, probabilidadeChuva: null, precipitacaoMm: null, tempestade: false },
     },
   };
 
@@ -253,14 +264,18 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     });
   }
 
-  const chavesPeriodo = horarioAgendado === "15:00" ? ["tarde", "noite"] : ["manha", "tarde", "noite"];
+  // Mesmos três períodos (e janelas) no painel e nos PDFs das 05h e 15h.
+  const chavesPeriodo = ["manha", "tarde", "noite"];
   const ventoPorPeriodo = chavesPeriodo.map((k) => {
     const p = base.periodos[k];
     const i = inmetPrevisao?.periodos[k];
     return {
       periodo: p.periodo,
+      janela: p.janela || janelaPeriodo(k),
       direcao: p.direcao,
+      // Vento (velocidade sustentada) e rajada são grandezas distintas.
       intensidade: p.intensidadeVento,
+      velocidadeMaxKmh: p.velocidadeMaxKmh ?? null,
       rajadaMaxKmh: p.rajadaMaxKmh,
       referenciaInmet: i ? `${i.direcaoVento || "—"} / ${i.intensidadeVento || "—"}` : null,
     };
@@ -271,6 +286,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     const i = inmetPrevisao?.periodos[k];
     return {
       periodo: p.periodo,
+      janela: p.janela || janelaPeriodo(k),
       probabilidade: p.probabilidadeChuva,
       precipitacaoMm: p.precipitacaoMm,
       precipitacaoHorariaMaxMm: p.precipitacaoHorariaMaxMm,
@@ -447,7 +463,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   ];
 
   const relatorio = {
-    cidade: { chave: cidade.chave, nome: cidade.nome, uf: cidade.uf },
+    cidade: { chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, fuso: cidade.fusoHorario || "America/Sao_Paulo" },
     nomeArquivoBase: `Informativo_Meteorologico_${slugCidade(cidade.nome)}_${dataNow.toISOString().slice(0, 10)}`,
     dataFormatadaLonga: new Intl.DateTimeFormat("pt-BR", {
       dateStyle: "full",
@@ -495,17 +511,18 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     climaSaude,
     geradoEmISO: dataNow.toISOString(),
     horarioAgendado,
-    periodoCoberto: horarioAgendado === "05:00"
-      ? "Hoje, das 05:00 até 00:00, mais os três dias seguintes"
-      : horarioAgendado === "15:00"
-        ? "Hoje, das 15:00 até 00:00, mais o dia seguinte"
-        : null,
-    previsaoDias: horarioAgendado ? openMeteo.previsaoDias.map((dia, i) => i === 0
-      ? { ...dia, chuvaMm: base.precipitacaoTotalMm, rajadaKmh: base.rajadaMaxKmh, periodo: horarioAgendado === "15:00" ? "Hoje (15:00–00:00)" : "Hoje (05:00–00:00)" }
-      : { ...dia, periodo: i === 1 ? "Amanhã" : `Dia +${i}` }) : null,
+    periodoCoberto: horarioAgendado ? PERIODO_COBERTO_AGENDADO : null,
+    // Só hoje: chuva e rajada na janela 05h–00h (as mesmas dos períodos acima).
+    previsaoDias: horarioAgendado ? openMeteo.previsaoDias.slice(0, 1).map((dia) => ({
+      ...dia,
+      janela: openMeteo.janelaHoje.rotulo,
+      chuvaMm: base.precipitacaoTotalMm,
+      rajadaKmh: base.rajadaMaxKmh,
+      periodo: `Hoje (${openMeteo.janelaHoje.rotulo})`,
+    })) : null,
   };
   relatorio.ocorrencias = montarOcorrencias(relatorio);
   return relatorio;
 }
 
-module.exports = { montarRelatorio };
+module.exports = { montarRelatorio, PERIODO_COBERTO_AGENDADO };

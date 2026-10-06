@@ -155,5 +155,5 @@ test('PDF omite exclusivamente o bloco de condição geral', () => {
   assert.equal(html.includes('Condição geral'), false);
   assert.equal(html.includes('Condição geral do céu'), false);
   assert.equal(html.includes('Nublado a encoberto'), false);
-  assert.match(html, /Previsão por dia|Temperatura e umidade/);
+  assert.match(html, /1\. Previsão/);
 });

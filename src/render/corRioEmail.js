@@ -147,11 +147,11 @@ function cartaoCorRioEmail(r) {
   const cor = s.estagio ? s.estagio.cor : CorRio.NEUTRO.cor;
   const fundo = s.estagio ? CorRio.tomClaro(cor, 0.1) : CorRio.NEUTRO.fundo;
   const selo = s.nivel
-    ? `<span style="display:inline-block;background:${cor};color:${CorRio.TINTA};font:bold 14px/1.2 Arial,sans-serif;letter-spacing:0.5px;padding:5px 12px;border-radius:5px;white-space:nowrap;">ESTÁGIO ${s.nivel}</span>`
+    ? `<span style="display:inline-block;background:${cor};color:${CorRio.TINTA};font:bold 14px/1.2 Arial,sans-serif;letter-spacing:0.5px;padding:5px 12px;border-radius:5px;white-space:nowrap;">Estágio ${s.nivel}</span>`
     : `<span style="display:inline-block;background:#DDE3E1;color:#2B3431;border:1px dashed #8A9894;font:bold 13px/1.2 Arial,sans-serif;padding:5px 10px;border-radius:5px;white-space:nowrap;">ESTÁGIO INDISPONÍVEL</span>`;
   const corCalor = s.calor ? s.calor.cor : CorRio.NEUTRO.cor;
   const seloCalor = s.nivelCalor
-    ? `<span style="display:inline-block;background:${corCalor};color:${CorRio.TINTA};font:bold 14px/1.2 Arial,sans-serif;letter-spacing:0.3px;padding:5px 12px;border-radius:5px;white-space:nowrap;margin-top:5px;">ESTÁGIO DE CALOR ${s.nivelCalor}</span>`
+    ? `<span style="display:inline-block;background:${corCalor};color:${CorRio.TINTA};font:bold 14px/1.2 Arial,sans-serif;letter-spacing:0.3px;padding:5px 12px;border-radius:5px;white-space:nowrap;margin-top:5px;">Calor ${s.nivelCalor}</span>`
     : `<span style="display:inline-block;background:#DDE3E1;color:#2B3431;border:1px dashed #8A9894;font:bold 13px/1.2 Arial,sans-serif;padding:5px 10px;border-radius:5px;white-space:nowrap;margin-top:5px;">CALOR INDISPONÍVEL</span>`;
 
   const geradoEm = r.geradoEmISO || Date.now();
@@ -184,7 +184,7 @@ function cartaoCorRioEmail(r) {
     : `<div style="margin-top:10px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio indisponível</strong> — não há consulta válida ao estágio operacional do COR-Rio${est.falha ? ` (${esc(est.falha)})` : ""}.</div>`;
   const calorParte = estado.calor || {};
   const calor = s.nivelCalor
-    ? `<div style="margin-top:8px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio de calor:</strong> Estágio de Calor ${s.nivelCalor}. Consulta à fonte: ${esc(quando(calorParte.consultadoEm))}. Protocolo independente do estágio operacional.</div>
+    ? `<div style="margin-top:8px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio de calor:</strong> Calor ${s.nivelCalor}. Consulta à fonte: ${esc(quando(calorParte.consultadoEm))}. Protocolo independente do estágio operacional.</div>
        ${s.calorDesatualizado ? aviso(`<strong>Dados desatualizados</strong> — última consulta bem-sucedida do estágio de calor: ${esc(quando(calorParte.consultadoEm))}.`) : ""}`
     : `<div style="margin-top:8px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio de calor indisponível</strong> — não há consulta válida ao Protocolo de Calor do COR-Rio${calorParte.falha ? ` (${esc(calorParte.falha)})` : ""}.</div>`;
   const rodape = doDia ? "" : linha("Abrangência", esc(estado.abrangencia || "Município do Rio de Janeiro")) + linha("Fonte", esc(estado.fonte || "COR-Rio"));

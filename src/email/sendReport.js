@@ -33,7 +33,8 @@ async function enviarRelatorioPorEmail(report, pdfBuffer) {
   }
 
   const transportador = criarTransportador();
-  const assunto = `Informativo Meteorológico — ${report.cidade.nome} — ${report.dataFormatadaCurta}`;
+  const prefixoTeste = report.envioTeste ? `[TESTE${report.horarioAgendado ? ` ${report.horarioAgendado}` : ""}] ` : "";
+  const assunto = `${prefixoTeste}Informativo Meteorológico — ${report.cidade.nome} — ${report.dataFormatadaCurta}`;
   const html = renderEmailHtml(report);
 
   const info = await transportador.sendMail({

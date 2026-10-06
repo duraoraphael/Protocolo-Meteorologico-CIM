@@ -46,7 +46,7 @@ test('cabeçalho, oito cards e rodapé usam dados e fontes do relatório', () =>
     'INFORMATIVO METEOROLÓGICO', 'Hora da consulta:', '10:09',
     'TEMP. MÍN/MÁX', '21° / 33°C', 'UMIDADE MÍN/MÁX', '55% / 100%',
     'QUALIDADE DO AR', 'Boa', 'RAJADA PREVISTA', '36 km/h',
-    'CHUVA ACUMULADA', '0 mm', 'ÍNDICE UV', '11.2',
+    'CHUVA ACUMULADA', '0 mm', 'CALOR', 'Indisponível',
     'MAR — ALTURA MÁX. DE ONDA', '0.7 m', 'CONDIÇÃO GERAL',
     'Fontes de dados:', 'INMET', 'Open-Meteo Air Quality', 'Open-Meteo Marine',
     'Informativo gerado automaticamente pelo Protocolo Meteorológico do COMPARTILHADO.',
@@ -71,7 +71,7 @@ test('card de qualidade do ar exibe somente a classificação dinâmica', () => 
   assert.ok(!html.includes('27.4 µg/m³'));
 });
 
-test('ÍNDICE UV é a última célula e o evento UV fica após os demais sem reordená-los', () => {
+test('CALOR é a última célula e o evento UV fica após os demais sem reordená-los', () => {
   const html = semImagem(renderEmailHtml(relatorio({
     severidade: { grau: 'ALERTA', eventos: [
       { tipo: 'uvAlto', assinatura: 'uv', grau: 'ALERTA', titulo: 'ALERTA — ÍNDICE UV ELEVADO', descricao: 'Índice UV extremo', fonteDados: 'Open-Meteo Air Quality' },
@@ -84,13 +84,39 @@ test('ÍNDICE UV é a última célula e o evento UV fica após os demais sem reo
   const segundaLinha = tabela.children('tbody').children('tr').eq(1).children('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
   assert.match(segundaLinha[0], /^QUALIDADE DO AR/);
   assert.match(segundaLinha[1], /^CHUVA ACUMULADA/);
-  assert.match(segundaLinha[2], /^ÍNDICE UV/);
+  assert.match(segundaLinha[2], /^CALOR/);
+  assert.doesNotMatch(segundaLinha.join(' '), /ÍNDICE UV|11\.2/, 'o card não usa o índice UV');
   const vento = html.indexOf('VENTO — ATENÇÃO');
   const chuva = html.indexOf('CHUVA INTENSA — ALERTA');
   const uv = html.indexOf('ÍNDICE UV — ALERTA');
   assert.ok(vento < chuva && chuva < uv);
-  assert.match(html, /11\.2/);
-  assert.match(html, /Extremo/);
+  assert.match(html, /Índice UV extremo/, 'o evento de UV continua no e-mail');
+});
+
+test('card CALOR mostra a classificação EHF de hoje na cor do nível, sem usar UV', () => {
+  const climaSaude = (previsaoDias, extra = {}) => ({ status: 'operacional', dados: {
+    source: 'Clima e Saúde — Ministério da Saúde', dataConsulta: '2026-09-28',
+    ehf: { classificacao: 'Sem excesso' }, previsaoDias, nivel: { grau: 'NORMAL' }, recomendacoes: [], ...extra,
+  } });
+  const celula = (html) => {
+    const $ = cheerio.load(html);
+    const tabela = $('div').filter((_, e) => $(e).text().trim() === 'TEMP. MÍN/MÁX').first().closest('table');
+    return tabela.children('tbody').children('tr').eq(1).children('td').eq(2);
+  };
+  const base = { geradoEmISO: '2026-09-28T13:09:00Z', cidade: { nome: 'Rio de Janeiro', uf: 'RJ', fuso: 'America/Sao_Paulo' } };
+  const atencao = celula(renderEmailHtml(relatorio({ ...base, climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Baixo' }, { data: '2026-09-29', classificacao: 'Severo' }]) })));
+  assert.equal(atencao.text().replace(/\s+/g, ' ').trim(), 'CALOR Atenção');
+  assert.match(atencao.html(), /color:#E65100/);
+  const alerta = celula(renderEmailHtml(relatorio({ ...base, climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Severo' }]) })));
+  assert.match(alerta.text(), /Alerta/);
+  assert.match(alerta.html(), /color:#D32F2F/);
+  const normal = celula(renderEmailHtml(relatorio({ ...base, climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Sem excesso' }]) })));
+  assert.match(normal.text(), /Normal/);
+  assert.match(normal.html(), /color:#2E7D32/);
+  // Coleta de outro dia sem previsão para hoje: indisponível, nunca "Normal".
+  const semHoje = celula(renderEmailHtml(relatorio({ ...base, climaSaude: { status: 'degradado', dados: { source: 'Clima e Saúde — Ministério da Saúde', dataConsulta: '2026-09-25', ehf: { classificacao: 'Sem excesso' }, previsaoDias: [{ data: '2026-09-25', classificacao: 'Sem excesso' }] } } })));
+  assert.match(semHoje.text(), /Indisponível/);
+  assert.doesNotMatch(semHoje.text(), /Normal/);
 });
 
 test('dados ausentes mostram traço sem fabricar números nem fontes', () => {
