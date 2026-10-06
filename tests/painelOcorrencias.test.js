@@ -184,7 +184,7 @@ test("Calor e Saúde em ATENÇÃO entra na área de destaque", () => {
   const { tela, detalhe } = renderizar(r);
   assert.match(cardCalor(tela), /selo-atencao">ATENÇÃO · P1/);
   assert.equal(r.ocorrencias[0].fenomeno, "calor");
-  assert.match(tela, /aria-label="ATENÇÃO — Calor e saúde"/);
+  assert.match(tela, /aria-label="CALOR \/ RISCO À SAÚDE — ATENÇÃO"/);
   assert.match(detalhe(r.ocorrencias[0].id), /Reforçar hidratação\./);
 });
 

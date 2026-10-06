@@ -535,6 +535,7 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .cor-rio-vazio.cor-rio-falha { border-style:dashed; border-color:rgba(232,199,102,.55); color:#e8d9a6; }
 .cor-rio-vazio.cor-rio-falha .icon { color:#e8c766; }
 .cor-rio-flag { align-self:flex-start; margin:0; line-height:1.45; overflow-wrap:anywhere; }
+.cor-rio-estagios { display:flex; flex-direction:column; gap:10px; min-width:0; }
 
 .cor-rio-estagio { display:flex; flex-direction:column; gap:9px; min-width:0; padding:12px 13px; border:1px solid color-mix(in srgb,var(--estagio) 50%,transparent); border-radius:9px; background:rgba(2,15,12,.55); }
 .cor-rio-estagio.sem-estagio { border:1px dashed rgba(166,189,183,.4); }

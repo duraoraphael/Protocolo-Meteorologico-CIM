@@ -115,8 +115,8 @@ test('05h→15h informa mudança e alerta de calor só em transição', () => {
   const agravado = detectarAlertasGraves({ ...base, climaSaude: { status: 'operacional', dados: severo } }).filter((a) => a.assinatura === 'calor-ehf');
   assert.equal(filtrarNovidades('petropolis', agravado, estado)[0].motivo, 'agravou');
   const htmlAlerta = renderAlertEmailHtml({ cidade, report: { dataFormatadaCurta: '29/09/2026', horaConsulta: '15:00' }, alertas: agravado });
-  assert.match(htmlAlerta, /ALERTA DE CALOR/);
-  assert.match(htmlAlerta, /ALERTA P2/);
+  assert.match(htmlAlerta, /CALOR \/ RISCO À SAÚDE — ALERTA/);
+  assert.match(htmlAlerta, /Protocolo aplicável:<\/strong> P2/);
   assert.equal(detectarAlertasGraves({ ...base, climaSaude: { status: 'indisponivel', dados: null } }).some((a) => a.assinatura === 'calor-ehf'), false);
 });
 
@@ -145,8 +145,8 @@ test('PDF, e-mail e painel exibem bloco próprio sem alterar severidade meteorol
   const tela = painel.executar('Dashboard.home')(report);
   const calor = report.ocorrencias.find((o) => o.fenomeno === 'calor');
   assert.equal(calor.grau, 'ALERTA');
-  assert.match(tela, /aria-label="ALERTA — Calor e saúde"/);
-  assert.match(tela, /Calor e Saúde/);
+  assert.match(tela, /aria-label="CALOR \/ RISCO À SAÚDE — ALERTA"/);
+  assert.match(tela, /CALOR \/ RISCO À SAÚDE — ALERTA/);
   assert.doesNotMatch(tela, /Previsão Clima e Saúde/, 'lista de vários dias fora do painel');
   const detalhe = painel.executar('Dashboard.details')(report, `ocorrencia:${calor.id}`);
   assert.match(detalhe, /Risco combinado à saúde/);

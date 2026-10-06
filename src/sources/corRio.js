@@ -1,17 +1,20 @@
 // Integração server-side com o COR-Rio (Centro de Operações e Resiliência da
-// Prefeitura do Rio). Duas fontes oficiais, públicas e sem chave:
+// Prefeitura do Rio). Três fontes oficiais, públicas e sem chave:
 //
 // - Estágio operacional: https://appcor.cor-rio.work/estagio_cidade — o mesmo
 //   endpoint JSON que o widget de estágio da página https://cor.rio/ consulta.
 //   Resposta: { estagio: "Estágio N", inicio: ISO (início do estágio), mensagem,
 //   mensagem2, cor, id }. Só o texto "Estágio N" define o nível; nada é deduzido
 //   de temperatura, chuva ou avisos do INMET.
+// - Estágio de calor: https://appcor.cor-rio.work/calor_api?formato=texto —
+//   endpoint consumido pelo próprio site cor.rio. Resposta JSON: "calor N".
+//   É um protocolo independente do estágio operacional da cidade.
 // - Comunicados: API REST do WordPress do cor.rio (/wp-json/wp/v2/posts) nas
 //   categorias "Estágios" (44) e "Prevenção e Operação" (46). A categoria
 //   "Estágios" sozinha não basta: o COR nem sempre marca nela as mudanças de
 //   estágio.
 //
-// Estágio e comunicados têm horários próprios e são guardados separadamente:
+// Estágio operacional, estágio de calor e comunicados têm horários próprios e são guardados separadamente:
 // cada um mantém a última coleta válida (memória + data/cor-rio.json) e o
 // horário em que foi consultado com sucesso. Uma falha nunca apaga o dado
 // anterior nem coloca um estágio padrão no lugar.
@@ -26,6 +29,8 @@ const FONTE = "COR-Rio — Centro de Operações e Resiliência (Prefeitura do R
 const ABRANGENCIA = "Município do Rio de Janeiro";
 const URL_ESTAGIO = "https://appcor.cor-rio.work/estagio_cidade";
 const URL_ESTAGIO_PUBLICA = "https://cor.rio/estagios-operacionais-da-cidade/";
+const URL_CALOR = "https://appcor.cor-rio.work/calor_api?formato=texto";
+const URL_CALOR_PUBLICA = "https://cor.rio/niveis-de-calor/";
 const CATEGORIAS_COMUNICADOS = Object.freeze([44, 46]);
 // Categoria "Previsão do Tempo" do cor.rio: identifica os comunicados
 // meteorológicos (usada pelo e-mail para escolher o comunicado do dia).
@@ -84,6 +89,19 @@ function interpretarEstagio(json) {
     vigenteDesde: isoGmt(json.inicio),
     mensagens,
     urlPublica: URL_ESTAGIO_PUBLICA,
+  };
+}
+
+/** Interpreta somente a resposta oficial literal "calor 1" a "calor 5". */
+function interpretarCalor(json) {
+  const correspondencia = /^\s*calor\s*([1-5])\s*$/i.exec(typeof json === "string" ? json : "");
+  if (!correspondencia) throw erroInterpretacao("COR-Rio (calor): estágio ausente ou em formato não reconhecido");
+  const nivel = Number(correspondencia[1]);
+  return {
+    nivel,
+    rotuloOficial: `Calor ${nivel}`,
+    rotulo: `Estágio de Calor ${nivel}`,
+    urlPublica: URL_CALOR_PUBLICA,
   };
 }
 
@@ -200,6 +218,7 @@ function criarServicoCorRio({
   // a cada sucesso.
   const partes = {
     estagio: { dados: salvo.estagio?.dados || null, consultadoEm: salvo.estagio?.consultadoEm || null, ultimaTentativaEm: null, ultimaFalha: null },
+    calor: { dados: salvo.calor?.dados || null, consultadoEm: salvo.calor?.consultadoEm || null, ultimaTentativaEm: null, ultimaFalha: null },
     comunicados: { dados: Array.isArray(salvo.comunicados?.dados) ? salvo.comunicados.dados : null, consultadoEm: salvo.comunicados?.consultadoEm || null, ultimaTentativaEm: null, ultimaFalha: null },
   };
   let emAndamento = null;
@@ -208,6 +227,7 @@ function criarServicoCorRio({
     try {
       salvar({
         estagio: { dados: partes.estagio.dados, consultadoEm: partes.estagio.consultadoEm },
+        calor: { dados: partes.calor.dados, consultadoEm: partes.calor.consultadoEm },
         comunicados: { dados: partes.comunicados.dados, consultadoEm: partes.comunicados.consultadoEm },
       });
     } catch (erro) {
@@ -239,12 +259,14 @@ function criarServicoCorRio({
     if (emAndamento) return emAndamento;
     emAndamento = Promise.all([
       atualizarParte("estagio", URL_ESTAGIO, interpretarEstagio, "COR-Rio (estágio)"),
+      atualizarParte("calor", URL_CALOR, interpretarCalor, "COR-Rio (calor)"),
       atualizarParte("comunicados", URL_COMUNICADOS, interpretarComunicados, "COR-Rio (comunicados)"),
     ])
       .then((resultados) => {
         if (resultados.some(Boolean)) persistir();
         const e = partes.estagio.dados;
-        logger.log?.(`[COR-RIO] Consulta concluída: estágio ${resultados[0] ? e.nivel : "indisponível"}; comunicados ${resultados[1] ? partes.comunicados.dados.length : "indisponíveis"}.`);
+        const c = partes.calor.dados;
+        logger.log?.(`[COR-RIO] Consulta concluída: estágio ${resultados[0] ? e.nivel : "indisponível"}; calor ${resultados[1] ? c.nivel : "indisponível"}; comunicados ${resultados[2] ? partes.comunicados.dados.length : "indisponíveis"}.`);
       })
       .finally(() => { emAndamento = null; });
     return emAndamento;
@@ -256,7 +278,7 @@ function criarServicoCorRio({
   }
 
   function estado() {
-    const { estagio, comunicados } = partes;
+    const { estagio, calor, comunicados } = partes;
     return {
       fonte: FONTE,
       abrangencia: ABRANGENCIA,
@@ -267,6 +289,13 @@ function criarServicoCorRio({
         consultadoEm: estagio.consultadoEm,
         ultimaTentativaEm: estagio.ultimaTentativaEm,
         falha: estagio.ultimaFalha,
+      },
+      calor: {
+        status: situacao(calor),
+        dados: calor.dados,
+        consultadoEm: calor.consultadoEm,
+        ultimaTentativaEm: calor.ultimaTentativaEm,
+        falha: calor.ultimaFalha,
       },
       comunicados: {
         status: situacao(comunicados),
@@ -283,6 +312,7 @@ function criarServicoCorRio({
   async function obter() {
     const ultima = Math.max(
       Date.parse(partes.estagio.ultimaTentativaEm || "") || 0,
+      Date.parse(partes.calor.ultimaTentativaEm || "") || 0,
       Date.parse(partes.comunicados.ultimaTentativaEm || "") || 0
     );
     if (agora() - ultima >= ttlMs) await atualizar();
@@ -313,6 +343,7 @@ function fontesCorRio(estado) {
   const manuais = [];
   const partes = [
     ["estagio", "COR-Rio — estágio operacional", "Estágio operacional da cidade (endpoint público appcor.cor-rio.work, o mesmo do site cor.rio)"],
+    ["calor", "COR-Rio — estágio de calor", "Nível oficial do Protocolo de Calor (endpoint público appcor.cor-rio.work, consumido pelo site cor.rio)"],
     ["comunicados", "COR-Rio — comunicados", "Comunicados das categorias Estágios e Prevenção e Operação (API pública do site cor.rio)"],
   ];
   for (const [chave, nome, uso] of partes) {
@@ -343,15 +374,19 @@ async function anexarCorRioAoRelatorio(report, cidade, { servico = servicoCorRio
     estado = {
       fonte: FONTE, abrangencia: ABRANGENCIA, urlPublica: "https://cor.rio/",
       estagio: { status: "indisponivel", dados: null, consultadoEm: null, falha: "falha inesperada na consulta" },
+      calor: { status: "indisponivel", dados: null, consultadoEm: null, falha: "falha inesperada na consulta" },
       comunicados: { status: "indisponivel", itens: [], janelaHoras: JANELA_VIGENCIA_HORAS, consultadoEm: null, falha: "falha inesperada na consulta" },
     };
+  }
+  if (!estado.calor) {
+    estado.calor = { status: "indisponivel", dados: null, consultadoEm: null, ultimaTentativaEm: null, falha: "dado não disponibilizado nesta resposta" };
   }
   report.corRio = estado;
   const { automatizadas, manuais } = fontesCorRio(estado);
   // substitui a antiga linha manual genérica "COR-Rio"
   report.fontesManuais = [...(report.fontesManuais || []).filter((f) => f.nome !== "COR-Rio"), ...manuais];
   report.fontesAutomatizadas = [...(report.fontesAutomatizadas || []), ...automatizadas];
-  if (estado.estagio.status !== "operacional" || estado.comunicados.status !== "operacional") {
+  if (estado.estagio.status !== "operacional" || estado.calor.status !== "operacional" || estado.comunicados.status !== "operacional") {
     report.avisosColeta = [...(report.avisosColeta || []), "COR-Rio: não foi possível atualizar todas as informações nesta geração (veja o card do COR-Rio)."];
   }
   return estado;
@@ -363,9 +398,11 @@ module.exports = {
   anexarCorRioAoRelatorio,
   fontesCorRio,
   interpretarEstagio,
+  interpretarCalor,
   interpretarComunicados,
   comunicadosVigentes,
   URL_ESTAGIO,
+  URL_CALOR,
   URL_COMUNICADOS,
   CATEGORIA_PREVISAO_TEMPO,
   JANELA_VIGENCIA_HORAS,

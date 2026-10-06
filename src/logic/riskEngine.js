@@ -9,6 +9,7 @@ const {
   GRAUS,
   classificarCondicoesMeteorologicas,
 } = require("./inmetAlertRules");
+const { formatarTitulo } = require("../../public/alert-title");
 
 const LIMIARES = {
   // Contrato legado do relatório semanal. O informativo diário não usa estes
@@ -210,7 +211,7 @@ function avaliarRiscos(consolidado) {
 
   for (const candidato of candidatos) {
     candidato.grau ||= grauPorNivel(candidato.nivel);
-    candidato.titulo ||= `${candidato.grau} — ${rotuloFenomeno(candidato.tipo)}`;
+    candidato.titulo ||= formatarTitulo(rotuloFenomeno(candidato.tipo), candidato.grau);
     candidato.recomendacoes ||= [];
   }
 

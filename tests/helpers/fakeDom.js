@@ -58,7 +58,7 @@ function carregarPainel({ responder = () => ({}) } = {}) {
     fetch: async (url, opcoes) => ({ ok: true, json: async () => responder(String(url), opcoes) }),
   };
   vm.createContext(contexto);
-  for (const arquivo of ["cor-rio-compartilhado.js", "dashboard-components.js", "dashboard.js"]) {
+  for (const arquivo of ["alert-title.js", "cor-rio-compartilhado.js", "dashboard-components.js", "dashboard.js"]) {
     const codigo = fs.readFileSync(path.join(__dirname, "..", "..", "public", arquivo), "utf-8");
     vm.runInContext(codigo, contexto, { filename: arquivo });
   }

@@ -45,13 +45,19 @@ function relatorio(corRio, extra = {}) {
   };
 }
 
-function estado(lista, { nivel = 2, comStatus = "operacional", estagioStatus = "operacional" } = {}) {
+function estado(lista, { nivel = 2, nivelCalor = 3, calorStatus = "operacional", comStatus = "operacional", estagioStatus = "operacional" } = {}) {
   return {
     fonte: "COR-Rio — Centro de Operações e Resiliência (Prefeitura do Rio)", abrangencia: "Município do Rio de Janeiro",
     estagio: {
       status: estagioStatus,
       dados: nivel ? { nivel, rotulo: `Estágio ${nivel}`, vigenteDesde: "2026-09-30T08:00:47Z", mensagens: [] } : null,
       consultadoEm: nivel ? "2026-10-02T13:55:00Z" : null, falha: estagioStatus === "operacional" ? null : "a fonte não respondeu a tempo",
+    },
+    calor: {
+      status: calorStatus,
+      dados: nivelCalor ? { nivel: nivelCalor, rotuloOficial: `Calor ${nivelCalor}`, rotulo: `Estágio de Calor ${nivelCalor}`, urlPublica: "https://cor.rio/niveis-de-calor/" } : null,
+      consultadoEm: nivelCalor ? "2026-10-02T13:57:00Z" : null,
+      falha: calorStatus === "operacional" ? null : "falha de conexão com a fonte",
     },
     comunicados: {
       status: comStatus, janelaHoras: 24, consultadoEm: comStatus === "indisponivel" ? null : "2026-10-02T13:56:00Z",
@@ -127,6 +133,8 @@ test("e-mail: só o comunicado do dia, sem próximos dias e sem outros comunicad
   assert.equal(td.find('a[href="https://cor.rio/post-1/"]').text(), "Consultar publicação oficial");
   const selo = td.find("span").filter((_, el) => $(el).text() === "ESTÁGIO 2");
   assert.match(selo.attr("style"), /background:#FACC15;color:#0B1A12;/);
+  assert.equal(td.find("span").filter((_, el) => $(el).text() === "ESTÁGIO DE CALOR 3").length, 1);
+  assert.match(texto, /Estágio de calor: Estágio de Calor 3\. Consulta à fonte: 02\/10\/2026 10:57/);
   assert.match($("table").filter((_, el) => /border-left:7px solid #FACC15/.test($(el).attr("style") || "")).attr("style"), /background:#FFFAE8;.*border-radius:8px/);
 });
 

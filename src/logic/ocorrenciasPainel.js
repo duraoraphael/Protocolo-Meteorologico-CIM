@@ -32,10 +32,10 @@ const FENOMENO_POR_TIPO = Object.freeze({
 });
 
 const ROTULO_FENOMENO = Object.freeze({
-  tempestade: "Tempestade",
+  tempestade: "Tempestade com raios",
   chuva: "Chuva intensa",
   vento: "Vento",
-  calor: "Calor e saúde",
+  calor: "Calor / risco à saúde",
   "baixa-umidade": "Baixa umidade",
   ressaca: "Agitação marítima",
   uv: "Índice UV elevado",

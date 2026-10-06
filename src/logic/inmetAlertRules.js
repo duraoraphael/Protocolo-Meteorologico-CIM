@@ -2,6 +2,7 @@
 // INMET. A fonte do dado numérico continua registrada separadamente, pois o
 // endpoint de previsão do INMET usado pelo projeto não fornece chuva horária
 // nem rajada numérica.
+const { formatarTitulo } = require("../../public/alert-title");
 
 const GRAUS = Object.freeze({
   NORMAL: 0,
@@ -123,7 +124,7 @@ function classificarCondicoesMeteorologicas({
       assinatura: "vento",
       fenomeno: "vento",
       tipo: "Vento",
-      titulo: `${grauVento} — VENTO`,
+      titulo: formatarTitulo("VENTO", grauVento),
       grau: grauVento,
       detalhe,
       descricao: detalhe,
@@ -146,7 +147,7 @@ function classificarCondicoesMeteorologicas({
       assinatura: "chuva",
       fenomeno: "chuva",
       tipo: "Chuva intensa",
-      titulo: `${classificacaoChuva.grau} — CHUVA INTENSA`,
+      titulo: formatarTitulo("CHUVA INTENSA", classificacaoChuva.grau),
       grau: classificacaoChuva.grau,
       detalhe,
       descricao: detalhe,

@@ -6,6 +6,7 @@ const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const monitorSecas = require("../sources/monitorSecas");
 const CorRio = require("../../public/cor-rio-compartilhado");
 const { comunicadoDoDia } = require("./corRioEmail");
+const AlertTitle = require("../../public/alert-title");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -49,8 +50,10 @@ function textoOficialHtml(valor) {
 
 function cardEvento({ titulo, grau, descricao, janela, fonteDados, detalhes = "", semFonte = false }) {
   const visual = visualCard(grau);
+  const tituloFormatado = AlertTitle.formatarTitulo(titulo, grau);
+  const classeTitulo = tituloFormatado.length > 34 ? " evento-titulo-longo" : "";
   return `<div class="evento-card" style="border-color:${visual.cor};background:${visual.fundo};">
-    <div class="evento-titulo" style="color:${visual.cor};"><span class="evento-icone">●</span> ${esc(titulo)}</div>
+    <div class="evento-titulo${classeTitulo}" style="color:${visual.cor};"><span class="evento-icone">●</span> ${esc(tituloFormatado)}</div>
     ${descricao ? `<p class="evento-descricao">${esc(descricao)}</p>` : ""}
     ${detalhes}
     ${janela ? `<p class="evento-linha"><em>Janela prevista:</em> ${esc(janela)}</p>` : ""}
@@ -63,7 +66,7 @@ function blocoEventoExtremo(r) {
   if (eventos.length) return eventos.map((evento) => cardEvento(evento)).join("");
   if ((r.severidade?.grau || "NORMAL") !== "NORMAL") return "";
   return cardEvento({
-    titulo: "CONDIÇÃO NORMAL",
+    titulo: "CONDIÇÕES METEOROLÓGICAS",
     grau: "NORMAL",
     descricao: "Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.",
     semFonte: true,
@@ -74,7 +77,7 @@ function blocoRecomendacoesPorFenomeno(r) {
   const grupos = eventosLocais(r)
     .filter((evento) => Array.isArray(evento.recomendacoes) && evento.recomendacoes.length)
     .map((evento) => ({
-      nome: String(evento.titulo || evento.tipo).split(/\s+—\s+/).slice(-1)[0],
+      nome: AlertTitle.nomeParametro(evento.fenomeno || evento.titulo || evento.tipo),
       grau: evento.grau,
       itens: evento.recomendacoes,
     }));
@@ -200,8 +203,12 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
   const selo = s.nivel
     ? `<span class="cor-selo" style="background:${cor};color:${CorRio.TINTA};">ESTÁGIO ${s.nivel}</span>`
     : `<span class="cor-selo cor-selo-neutro">ESTÁGIO INDISPONÍVEL</span>`;
+  const corCalor = s.calor ? s.calor.cor : CorRio.NEUTRO.cor;
+  const seloCalor = s.nivelCalor
+    ? `<span class="cor-selo cor-selo-calor" style="background:${corCalor};color:${CorRio.TINTA};">ESTÁGIO DE CALOR ${s.nivelCalor}</span>`
+    : `<span class="cor-selo cor-selo-neutro cor-selo-calor">CALOR INDISPONÍVEL</span>`;
   const abrirCard = (titulo, extraClasse = "") => `<div class="evento-card cor-card${extraClasse}" style="border-color:${cor};background:${fundo};">
-    <div class="cor-topo"><div class="cor-titulo">${titulo}</div>${selo}</div>`;
+    <div class="cor-topo"><div class="cor-titulo">${titulo}</div><div class="cor-selos">${selo}${seloCalor}</div></div>`;
   const desatualizado = (rotulo, iso) => `<p class="cor-desatualizado"><strong>Dados desatualizados</strong> — a consulta ao COR-Rio falhou nesta geração. Última consulta bem-sucedida ${rotulo}: ${esc(dataHoraBrasilia(iso))}.</p>`;
 
   // Estágio: informação própria, com seus horários.
@@ -211,7 +218,14 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
       ${s.estagioDesatualizado ? desatualizado("do estágio", est.consultadoEm) : ""}`
     : `<p class="evento-linha"><strong>Estágio indisponível</strong> — não há consulta válida ao estágio operacional do COR-Rio${est.falha ? ` (${esc(est.falha)})` : ""}. Nenhum estágio é presumido.</p>`;
 
+  const calor = estado.calor || {};
+  const linhaCalor = s.nivelCalor
+    ? `<p class="evento-linha"><strong>Estágio de calor:</strong> Estágio de Calor ${s.nivelCalor}. Consulta à fonte: ${esc(dataHoraBrasilia(calor.consultadoEm))}. Protocolo independente do estágio operacional da cidade.</p>
+      ${s.calorDesatualizado ? desatualizado("do estágio de calor", calor.consultadoEm) : ""}`
+    : `<p class="evento-linha"><strong>Estágio de calor indisponível</strong> — não há consulta válida ao Protocolo de Calor do COR-Rio${calor.falha ? ` (${esc(calor.falha)})` : ""}. Nenhum nível é presumido.</p>`;
+
   const linkEstagios = linkCorRioHtml(est.dados?.urlPublica || "https://cor.rio/estagios-operacionais-da-cidade/", "Estágios operacionais no cor.rio");
+  const linkCalor = linkCorRioHtml(calor.dados?.urlPublica || "https://cor.rio/niveis-de-calor/", "Níveis de calor no cor.rio");
 
   if (s.comunicados !== "disponivel" || semComunicadoDoDia) {
     const texto = semComunicadoDoDia
@@ -227,7 +241,8 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
       ${texto}
       <div class="cor-separador"></div>
       ${linhaEstagio}
-      <p class="evento-linha"><strong>Abrangência:</strong> ${esc(estado.abrangencia || "Município do Rio de Janeiro")} &nbsp;|&nbsp; <strong>Fonte:</strong> COR-Rio${linkEstagios ? ` &nbsp;|&nbsp; ${linkEstagios}` : ""}</p>
+      ${linhaCalor}
+      <p class="evento-linha"><strong>Abrangência:</strong> ${esc(estado.abrangencia || "Município do Rio de Janeiro")} &nbsp;|&nbsp; <strong>Fonte:</strong> COR-Rio${linkEstagios ? ` &nbsp;|&nbsp; ${linkEstagios}` : ""}${linkCalor ? ` &nbsp;|&nbsp; ${linkCalor}` : ""}</p>
     </div>`;
   }
 
@@ -263,6 +278,7 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
       ${ultima ? `${total > 1 && linkPublicacao ? `<p class="evento-linha">Fim do comunicado · ${linkPublicacao}</p>` : ""}
       <div class="cor-separador"></div>
       ${linhaEstagio}
+      ${linhaCalor}
       ${relacao}` : `<p class="cor-continua">Continua na próxima parte.</p>`}
     </div>`;
   }).join("") + outrosHtml;
@@ -655,7 +671,7 @@ function blocoClimaSaude(r) {
     <p class="evento-linha">Consulta: ${esc(dados.consultadoEm)}${integracao.status === 'armazenado' ? ' — última coleta válida armazenada' : ''}</p>
     ${previsao ? `<div class="evento-linha"><strong>Previsão Clima e Saúde</strong><ul>${previsao}</ul></div>` : ''}`;
   return cardEvento({
-    titulo: `${nivel.grau} — CALOR / RISCO À SAÚDE${nivel.protocolo ? ` ${nivel.protocolo}` : ''}`,
+    titulo: "CALOR / RISCO À SAÚDE",
     grau: nivel.grau,
     descricao: `EHF: ${dados.ehf?.classificacao || "Indisponível"}${dados.ehf?.valor == null ? '' : ` (${dados.ehf.valor})`}`,
     fonteDados: dados.source,
@@ -811,7 +827,13 @@ function renderPdfHtml(r, opcoes = {}) {
     font-weight: 700;
     line-height: 1.4;
     margin: 0 0 12px 0;
+    white-space: nowrap;
+    word-break: keep-all;
+    overflow-wrap: normal;
+    break-after: avoid;
+    page-break-after: avoid;
   }
+  .evento-titulo-longo { font-size: 11.5pt; letter-spacing: -0.1px; }
   .evento-icone { font-size: 11pt; vertical-align: 1px; }
   .evento-descricao { margin: 0 0 10px 0; line-height: 1.55; }
   .evento-linha { margin: 8px 0 0 0; line-height: 1.55; }
@@ -832,6 +854,8 @@ function renderPdfHtml(r, opcoes = {}) {
   .cor-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
   .cor-titulo { font-size: 15pt; font-weight: 700; line-height: 1.3; color: #1F2A26; }
   .cor-selo { flex: none; padding: 4px 12px; border-radius: 5px; font-size: 10.5pt; font-weight: 800; letter-spacing: 0.6px; white-space: nowrap; }
+  .cor-selos { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: none; }
+  .cor-selo-calor { font-size: 9.5pt; }
   .cor-selo-neutro { background: #DDE3E1; color: #2B3431; border: 1px dashed #8A9894; }
   .cor-com-titulo { margin: 0 0 8px 0; font-size: 12pt; line-height: 1.4; }
   .cor-cont { font-weight: normal; font-size: 10pt; color: #555; }

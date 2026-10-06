@@ -4,6 +4,7 @@ const { ordenarEventosParaExibicao } = require("./eventOrdering");
 const { consolidarAvisosInmet } = require("../sources/inmet");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
+const AlertTitle = require("../../public/alert-title");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
 // bgcolor + background) para que nenhum cliente herde áreas escuras. Só o
@@ -133,13 +134,13 @@ function eventosLocais(r) {
 }
 
 function cartaoEvento(evento, grauGeral) {
-  const grau = evento.grau || String(evento.titulo || "").split(" — ")[0] || grauGeral;
+  const grau = evento.grau || AlertTitle.normalizarGrau(evento.titulo) || grauGeral;
   const linhas = [
     `<div>${texto(evento.descricao)}</div>`,
     presente(evento.janela) ? `<div style="margin-top:3px;"><em>Janela prevista:</em> ${esc(evento.janela)}</div>` : "",
     `<div style="margin-top:3px;">Fonte de dados: ${texto(evento.fonteDados)}</div>`,
   ];
-  return cartao(texto(evento.titulo), corGrau(grau), linhas);
+  return cartao(esc(AlertTitle.tituloEvento(evento, grau)), corGrau(grau), linhas);
 }
 
 function cartaoCalor(climaSaude) {
@@ -152,7 +153,7 @@ function cartaoCalor(climaSaude) {
     `<div style="margin-top:3px;">RISCO COMBINADO À SAÚDE: ${texto(dados.riscoCombinado)}</div>`,
     `<div style="margin-top:3px;">Fonte de dados: ${texto(dados.source)}</div>`,
   ];
-  return cartao(`${esc(grau)} — CALOR / RISCO À SAÚDE`, corGrau(grau), linhas);
+  return cartao(esc(AlertTitle.formatarTitulo("CALOR / RISCO À SAÚDE", grau)), corGrau(grau), linhas);
 }
 
 function listaOficial(valor) {
@@ -188,9 +189,7 @@ function avisosInmet(r) {
 }
 
 function nomeFenomeno(evento) {
-  const titulo = String(evento.titulo || "");
-  const partes = titulo.split(/\s+—\s+/);
-  return partes.length > 1 ? partes.slice(1).join(" — ") : (evento.fenomeno || evento.tipo || titulo);
+  return AlertTitle.nomeParametro(evento.fenomeno || evento.titulo || evento.tipo);
 }
 
 function grupoRecomendacoes(rotulo, grau, itens) {
@@ -248,7 +247,7 @@ function fontesDeDados(r, eventos) {
 function renderEmailHtml(r) {
   const eventos = eventosLocais(r);
   const normal = !eventos.length && r.severidade?.grau === "NORMAL"
-    ? cartao("CONDIÇÃO NORMAL", corGrau("NORMAL"), ["<div>Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.</div>"])
+    ? cartao(AlertTitle.formatarTitulo("CONDIÇÕES METEOROLÓGICAS", "NORMAL"), corGrau("NORMAL"), ["<div>Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.</div>"])
     : "";
   const mudancas = renderDailyChanges(r.mudancasDia);
 

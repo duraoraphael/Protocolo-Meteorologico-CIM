@@ -34,7 +34,7 @@ function post(id, { horas = 2, paragrafos = "<p>Conteúdo oficial.</p><ul><li>Or
   };
 }
 
-function estado({ nivel = 2, estagioStatus = "operacional", comStatus = "operacional", posts = [post(1), post(2, { horas: 5 })], vigenteDesde = "2026-10-02T10:00:00Z" } = {}) {
+function estado({ nivel = 2, estagioStatus = "operacional", nivelCalor = 3, calorStatus = "operacional", comStatus = "operacional", posts = [post(1), post(2, { horas: 5 })], vigenteDesde = "2026-10-02T10:00:00Z" } = {}) {
   return {
     fonte: "COR-Rio — Centro de Operações e Resiliência (Prefeitura do Rio)", abrangencia: "Município do Rio de Janeiro",
     estagio: {
@@ -42,6 +42,12 @@ function estado({ nivel = 2, estagioStatus = "operacional", comStatus = "operaci
       dados: nivel ? { nivel, rotulo: `Estágio ${nivel}`, vigenteDesde, mensagens: [], urlPublica: "https://cor.rio/estagios-operacionais-da-cidade/" } : null,
       consultadoEm: nivel ? "2026-10-02T13:55:00Z" : null,
       falha: estagioStatus === "operacional" ? null : "a fonte não respondeu a tempo",
+    },
+    calor: {
+      status: calorStatus,
+      dados: nivelCalor ? { nivel: nivelCalor, rotuloOficial: `Calor ${nivelCalor}`, rotulo: `Estágio de Calor ${nivelCalor}`, urlPublica: "https://cor.rio/niveis-de-calor/" } : null,
+      consultadoEm: nivelCalor ? "2026-10-02T13:57:00Z" : null,
+      falha: calorStatus === "operacional" ? null : "a fonte não respondeu a tempo",
     },
     comunicados: {
       status: comStatus, janelaHoras: 24,
@@ -73,10 +79,11 @@ test("cada estágio colore faixa, borda e selo; fundo é um tom claro da mesma c
     const { $ } = await html(estado({ nivel }));
     const card = $(".cor-card").first();
     assert.match(card.attr("style"), new RegExp(`border-color:${CORES[nivel]};background:${CorRio.tomClaro(CORES[nivel], 0.1)};`));
-    const selo = card.find(".cor-selo");
+    const selo = card.find(".cor-selo").not(".cor-selo-calor");
     assert.equal(selo.text(), `ESTÁGIO ${nivel}`);
     assert.equal(selo.attr("style"), `background:${CORES[nivel]};color:#0B1A12;`);
-    assert.equal($(".cor-selo").length, 1, "só o selo do estágio atual, sem sequência 1–5");
+    assert.equal($(".cor-selo").length, 2, "um selo operacional e um selo do estágio de calor");
+    assert.equal(card.find(".cor-selo-calor").text(), "ESTÁGIO DE CALOR 3");
   }
 });
 
@@ -94,6 +101,7 @@ test("conteúdo: título, conteúdo/orientações, abrangência, publicação, f
   assert.equal(meta["Consulta à fonte"], "02/10/2026 10:56 (Brasília)");
   assert.equal(card.find('a[href="https://cor.rio/post-1/"]').text(), "Consultar publicação oficial");
   assert.match(card.text(), /Estágio 2, em vigor desde 02\/10\/2026 07:00 \(Brasília\)\. Consulta à fonte: 02\/10\/2026 10:55/);
+  assert.match(card.text(), /Estágio de Calor 3\. Consulta à fonte: 02\/10\/2026 10:57/);
   assert.match($(".cor-outros").text(), /Comunicado 2/);
 });
 
@@ -113,16 +121,16 @@ test("comunicado anterior ao início do estágio é sinalizado; estágio não é
 test("sem comunicado vigente, desatualizado e indisponível são estados distintos", async () => {
   const nenhum = await html(estado({ posts: [] }));
   assert.match(nenhum.$(".cor-card").text(), /Nenhum comunicado vigente disponibilizado pela fonte/);
-  assert.equal(nenhum.$(".cor-selo").text(), "ESTÁGIO 2");
+  assert.equal(nenhum.$(".cor-selo").not(".cor-selo-calor").text(), "ESTÁGIO 2");
 
   const velho = await html(estado({ nivel: 4, estagioStatus: "desatualizado", comStatus: "desatualizado" }));
   assert.equal(velho.$(".cor-desatualizado").length, 2);
   assert.match(velho.$(".cor-desatualizado").first().text(), /Dados desatualizados.*Última consulta bem-sucedida dos comunicados: 02\/10\/2026 10:56/s);
 
-  const fora = await html(estado({ nivel: null, estagioStatus: "indisponivel", comStatus: "indisponivel" }));
+  const fora = await html(estado({ nivel: null, estagioStatus: "indisponivel", nivelCalor: null, calorStatus: "indisponivel", comStatus: "indisponivel" }));
   const card = fora.$(".cor-card");
-  assert.equal(card.find(".cor-selo").text(), "ESTÁGIO INDISPONÍVEL");
-  assert.ok(card.find(".cor-selo").hasClass("cor-selo-neutro"));
+  assert.equal(card.find(".cor-selo").not(".cor-selo-calor").text(), "ESTÁGIO INDISPONÍVEL");
+  assert.ok(card.find(".cor-selo").not(".cor-selo-calor").hasClass("cor-selo-neutro"));
   assert.match(card.attr("style"), /border-color:#8A9894;background:#F3F5F4;/);
   assert.match(card.text(), /Estágio indisponível/);
   assert.match(card.text(), /Não foi possível consultar os comunicados/);
@@ -144,7 +152,7 @@ test("comunicado longo: partes de continuação identificadas, sem omitir texto;
 
 test("fontes: coleta automática só quando a consulta funcionou; falha vai para verificação manual", async () => {
   const ok = await html(estado());
-  assert.deepEqual(ok.r.fontesAutomatizadas.map((f) => f.nome), ["Open-Meteo", "COR-Rio — estágio operacional", "COR-Rio — comunicados"]);
+  assert.deepEqual(ok.r.fontesAutomatizadas.map((f) => f.nome), ["Open-Meteo", "COR-Rio — estágio operacional", "COR-Rio — estágio de calor", "COR-Rio — comunicados"]);
   assert.ok(!ok.r.fontesManuais.some((f) => /COR-Rio/.test(f.nome)), "linha manual genérica removida");
   assert.match(ok.r.fontesAutomatizadas[1].uso, /consultado automaticamente em 02\/10\/2026 10:55/);
 

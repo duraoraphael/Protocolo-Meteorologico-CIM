@@ -1,4 +1,5 @@
 const { HEADER_AMARELO, HEADER_VERDE, srcLogoEmail } = require("../config/headerAssets");
+const AlertTitle = require("../../public/alert-title");
 
 const EMAIL_HEADER_VERDE = HEADER_VERDE;
 const EMAIL_HEADER_AMARELO = HEADER_AMARELO;
@@ -9,10 +10,10 @@ const EMAIL_PETROBRAS_LARGURA = 150;
 const EMAIL_PETROBRAS_ALTURA = 30;
 
 const EMAIL_STATUS = Object.freeze({
-  NORMAL: Object.freeze({ cor: "#2E7D32", fundo: "#E8F5E9" }),
-  "ATENÇÃO": Object.freeze({ cor: "#F57C00", fundo: "#FFF3E0" }),
-  ALERTA: Object.freeze({ cor: "#D32F2F", fundo: "#FFEBEE" }),
-  "EMERGÊNCIA": Object.freeze({ cor: "#B71C1C", fundo: "#FFEBEE" }),
+  NORMAL: Object.freeze({ cor: "#2E7D32", fundo: "#E8F5E9", selo: "#2E7D32", textoSelo: "#FFFFFF" }),
+  "ATENÇÃO": Object.freeze({ cor: "#9A7600", fundo: "#FFF9DB", selo: "#FBC02D", textoSelo: "#222222" }),
+  ALERTA: Object.freeze({ cor: "#EF6C00", fundo: "#FFF3E0", selo: "#EF6C00", textoSelo: "#FFFFFF" }),
+  "EMERGÊNCIA": Object.freeze({ cor: "#C62828", fundo: "#FFEBEE", selo: "#C62828", textoSelo: "#FFFFFF" }),
 });
 
 const ORDEM_STATUS = Object.freeze({ NORMAL: 0, "ATENÇÃO": 1, ALERTA: 2, "EMERGÊNCIA": 3 });
@@ -28,15 +29,15 @@ function esc(valor) {
 }
 
 function normalizarGrau(valor) {
-  const texto = String(valor || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase();
-  if (/\bEMERGENCIA\b/.test(texto)) return "EMERGÊNCIA";
-  if (/\bALERTA\b/.test(texto)) return "ALERTA";
-  if (/\bATENCAO\b/.test(texto)) return "ATENÇÃO";
-  if (/\bNORMAL\b/.test(texto)) return "NORMAL";
-  return null;
+  return AlertTitle.normalizarGrau(valor);
+}
+
+function nivelExibicao(grau) {
+  return normalizarGrau(grau) || "NORMAL";
+}
+
+function nomeParametroAlerta(tipo) {
+  return AlertTitle.nomeParametro(tipo || "Condições meteorológicas");
 }
 
 function statusEmail(grau) {
@@ -105,13 +106,14 @@ function classificacaoMudanca(grauAnterior, grauAtual, motivo) {
 function seloStatus(grau, atual = false) {
   const normalizado = normalizarGrau(grau) || "NORMAL";
   const visual = atual ? statusEmail(normalizado) : { cor: "#687078", fundo: "#ECEFF1" };
-  const corTexto = atual ? "#FFFFFF" : "#333333";
-  return `<span style="display:inline-block;border:2px solid ${visual.cor};background:${atual ? visual.cor : visual.fundo};color:${corTexto};padding:7px 12px;font:bold 14px/1.1 Arial,sans-serif;white-space:nowrap;">${esc(normalizado)}</span>`;
+  const fundo = atual ? visual.selo : visual.fundo;
+  const corTexto = atual ? visual.textoSelo : "#333333";
+  return `<span style="display:inline-block;border:2px solid ${visual.cor};background:${fundo};color:${corTexto};padding:7px 12px;font:bold 14px/1.1 Arial,sans-serif;white-space:nowrap;">${esc(nivelExibicao(normalizado))}</span>`;
 }
 
 function recomendacoesHtml(itens) {
   if (!Array.isArray(itens) || !itens.length) return "";
-  return `<div style="margin-top:16px;color:#333333;font:13px/1.5 Arial,sans-serif;"><strong>Recomendações - Protocolo Meteorológico do COMPARTILHADO</strong><ul style="margin:8px 0 0 20px;padding:0;">${itens.map((item) => `<li style="margin-bottom:7px;">${esc(item)}</li>`).join("")}</ul></div>`;
+  return `<div data-alert-recommendations="true" style="border-top:1px solid #E5E7E6;margin-top:16px;padding-top:14px;color:#333333;font:13px/1.5 Arial,sans-serif;"><strong style="display:block;color:#333333;font-size:13px;line-height:1.4;text-transform:uppercase;">Recomendações – Protocolo Meteorológico do COMPARTILHADO</strong><ul style="margin:9px 0 0 20px;padding:0;">${itens.map((item) => `<li data-alert-recommendation="true" style="margin-bottom:7px;">${esc(item)}</li>`).join("")}</ul></div>`;
 }
 
 function renderStatusChangeCard({ tipo, grauAnterior, grau, motivo, detalhe, janela, fonteDados, protocolo, naturezaDado, severidadeTexto, instrucoesOficiais, recomendacoes }) {
@@ -119,29 +121,31 @@ function renderStatusChangeCard({ tipo, grauAnterior, grau, motivo, detalhe, jan
   const anterior = normalizarGrau(grauAnterior);
   const visual = statusEmail(atual);
   const classificacao = classificacaoMudanca(anterior, atual, motivo);
-  const fenomeno = String(tipo || "Meteorológico").toUpperCase();
+  const fenomeno = nomeParametroAlerta(tipo);
+  const nivelAtual = nivelExibicao(atual);
   const avisoOficial = naturezaDado === "Aviso oficial";
   const normalizacaoOficial = avisoOficial && atual === "NORMAL";
   const tituloMudanca = avisoOficial
-    ? `${normalizacaoOficial ? "NORMALIZAÇÃO" : "MUDANÇA"} DE AVISO OFICIAL INMET — ${fenomeno}`
-    : `MUDANÇA DE STATUS — ${fenomeno}`;
+    ? `${normalizacaoOficial ? "NORMALIZAÇÃO" : "MUDANÇA"} DE AVISO OFICIAL INMET`
+    : "MUDANÇA DE STATUS";
   const linhaStatus = anterior
     ? `${seloStatus(anterior)}<span style="display:inline-block;padding:0 12px;color:#333333;font:bold 22px/1 Arial,sans-serif;vertical-align:middle;">→</span>${seloStatus(atual, true)}`
     : `${seloStatus(atual, true)}`;
   const textoTransicao = anterior
-    ? `<div style="color:#555555;font:12px/1.4 Arial,sans-serif;margin-top:10px;">Mudança de gatilho: <strong>${esc(anterior)} → ${esc(atual)}</strong></div>`
-    : `<div style="color:#555555;font:12px/1.4 Arial,sans-serif;margin-top:10px;">Grau atual: <strong>${esc(atual)}</strong></div>`;
-  const rotuloAtual = `${atual}${protocolo ? ` ${esc(protocolo)}` : ""} — ${esc(fenomeno)}`;
+    ? `<div style="color:#555555;font:12px/1.4 Arial,sans-serif;margin-top:10px;">Mudança de gatilho: <strong>${esc(nivelExibicao(anterior))} → ${esc(nivelAtual)}</strong></div>`
+    : "";
+  const tituloAtual = AlertTitle.formatarTitulo(fenomeno, atual);
 
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:${visual.fundo};border:1.5px solid ${visual.cor};border-left:5px solid ${visual.cor};margin:0 0 12px;">
+  return `<table data-alert-card="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#FFFFFF;border:1.5px solid ${visual.cor};border-left:5px solid ${visual.cor};margin:0 0 14px;">
     <tr><td style="padding:15px 18px;color:#333333;font-family:Arial,sans-serif;">
-      <div style="color:${visual.cor};font:bold 18px/1.25 Arial,sans-serif;">${esc(tituloMudanca)}</div>
-      <div style="color:${visual.cor};font:bold 12px/1.3 Arial,sans-serif;margin-top:4px;">${avisoOficial ? "Classificação: " : ""}${classificacao}</div>
+      <div style="color:#666666;font:bold 10px/1.3 Arial,sans-serif;letter-spacing:0.7px;text-transform:uppercase;">${esc(tituloMudanca)} · ${esc(classificacao)}</div>
+      <div data-alert-title="true" style="color:${visual.cor};font:bold 18px/1.3 Arial,sans-serif;margin-top:5px;">${esc(tituloAtual)}</div>
+      <div data-alert-level="${esc(nivelAtual)}" style="color:#333333;font:13px/1.45 Arial,sans-serif;margin-top:8px;"><strong>Classificação:</strong> ${esc(nivelAtual)}</div>
+      ${protocolo ? `<div style="color:#555555;font:12px/1.45 Arial,sans-serif;margin-top:4px;"><strong>Protocolo aplicável:</strong> ${esc(protocolo)}</div>` : ""}
       <div style="margin-top:12px;">${linhaStatus}</div>
       ${textoTransicao}
-      <div style="color:${visual.cor};font:bold 13px/1.4 Arial,sans-serif;margin-top:10px;">${rotuloAtual}</div>
       ${severidadeTexto ? `<div style="color:${visual.cor};font:bold 12px/1.4 Arial,sans-serif;margin-top:5px;">${esc(severidadeTexto)}</div>` : ""}
-      ${detalhe ? `<div style="font:13px/1.55 Arial,sans-serif;margin-top:12px;">${avisoOficial && !normalizacaoOficial ? "<strong>Motivo do aviso:</strong> " : ""}${esc(detalhe)}</div>` : ""}
+      ${detalhe ? `<div style="font:13px/1.55 Arial,sans-serif;margin-top:12px;"><strong>${avisoOficial && !normalizacaoOficial ? "Motivo do aviso" : "Informação meteorológica"}:</strong> ${esc(detalhe)}</div>` : ""}
       ${Array.isArray(instrucoesOficiais) && instrucoesOficiais.length ? `<div style="font:13px/1.55 Arial,sans-serif;margin-top:9px;"><strong>Instruções oficiais:</strong> ${instrucoesOficiais.map(esc).join(" ")}</div>` : ""}
       ${janela ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:9px;">${avisoOficial ? "Vigência" : "Período"}: ${esc(janela)}</div>` : ""}
       ${fonteDados ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:6px;">Fonte de dados: ${esc(fonteDados)}</div>` : ""}
@@ -204,6 +208,8 @@ module.exports = {
   classificacaoMudanca,
   esc,
   interpretarMudanca,
+  nivelExibicao,
+  nomeParametroAlerta,
   normalizarGrau,
   renderDailyChanges,
   renderEmailHeader,

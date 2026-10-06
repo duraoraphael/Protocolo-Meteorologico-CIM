@@ -157,16 +157,16 @@ test("normalização usa o título de atualização e continua com header verde 
 
 test("todas as transições recebem classificação e cor pelo status de destino", () => {
   const casos = [
-    ["NORMAL", "ATENÇÃO", "#F57C00", "AGRAVAMENTO"],
-    ["NORMAL", "ALERTA", "#D32F2F", "AGRAVAMENTO"],
-    ["NORMAL", "EMERGÊNCIA", "#B71C1C", "AGRAVAMENTO"],
-    ["ATENÇÃO", "ALERTA", "#D32F2F", "AGRAVAMENTO"],
+    ["NORMAL", "ATENÇÃO", "#FBC02D", "AGRAVAMENTO"],
+    ["NORMAL", "ALERTA", "#EF6C00", "AGRAVAMENTO"],
+    ["NORMAL", "EMERGÊNCIA", "#C62828", "AGRAVAMENTO"],
+    ["ATENÇÃO", "ALERTA", "#EF6C00", "AGRAVAMENTO"],
     ["ATENÇÃO", "NORMAL", "#2E7D32", "NORMALIZAÇÃO"],
-    ["ALERTA", "ATENÇÃO", "#F57C00", "REDUÇÃO"],
+    ["ALERTA", "ATENÇÃO", "#FBC02D", "REDUÇÃO"],
     ["ALERTA", "NORMAL", "#2E7D32", "NORMALIZAÇÃO"],
-    ["ALERTA", "EMERGÊNCIA", "#B71C1C", "AGRAVAMENTO"],
-    ["EMERGÊNCIA", "ALERTA", "#D32F2F", "REDUÇÃO"],
-    ["EMERGÊNCIA", "ATENÇÃO", "#F57C00", "REDUÇÃO"],
+    ["ALERTA", "EMERGÊNCIA", "#C62828", "AGRAVAMENTO"],
+    ["EMERGÊNCIA", "ALERTA", "#EF6C00", "REDUÇÃO"],
+    ["EMERGÊNCIA", "ATENÇÃO", "#FBC02D", "REDUÇÃO"],
     ["EMERGÊNCIA", "NORMAL", "#2E7D32", "NORMALIZAÇÃO"],
   ];
 
@@ -189,7 +189,7 @@ test("mudanças diárias aceitam acentos e três formatos de seta", () => {
     assert.equal(mudanca.grau, "ATENÇÃO");
     const html = renderDailyChanges([entrada]);
     assert.match(html, /NORMAL → ATENÇÃO/);
-    assert.match(html, /#F57C00/);
+    assert.match(html, /#FBC02D/);
   }
 });
 
@@ -210,7 +210,7 @@ test("novo alerta é classificado e campos estruturados continuam escapados", ()
     fonteDados: '<script>alert("x")</script>',
   });
   assert.match(html, /NOVO ALERTA/);
-  assert.match(html, /#D32F2F/);
+  assert.match(html, /#EF6C00/);
   assert.match(html, /&lt;IMG SRC=X ONERROR=&quot;ALERT\(1\)&quot;&gt;/);
   assert.match(html, /Rajada &lt; 48 &amp; risco &gt; 1/);
   assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);

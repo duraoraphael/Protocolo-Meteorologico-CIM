@@ -4,8 +4,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
-  criarServicoCorRio, interpretarEstagio, interpretarComunicados, comunicadosVigentes,
-  URL_ESTAGIO, URL_COMUNICADOS,
+  criarServicoCorRio, interpretarEstagio, interpretarCalor, interpretarComunicados, comunicadosVigentes,
+  URL_ESTAGIO, URL_CALOR, URL_COMUNICADOS,
 } = require("../src/sources/corRio");
 const { carregarPainel } = require("./helpers/fakeDom");
 const { subirApp } = require("./helpers/servidor");
@@ -44,6 +44,7 @@ function fetchFalso(rotas) {
 }
 const silencioso = { log() {}, error() {}, warn() {} };
 function servico(rotas, opcoes = {}) {
+  if (!(URL_CALOR in rotas)) rotas[URL_CALOR] = () => respostaJson("calor 1");
   const fetchImpl = fetchFalso(rotas);
   let agora = AGORA;
   const s = criarServicoCorRio({
@@ -64,6 +65,17 @@ test("estágio: só o texto oficial 'Estágio N' (1–5) define o nível", () =>
     assert.throws(() => interpretarEstagio(invalido), /estágio ausente/);
   }
   assert.deepEqual(interpretarEstagio(estagioBruto("Estágio 3", { mensagem: "<b>Chuva forte</b>" })).mensagens, ["Chuva forte"]);
+});
+
+test("calor: só a resposta oficial 'calor N' (1–5) define o estágio independente", () => {
+  for (const n of [1, 2, 3, 4, 5]) {
+    assert.deepEqual(interpretarCalor(`calor ${n}`), {
+      nivel: n, rotuloOficial: `Calor ${n}`, rotulo: `Estágio de Calor ${n}`, urlPublica: "https://cor.rio/niveis-de-calor/",
+    });
+  }
+  for (const invalido of [null, {}, "", "calor 0", "calor 6", "Estágio 2", "calor alto"]) {
+    assert.throws(() => interpretarCalor(invalido), /estágio ausente/);
+  }
 });
 
 test("comunicados: texto limpo, link só do cor.rio, sem duplicados, mais recente primeiro", () => {
@@ -100,7 +112,7 @@ test("comunicados vigentes: publicados ou atualizados nas últimas 24 h", () => 
   assert.deepEqual(comunicadosVigentes(itens, AGORA).map((c) => c.id), ["a", "b"]);
 });
 
-test("serviço: estágio e comunicados com horários próprios; falha preserva o último válido", async () => {
+test("serviço: estágio operacional, calor e comunicados têm horários próprios; falha preserva o último válido", async () => {
   let estagio = estagioBruto("Estágio 2");
   const rotas = {
     [URL_ESTAGIO]: () => respostaJson(estagio),
@@ -111,13 +123,14 @@ test("serviço: estágio e comunicados com horários próprios; falha preserva o
   let e = await s.obter();
   assert.equal(e.estagio.status, "operacional");
   assert.equal(e.estagio.dados.nivel, 2);
+  assert.equal(e.calor.dados.nivel, 1);
   assert.equal(e.comunicados.status, "operacional");
   assert.equal(e.comunicados.itens.length, 1);
   assert.equal(e.estagio.consultadoEm, new Date(AGORA).toISOString());
 
   // dentro do TTL não consulta de novo
   await s.obter();
-  assert.equal(fetchImpl.chamadas.length, 2);
+  assert.equal(fetchImpl.chamadas.length, 3);
 
   // mudança de estágio chega na próxima consulta
   avancar(60_000);
@@ -135,6 +148,13 @@ test("serviço: estágio e comunicados com horários próprios; falha preserva o
   assert.match(e.estagio.falha, /HTTP 503/);
   assert.equal(e.comunicados.status, "operacional");
   assert.equal(e.comunicados.consultadoEm, new Date(AGORA + 120_000).toISOString());
+
+  avancar(60_000);
+  rotas[URL_CALOR] = () => respostaJson({}, 503);
+  e = await s.obter();
+  assert.equal(e.calor.status, "desatualizado");
+  assert.equal(e.calor.dados.nivel, 1, "mantém o último estágio de calor válido");
+  assert.equal(e.estagio.status, "desatualizado", "estado operacional permanece independente");
 });
 
 test("serviço: sem dado válido fica indisponível — nunca assume o estágio 1", async () => {
@@ -149,6 +169,7 @@ test("serviço: sem dado válido fica indisponível — nunca assume o estágio 
   assert.equal(e.comunicados.status, "indisponivel");
   assert.deepEqual(e.comunicados.itens, []);
   assert.equal(e.comunicados.consultadoEm, null);
+  assert.equal(e.calor.status, "operacional");
 });
 
 test("serviço: lista vazia da fonte é 'nenhum comunicado', não falha", async () => {
@@ -167,14 +188,16 @@ test("serviço: retoma a última coleta válida gravada, com o horário original
   );
   await primeiro.s.obter();
   assert.equal(salvo.estagio.dados.nivel, 3);
+  assert.equal(salvo.calor.dados.nivel, 1);
 
   const falha = () => respostaJson({}, 500);
-  const reinicio = servico({ [URL_ESTAGIO]: falha, [URL_COMUNICADOS]: falha }, { carregar: () => salvo });
+  const reinicio = servico({ [URL_ESTAGIO]: falha, [URL_CALOR]: falha, [URL_COMUNICADOS]: falha }, { carregar: () => salvo });
   const e = await reinicio.s.obter();
   assert.equal(e.estagio.status, "desatualizado");
   assert.equal(e.estagio.dados.nivel, 3);
   assert.equal(e.estagio.consultadoEm, salvo.estagio.consultadoEm);
   assert.equal(e.comunicados.status, "desatualizado");
+  assert.equal(e.calor.status, "desatualizado");
 });
 
 test("/api/cor-rio responde só para a base Rio de Janeiro; /api/cidades marca a base", async (t) => {
@@ -201,7 +224,7 @@ test("/api/cor-rio responde só para a base Rio de Janeiro; /api/cidades marca a
 // Renderização
 // ---------------------------------------------------------------------
 const CORES = { 1: "#22C55E", 2: "#FACC15", 3: "#F97316", 4: "#EF4444", 5: "#A855F7" };
-function resposta({ nivel = 3, estagioStatus = "operacional", itens, comStatus = "operacional", comConsultado = "2026-10-02T14:00:00Z" } = {}) {
+function resposta({ nivel = 3, estagioStatus = "operacional", nivelCalor = 2, calorStatus = "operacional", itens, comStatus = "operacional", comConsultado = "2026-10-02T14:00:00Z" } = {}) {
   return {
     fonte: "COR-Rio", abrangencia: "Município do Rio de Janeiro",
     estagio: {
@@ -209,6 +232,12 @@ function resposta({ nivel = 3, estagioStatus = "operacional", itens, comStatus =
       dados: nivel ? { nivel, rotulo: `Estágio ${nivel}`, vigenteDesde: "2026-10-02T10:00:00Z", mensagens: [] } : null,
       consultadoEm: nivel ? "2026-10-02T14:30:00Z" : null,
       falha: estagioStatus === "operacional" ? null : "a fonte não respondeu a tempo",
+    },
+    calor: {
+      status: calorStatus,
+      dados: nivelCalor ? { nivel: nivelCalor, rotuloOficial: `Calor ${nivelCalor}`, rotulo: `Estágio de Calor ${nivelCalor}`, urlPublica: "https://cor.rio/niveis-de-calor/" } : null,
+      consultadoEm: nivelCalor ? "2026-10-02T14:35:00Z" : null,
+      falha: calorStatus === "operacional" ? null : "a fonte não respondeu a tempo",
     },
     comunicados: {
       status: comStatus, janelaHoras: 24, consultadoEm: comConsultado,
@@ -235,8 +264,8 @@ test("cada estágio aplica sua cor ao painel, ao indicador e à escala; só o at
     assert.match(html, new RegExp(`<section class="cor-rio" data-cor-estagio="${nivel}"`));
     assert.match(html, new RegExp(`<aside class="cor-rio-estagio" data-cor-estagio="${nivel}"`));
     assert.match(html, new RegExp(`ESTÁGIO ${nivel}<`));
-    assert.equal((html.match(/cor-rio-atual-txt/g) || []).length, 1);
-    assert.equal((html.match(/aria-current="step"/g) || []).length, 1);
+    assert.equal((html.match(/cor-rio-atual-txt/g) || []).length, 2);
+    assert.equal((html.match(/aria-current="step"/g) || []).length, 2);
     assert.match(html, new RegExp(`<li data-cor-estagio="${nivel}" class="atual" aria-current="step">`));
     for (const n of [1, 2, 3, 4, 5]) assert.match(html, new RegExp(`<li data-cor-estagio="${n}"`), "cada número tem a própria cor");
     assert.doesNotMatch(html, /<button[^>]*data-estagio|<input/, "escala não é controle");
@@ -247,7 +276,7 @@ test("cada estágio aplica sua cor ao painel, ao indicador e à escala; só o at
     const raiz = Object.assign(el(nivel), { querySelectorAll: () => [1, 2, 3, 4, 5].map(el) });
     painel.contexto.__raiz = raiz;
     painel.executar("Dashboard.aplicarCoresEstagio(__raiz)");
-    assert.deepEqual(definidas.filter(([n, p]) => n === nivel && p === "--estagio").map(([, , v]) => v), [CORES[nivel], CORES[nivel]]);
+    assert.ok(definidas.filter(([n, p, v]) => n === nivel && p === "--estagio" && v === CORES[nivel]).length >= 2);
     assert.ok(definidas.some(([, p, v]) => p === "--estagio-tinta" && v === "#0B1A12"));
   }
 });
@@ -263,6 +292,8 @@ test("comunicado: título, resumo, abrangência, data, fonte e botão Ver comuni
   assert.match(html, /data-detail="cor-rio:21">Ver comunicado/);
   assert.match(html, /data-detail="cor-rio">Ver outro comunicado vigente/);
   assert.match(html, /Em vigor desde 02\/10\/2026 07:00/, "horário do estágio separado do comunicado");
+  assert.match(html, /ESTÁGIO DE CALOR 2/);
+  assert.match(html, /Consultado em 02\/10\/2026 11:35/);
 });
 
 test("estados vazios e de falha são distintos", () => {
@@ -274,7 +305,7 @@ test("estados vazios e de falha são distintos", () => {
   assert.match(semFonte, /Não foi possível consultar a fonte de comunicados do COR-Rio/);
   assert.doesNotMatch(semFonte, /Nenhum comunicado vigente/);
 
-  const semEstagio = renderizar({ resposta: resposta({ nivel: null, estagioStatus: "indisponivel" }) }).html;
+  const semEstagio = renderizar({ resposta: resposta({ nivel: null, estagioStatus: "indisponivel", nivelCalor: null, calorStatus: "indisponivel" }) }).html;
   assert.match(semEstagio, /<section class="cor-rio sem-estagio" aria-labelledby/);
   assert.doesNotMatch(semEstagio, /<section[^>]*data-cor-estagio/);
   assert.match(semEstagio, /Estágio indisponível/);
@@ -303,6 +334,7 @@ test("detalhes: conteúdo completo, link original e estágio identificado como i
   assert.match(det, /href="https:\/\/cor\.rio\/post-20\/" target="_blank" rel="noopener noreferrer"/);
   assert.match(det, /Outros comunicados vigentes[\s\S]*cor-rio:21/);
   assert.match(det, /publicado pelo COR-Rio separadamente dos comunicados/);
+  assert.match(det, /ESTÁGIO DE CALOR 2/);
   assert.equal(painel.executar("Dashboard.corRioTitulo(__estado, '20')"), "Comunicado COR-Rio");
   assert.match(painel.executar("Dashboard.corRioDetalhes(__estado, '999')"), /não está mais entre os vigentes/);
 });

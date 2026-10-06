@@ -1,5 +1,6 @@
 /* Presentation components. Values come exclusively from /api/preview. */
 const Dashboard = (() => {
+  const TitulosAlerta = AlertTitle;
   const escape = (value) => String(value ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const paths = {
     cloud: '<path d="M6 18a5 5 0 1 1 1-10 6 6 0 0 1 11 2 4 4 0 0 1 0 8Z"/>',
@@ -58,6 +59,7 @@ const Dashboard = (() => {
       return metric('Calor e Saúde', 'Indisponível', integracao.mensagem || 'Dados indisponíveis nesta atualização', 'thermometer', 'heat span-2 heat-indisponivel', fonte, '<span class="selo selo-indisponivel">Indisponível</span>');
     }
     const grau = dados.nivel?.grau || 'NORMAL';
+    const tituloCalor = TitulosAlerta.formatarTitulo('CALOR / RISCO À SAÚDE', grau);
     const classificacao = dados.ehf?.classificacao;
     const valor = /^sem excesso$/i.test(classificacao || '') ? 'Sem excesso de calor' : classificacao ? `EHF ${escape(classificacao)}` : 'Classificação indisponível';
     const maxima = dados.temperatura?.maxima == null ? 'Máxima prevista indisponível' : `Máxima prevista ${dados.temperatura.maxima} °C`;
@@ -67,13 +69,13 @@ const Dashboard = (() => {
     const atual = Boolean(diaBrasilia(dados.consultadoEm)) && diaBrasilia(dados.consultadoEm) === diaBrasilia(new Date().toISOString());
     if (!atual) {
       const coleta = dateTimeBrasilia(dados.consultadoEm) || 'horário indisponível';
-      return metric('Calor e Saúde', valor, `${maxima} · última coleta válida: ${coleta}`, 'thermometer', 'heat span-2 heat-desatualizado', fonte, '<span class="selo selo-indisponivel">Desatualizado</span>');
+      return metric(tituloCalor, valor, `${maxima} · última coleta válida: ${coleta}`, 'thermometer', 'heat span-2 heat-desatualizado', fonte, '<span class="selo selo-indisponivel">Desatualizado</span>');
     }
     const selo = grau === 'NORMAL'
       ? '<span class="selo selo-normal">Normal</span>'
       : `<span class="selo selo-${nivel(grau).classe}">${escape(grau)}${dados.nivel?.protocolo ? ` · ${escape(dados.nivel.protocolo)}` : ''}</span>`;
     const coleta = integracao.status === 'operacional' ? '' : ` · coleta de ${dateTimeBrasilia(dados.consultadoEm)}`;
-    return metric('Calor e Saúde', valor, `${maxima}${coleta}`, 'thermometer', `heat span-2${grau === 'NORMAL' ? '' : ` heat-${nivel(grau).classe}`}`, fonte, selo);
+    return metric(tituloCalor, valor, `${maxima}${coleta}`, 'thermometer', `heat span-2${grau === 'NORMAL' ? '' : ` heat-${nivel(grau).classe}`}`, fonte, selo);
   }
 
   // Indicadores marítimos só para bases em que o monitoramento de mar se aplica.
@@ -122,12 +124,13 @@ const Dashboard = (() => {
     return (r.severidade?.eventos || [])
       .filter(e => e && ordem[e.grau] && e.tipo !== 'avisoInmet')
       .sort((a, b) => ordem[b.grau] - ordem[a.grau])
-      .map((e, i) => ({ id:`oc-${i + 1}`, grau:e.grau, rotulo:String(e.titulo || e.tipo).split(/\s+—\s+/).slice(-1)[0], icone:'alert', resumo:e.descricao, valores:[], validade:e.janela || 'Hoje', fontes:e.fonteDados ? [e.fonteDados] : [], blocos:[{ origem:'protocolo', titulo:e.titulo, grau:e.grau, descricao:e.detalhe || e.descricao, janela:e.janela, fonte:e.fonteDados, recomendacoes:e.recomendacoes || [] }] }));
+      .map((e, i) => ({ id:`oc-${i + 1}`, grau:e.grau, rotulo:TitulosAlerta.nomeParametro(e.fenomeno || e.titulo || e.tipo), icone:'alert', resumo:e.descricao, valores:[], validade:e.janela || 'Hoje', fontes:e.fonteDados ? [e.fonteDados] : [], blocos:[{ origem:'protocolo', titulo:e.titulo, grau:e.grau, descricao:e.detalhe || e.descricao, janela:e.janela, fonte:e.fonteDados, recomendacoes:e.recomendacoes || [] }] }));
   }
 
   function occurrenceCard(o) {
     const n = nivel(o.grau);
     const rotuloNivel = o.grau && NIVEIS[o.grau] ? o.grau : (o.classificacaoOficial || 'Sem classificação');
+    const titulo = TitulosAlerta.formatarTitulo(o.rotulo, rotuloNivel);
     const valores = (o.valores || []).length ? `<dl class="oc-valores">${o.valores.map(v => `<div><dt>${escape(v.rotulo)}</dt><dd>${escape(v.valor)}</dd></div>`).join('')}</dl>` : '';
     const fontes = (o.fontes || []).map(f => f.replace(/\s+—\s+aviso oficial$/i, '')).join(' + ') || 'Fonte não informada';
     const avisos = [
@@ -135,9 +138,9 @@ const Dashboard = (() => {
       o.detalhesIndisponiveis ? '<span class="oc-flag">Detalhes do aviso indisponíveis na fonte</span>' : '',
       o.desatualizado ? '<span class="oc-flag">Dado desatualizado</span>' : '',
     ].join('');
-    return `<article class="ocorrencia nivel-${n.classe}" aria-label="${escape(rotuloNivel)} — ${escape(o.rotulo)}">
+    return `<article class="ocorrencia nivel-${n.classe}" aria-label="${escape(titulo)}">
       <div class="oc-topo"><span class="nivel-chip">${icon(n.icone)}${escape(rotuloNivel)}</span>${o.classificacaoOficial && NIVEIS[o.grau] ? `<span class="oc-oficial" title="Classificação oficial do INMET">INMET: ${escape(o.classificacaoOficial)}</span>` : ''}</div>
-      <h3 class="oc-titulo">${icon(o.icone)}<span>${escape(o.rotulo)}</span></h3>
+      <h3 class="oc-titulo">${icon(o.icone)}<span>${escape(titulo)}</span></h3>
       <p class="oc-resumo">${escape(o.resumo)}</p>
       ${valores}
       ${avisos ? `<div class="oc-flags">${avisos}</div>` : ''}
@@ -214,7 +217,7 @@ const Dashboard = (() => {
   function detailsTitle(r, type) {
     if (String(type).startsWith('ocorrencia:')) {
       const o = r && occurrencesOf(r).find(item => item.id === type.slice(11));
-      return o ? `${NIVEIS[o.grau] ? o.grau : o.classificacaoOficial || 'Ocorrência'} — ${o.rotulo}` : 'Ocorrência';
+      return o ? TitulosAlerta.formatarTitulo(o.rotulo, NIVEIS[o.grau] ? o.grau : o.classificacaoOficial || 'Ocorrência') : 'Ocorrência';
     }
     return {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[type] || 'Detalhes';
   }
@@ -233,7 +236,7 @@ const Dashboard = (() => {
     const apiCards = (r.monitoramentoApis || []).map(api => `<article class="api-status api-${escape(api.status)}"><div><strong>${escape(api.nome)}</strong><span>${escape(statusLabels[api.status] || api.status)}</span></div><p>${escape(api.detalhe)}</p>${api.id === 'oceanop' ? `<a href="areas.html?cidade=${encodeURIComponent(r.cidade.chave)}">Abrir monitoramento Oceanop</a>` : ''}</article>`).join('');
     const ocorrencias = occurrencesOf(r);
     const resumoEventos = ocorrencias.length
-      ? ocorrencias.map(o => `<article class="aviso-item nivel-${nivel(o.grau).classe}"><strong>${escape(NIVEIS[o.grau] ? o.grau : o.classificacaoOficial)} — ${escape(o.rotulo)}</strong><p>${escape(o.resumo)}</p><p>Validade: ${escape(o.validade)} · Fonte de dados: ${escape((o.fontes || []).join(' + '))}</p><button class="text-link det-link" data-detail="ocorrencia:${escape(o.id)}">Ver detalhes <span aria-hidden="true">→</span></button></article>`).join('')
+      ? ocorrencias.map(o => `<article class="aviso-item nivel-${nivel(o.grau).classe}"><strong>${escape(TitulosAlerta.formatarTitulo(o.rotulo, NIVEIS[o.grau] ? o.grau : o.classificacaoOficial))}</strong><p>${escape(o.resumo)}</p><p>Validade: ${escape(o.validade)} · Fonte de dados: ${escape((o.fontes || []).join(' + '))}</p><button class="text-link det-link" data-detail="ocorrencia:${escape(o.id)}">Ver detalhes <span aria-hidden="true">→</span></button></article>`).join('')
       : '<p>Nenhuma ocorrência ativa no período analisado.</p>';
     const avisos = r.avisosInmetStatus === 'indisponivel'
       ? '<p class="det-indisponivel">A coleta de avisos oficiais do INMET falhou nesta atualização; os avisos vigentes não puderam ser confirmados.</p>'
@@ -269,8 +272,9 @@ const Dashboard = (() => {
     const d = st?.resposta;
     const s = CorRio.situacao(d, { falhaServidor: Boolean(st?.falhaServidor) });
     return {
-      d, est: d?.estagio, com: d?.comunicados, nivel: s.nivel,
+      d, est: d?.estagio, calor: d?.calor, com: d?.comunicados, nivel: s.nivel, nivelCalor: s.nivelCalor,
       estagioDesatualizado: s.estagioDesatualizado,
+      calorDesatualizado: s.calorDesatualizado,
       comunicadosDesatualizados: s.comunicadosDesatualizados,
     };
   }
@@ -304,6 +308,30 @@ const Dashboard = (() => {
       ${corRioEscala(nivel)}
       <p class="cor-rio-estagio-meta">${desde ? `Em vigor desde ${escape(desde)}<br>` : ''}${p.estagioDesatualizado ? '' : `Consultado em ${escape(consulta || 'horário indisponível')}`}</p>
       ${p.estagioDesatualizado ? `<p class="oc-flag cor-rio-flag">Desatualizado · última consulta válida: ${escape(consulta || 'horário indisponível')}${motivo ? ` (${escape(motivo)})` : ''}</p>` : ''}
+    </aside>`;
+  }
+
+  function corRioCalor(st, p) {
+    const parte = p.calor;
+    const nivel = p.nivelCalor;
+    if (!nivel) {
+      const carregando = st.carregando && !p.d;
+      const motivo = motivoFalhaCor(parte, st);
+      return `<aside class="cor-rio-estagio sem-estagio" aria-label="Estágio de calor do COR-Rio">
+        <p class="cor-rio-estagio-rotulo">Estágio de calor</p>
+        <p class="cor-rio-estagio-atual">${carregando ? 'Consultando…' : 'Estágio de calor indisponível'}</p>
+        ${corRioEscala(null).replace('estágios operacionais', 'estágios de calor')}
+        <p class="cor-rio-estagio-meta">${carregando ? 'Consultando o COR-Rio.' : `Não foi possível obter o estágio de calor${motivo ? `: ${escape(motivo)}` : ''}. Nova tentativa automática.`}</p>
+      </aside>`;
+    }
+    const consulta = dateTimeBrasilia(parte.consultadoEm);
+    const motivo = motivoFalhaCor(parte, st);
+    return `<aside class="cor-rio-estagio" data-cor-estagio="${nivel}" aria-label="Estágio de calor do COR-Rio: ${nivel}">
+      <p class="cor-rio-estagio-rotulo">Estágio de calor</p>
+      <p class="cor-rio-estagio-atual"><span class="cor-rio-estagio-chip">ESTÁGIO DE CALOR ${nivel}</span></p>
+      ${corRioEscala(nivel).replace('estágios operacionais', 'estágios de calor')}
+      <p class="cor-rio-estagio-meta">${p.calorDesatualizado ? '' : `Consultado em ${escape(consulta || 'horário indisponível')}`}</p>
+      ${p.calorDesatualizado ? `<p class="oc-flag cor-rio-flag">Desatualizado · última consulta válida: ${escape(consulta || 'horário indisponível')}${motivo ? ` (${escape(motivo)})` : ''}</p>` : ''}
     </aside>`;
   }
 
@@ -354,7 +382,7 @@ const Dashboard = (() => {
         <div class="cor-rio-cabecalho"><span class="cor-rio-icone">${icon('megaphone')}</span><h2 id="titulo-cor-rio" class="cor-rio-titulo">Comunicados COR-Rio</h2></div>
         ${corRioComunicado(st, p)}
       </div>
-      ${corRioEstagio(st, p)}
+      <div class="cor-rio-estagios">${corRioEstagio(st, p)}${corRioCalor(st, p)}</div>
     </section>`;
   }
 
@@ -389,13 +417,17 @@ const Dashboard = (() => {
         </dl></div>`
       : '<p class="det-indisponivel">Estágio indisponível: não há consulta válida ao COR-Rio.</p>';
     const blocoEstagio = `<section class="det-bloco"><h3>Estágio operacional da cidade</h3><p class="cor-rio-nota">O estágio é publicado pelo COR-Rio separadamente dos comunicados e pode ter sido definido em outro horário.</p>${estagio}<p class="det-fonte">Fonte: COR-Rio · ${linkOriginal(p.est?.dados?.urlPublica || 'https://cor.rio/estagios-operacionais-da-cidade/', 'Estágios operacionais no cor.rio')}</p></section>`;
+    const calor = p.nivelCalor
+      ? `<div class="cor-rio-det-estagio" data-cor-estagio="${p.nivelCalor}"><span class="cor-rio-estagio-chip">ESTÁGIO DE CALOR ${p.nivelCalor}</span><dl class="det-lista"><div><dt>Consulta ao COR-Rio</dt><dd>${escape(dateTimeBrasilia(p.calor.consultadoEm) || 'horário indisponível')}${p.calorDesatualizado ? ' — última consulta válida (dado desatualizado)' : ''}</dd></div></dl></div>`
+      : '<p class="det-indisponivel">Estágio de calor indisponível: não há consulta válida ao COR-Rio.</p>';
+    const blocoCalor = `<section class="det-bloco"><h3>Estágio de calor</h3><p class="cor-rio-nota">O Protocolo de Calor é publicado separadamente do estágio operacional da cidade.</p>${calor}<p class="det-fonte">Fonte: COR-Rio · ${linkOriginal(p.calor?.dados?.urlPublica || 'https://cor.rio/niveis-de-calor/', 'Níveis de calor no cor.rio')}</p></section>`;
     const lista = (excluir) => itens.filter(i => i.id !== excluir).map(i => `<article class="aviso-item cor-rio-item"><strong>${escape(i.titulo)}</strong><p>${corRioPublicacao(i)}</p><button class="text-link det-link" data-detail="cor-rio:${escape(i.id)}">Ver comunicado <span aria-hidden="true">→</span></button></article>`).join('');
-    if (id && !c) return `<p>Este comunicado não está mais entre os vigentes na atualização atual.</p>${itens.length ? `<h3>Comunicados vigentes</h3>${lista()}` : ''}${blocoEstagio}`;
+    if (id && !c) return `<p>Este comunicado não está mais entre os vigentes na atualização atual.</p>${itens.length ? `<h3>Comunicados vigentes</h3>${lista()}` : ''}${blocoEstagio}${blocoCalor}`;
     if (!c) {
       const vazio = !p.com?.consultadoEm
         ? '<p class="det-indisponivel">Não foi possível consultar a fonte de comunicados do COR-Rio.</p>'
         : `<p>Nenhum comunicado vigente: o COR-Rio não publicou nem atualizou comunicados nas últimas ${escape(p.com.janelaHoras)} h.</p>`;
-      return `<h3>Comunicados vigentes</h3>${itens.length ? lista() : vazio}${blocoEstagio}`;
+      return `<h3>Comunicados vigentes</h3>${itens.length ? lista() : vazio}${blocoEstagio}${blocoCalor}`;
     }
     const outros = lista(c.id);
     return `<div class="det-resumo cor-rio-det-resumo"${p.nivel ? ` data-cor-estagio="${p.nivel}"` : ''}>
@@ -406,7 +438,7 @@ const Dashboard = (() => {
       <section class="det-bloco cor-rio-conteudo">${corRioParagrafos(c.paragrafos) || `<p>${escape(c.resumo)}</p>`}
         <p class="det-fonte">${linkOriginal(c.link, 'Abrir a publicação original no cor.rio')}</p></section>
       ${outros ? `<h3>Outros comunicados vigentes</h3>${outros}` : ''}
-      ${blocoEstagio}`;
+      ${blocoEstagio}${blocoCalor}`;
   }
 
   return { escape, icon, currentWeather, details, detailsTitle, corRio, corRioDetalhes, corRioTitulo, aplicarCoresEstagio, ESTAGIOS_COR_RIO, home: r => `${occurrences(r)}<div id="cor-rio-slot"></div>${metrics(r)}<div class="tables-grid${marAplicavel(r) ? '' : ' tabela-unica'}">${marAplicavel(r) ? marine(r) : ''}${windRain(r)}</div>` };

@@ -112,15 +112,15 @@ test("rajada de 36 km/h aparece como ATENÇÃO laranja em tela, PDF e e-mail", (
   const tela = carregarPainel().executar("Dashboard.home")(report);
 
   assert.equal(report.severidade.grau, "ATENÇÃO");
-  assert.equal(report.eventoMaisRelevante.titulo, "ATENÇÃO — VENTO");
+  assert.equal(report.eventoMaisRelevante.titulo, "VENTO — ATENÇÃO");
   assert.deepEqual(report.eventoMaisRelevante.recomendacoes, ["Manter o monitoramento durante o dia."]);
   assert.match(pdf, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
-  assert.match(pdf, /class="evento-titulo"[^>]*>.*ATENÇÃO — VENTO/);
+  assert.match(pdf, /class="evento-titulo"[^>]*>.*VENTO — ATENÇÃO/);
   assert.match(pdf, /font-size: 15pt/);
   assert.match(pdf, /padding: 18px 20px/);
 
   for (const html of [pdf, email]) {
-    assert.match(html, /ATENÇÃO — VENTO/);
+    assert.match(html, /VENTO — ATENÇÃO/);
     assert.match(html, /#F57C00/);
     assert.match(html, /Manter o monitoramento durante o dia/);
     assert.doesNotMatch(html, /Não foi identificado evento climático extremo/);
@@ -129,7 +129,7 @@ test("rajada de 36 km/h aparece como ATENÇÃO laranja em tela, PDF e e-mail", (
 
   // Painel: card compacto na cor de Atenção; recomendações ficam nos detalhes.
   assert.match(tela, /class="ocorrencia nivel-atencao"/);
-  assert.match(tela, /aria-label="ATENÇÃO — Vento"/);
+  assert.match(tela, /aria-label="VENTO — ATENÇÃO"/);
   assert.doesNotMatch(tela, /Manter o monitoramento durante o dia/);
   assert.doesNotMatch(tela, /sem-ocorrencias/);
   const detalhe = carregarPainel().executar("Dashboard.details")(report, "ocorrencia:oc-1");
@@ -143,17 +143,17 @@ test("vento e chuva simultâneos permanecem visíveis com a maior severidade", (
   const email = renderEmailHtml(report);
 
   assert.equal(report.severidade.grau, "ALERTA");
-  assert.match(pdf, /ALERTA — CHUVA INTENSA/);
-  assert.match(pdf, /ATENÇÃO — VENTO/);
-  assert.match(email, /ALERTA — CHUVA INTENSA/);
-  assert.match(email, /ATENÇÃO — VENTO/);
+  assert.match(pdf, /CHUVA INTENSA — ALERTA/);
+  assert.match(pdf, /VENTO — ATENÇÃO/);
+  assert.match(email, /CHUVA INTENSA — ALERTA/);
+  assert.match(email, /VENTO — ATENÇÃO/);
 });
 
 test("estados NORMAL, ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saídas", () => {
   const casos = [
-    { rajadaMaxKmh: 25, grau: "NORMAL", corPdf: "#2E7D32", corEmail: "#2E7D32", classe: "sem-ocorrencias", titulo: "CONDIÇÃO NORMAL", tela: "Nenhuma ocorrência ativa" },
-    { rajadaMaxKmh: 45, grau: "ALERTA", corPdf: "#D32F2F", corEmail: "#D32F2F", classe: "ocorrencia nivel-alerta", titulo: "ALERTA — VENTO", tela: "ALERTA — Vento" },
-    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", corPdf: "#B71C1C", corEmail: "#B71C1C", classe: "ocorrencia nivel-emergencia", titulo: "EMERGÊNCIA — VENTO", tela: "EMERGÊNCIA — Vento" },
+    { rajadaMaxKmh: 25, grau: "NORMAL", corPdf: "#2E7D32", corEmail: "#2E7D32", classe: "sem-ocorrencias", titulo: "CONDIÇÕES METEOROLÓGICAS — NORMAL", tela: "Nenhuma ocorrência ativa" },
+    { rajadaMaxKmh: 45, grau: "ALERTA", corPdf: "#D32F2F", corEmail: "#D32F2F", classe: "ocorrencia nivel-alerta", titulo: "VENTO — ALERTA", tela: "VENTO — ALERTA" },
+    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", corPdf: "#B71C1C", corEmail: "#B71C1C", classe: "ocorrencia nivel-emergencia", titulo: "VENTO — EMERGÊNCIA", tela: "VENTO — EMERGÊNCIA" },
   ];
 
   for (const caso of casos) {

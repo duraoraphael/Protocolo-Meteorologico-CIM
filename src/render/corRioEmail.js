@@ -149,6 +149,10 @@ function cartaoCorRioEmail(r) {
   const selo = s.nivel
     ? `<span style="display:inline-block;background:${cor};color:${CorRio.TINTA};font:bold 14px/1.2 Arial,sans-serif;letter-spacing:0.5px;padding:5px 12px;border-radius:5px;white-space:nowrap;">ESTÁGIO ${s.nivel}</span>`
     : `<span style="display:inline-block;background:#DDE3E1;color:#2B3431;border:1px dashed #8A9894;font:bold 13px/1.2 Arial,sans-serif;padding:5px 10px;border-radius:5px;white-space:nowrap;">ESTÁGIO INDISPONÍVEL</span>`;
+  const corCalor = s.calor ? s.calor.cor : CorRio.NEUTRO.cor;
+  const seloCalor = s.nivelCalor
+    ? `<span style="display:inline-block;background:${corCalor};color:${CorRio.TINTA};font:bold 14px/1.2 Arial,sans-serif;letter-spacing:0.3px;padding:5px 12px;border-radius:5px;white-space:nowrap;margin-top:5px;">ESTÁGIO DE CALOR ${s.nivelCalor}</span>`
+    : `<span style="display:inline-block;background:#DDE3E1;color:#2B3431;border:1px dashed #8A9894;font:bold 13px/1.2 Arial,sans-serif;padding:5px 10px;border-radius:5px;white-space:nowrap;margin-top:5px;">CALOR INDISPONÍVEL</span>`;
 
   const geradoEm = r.geradoEmISO || Date.now();
   const doDia = s.comunicados === "indisponivel" ? null : comunicadoDoDia(com.itens, { geradoEm });
@@ -178,16 +182,22 @@ function cartaoCorRioEmail(r) {
     ? `<div style="margin-top:10px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio operacional da cidade:</strong> Estágio ${s.nivel}${est.dados.vigenteDesde ? `, em vigor desde ${esc(quando(est.dados.vigenteDesde))}` : ""}. Consulta à fonte: ${esc(quando(est.consultadoEm))}. Estágio e comunicado são publicados separadamente pelo COR-Rio.</div>
        ${s.estagioDesatualizado ? aviso(`<strong>Dados desatualizados</strong> — última consulta bem-sucedida do estágio: ${esc(quando(est.consultadoEm))}.`) : ""}`
     : `<div style="margin-top:10px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio indisponível</strong> — não há consulta válida ao estágio operacional do COR-Rio${est.falha ? ` (${esc(est.falha)})` : ""}.</div>`;
+  const calorParte = estado.calor || {};
+  const calor = s.nivelCalor
+    ? `<div style="margin-top:8px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio de calor:</strong> Estágio de Calor ${s.nivelCalor}. Consulta à fonte: ${esc(quando(calorParte.consultadoEm))}. Protocolo independente do estágio operacional.</div>
+       ${s.calorDesatualizado ? aviso(`<strong>Dados desatualizados</strong> — última consulta bem-sucedida do estágio de calor: ${esc(quando(calorParte.consultadoEm))}.`) : ""}`
+    : `<div style="margin-top:8px;font:14px/1.45 Arial,sans-serif;"><strong>Estágio de calor indisponível</strong> — não há consulta válida ao Protocolo de Calor do COR-Rio${calorParte.falha ? ` (${esc(calorParte.falha)})` : ""}.</div>`;
   const rodape = doDia ? "" : linha("Abrangência", esc(estado.abrangencia || "Município do Rio de Janeiro")) + linha("Fonte", esc(estado.fonte || "COR-Rio"));
 
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${fundo}" style="width:100%;background:${fundo};border:1.5px solid ${cor};border-left:7px solid ${cor};border-radius:8px;border-collapse:separate;margin-top:9px;">
     <tr><td bgcolor="${fundo}" style="padding:13px 18px 14px;background:${fundo};color:${TEXTO};font:15px/1.5 Arial,sans-serif;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;"><tr>
         <td valign="top" style="color:${TEXTO};font:bold 20px/1.25 Arial,sans-serif;padding:0 10px 8px 0;">Comunicado oficial COR-Rio</td>
-        <td valign="top" align="right" style="text-align:right;padding-bottom:8px;">${selo}</td>
+        <td valign="top" align="right" style="text-align:right;padding-bottom:8px;">${selo}<br>${seloCalor}</td>
       </tr></table>
       ${corpo}
       ${estagio}
+      ${calor}
       ${rodape ? `<div style="font:14px/1.45 Arial,sans-serif;">${rodape}</div>` : ""}
     </td></tr>
   </table>`;

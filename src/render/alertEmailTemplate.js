@@ -3,6 +3,8 @@
 
 const {
   esc,
+  nivelExibicao,
+  nomeParametroAlerta,
   normalizarGrau,
   renderEmailHeader,
   renderStatusChangeCard,
@@ -52,7 +54,6 @@ function renderAlertEmailHtml(base) {
         })}
 
         <tr><td style="padding:16px 22px 4px 22px;font-family:Arial,sans-serif;font-size:13.5px;color:#333;">
-          ${apenasCalorEhf ? '<strong>ALERTA DE CALOR / RISCO À SAÚDE</strong><br>' : ''}
           Mudança de gatilho ${apenasCalorEhf ? 'de calor / risco à saúde' : 'meteorológico'} identificada para <strong>${esc(cidade.nome)}</strong>.
           Consulte abaixo o grau atual e as recomendações aplicáveis.
         </td></tr>
@@ -82,7 +83,7 @@ function renderAlertEmailHtml(base) {
 
         <tr><td style="padding:14px 22px 18px 22px;font-family:Arial,sans-serif;">
           <div style="background:#F4F7F5;border-radius:4px;padding:11px 14px;font-size:12px;color:#555;">
-            Recomendações completas e detalhamento por período estão no informativo diário desta base.
+            O detalhamento complementar por período está no informativo diário desta base.
             Em caso de emergência, acionar a Defesa Civil pelo <strong>199</strong>.
           </div>
         </td></tr>
@@ -103,14 +104,14 @@ function renderAlertEmailHtml(base) {
 }
 
 function assuntoAlerta(base) {
-  const tipos = [...new Set(base.alertas.map((a) => a.tipo))].slice(0, 2).join(" / ");
+  const tipos = [...new Set(base.alertas.map((a) => nomeParametroAlerta(a.tipo)))].slice(0, 2).join(" / ");
   const ordem = { NORMAL: 0, "ATENÇÃO": 1, ALERTA: 2, "EMERGÊNCIA": 3 };
   const grau = base.alertas
-    .map((a) => a.grau)
+    .map((a) => normalizarGrau(a.grau))
     .filter(Boolean)
     .sort((a, b) => ordem[b] - ordem[a])[0] || "ALERTA";
-  const simbolo = grau === "NORMAL" ? "🟡" : grau === "ATENÇÃO" ? "🟠" : "🔴";
-  return `${simbolo} ${grau} — ${base.cidade.nome}/${base.cidade.uf}: ${tipos}`;
+  const simbolo = { NORMAL: "🟢", "ATENÇÃO": "🟡", ALERTA: "🟠", "EMERGÊNCIA": "🔴" }[grau];
+  return `${simbolo} ${tipos} — ${nivelExibicao(grau)} — ${base.cidade.nome}/${base.cidade.uf}`;
 }
 
 module.exports = { renderAlertEmailHtml, assuntoAlerta };

@@ -84,7 +84,7 @@ test('aviso e calor ausentes não geram cards falsos; Windy só aparece com dado
   const $ = cheerio.load(html);
   assert.equal($('.aviso-inmet').length, 0);
   assert.equal($('.evento-card').length, 1);
-  assert.equal($('.evento-card').first().text().includes('CONDIÇÃO NORMAL'), true);
+  assert.equal($('.evento-card').first().text().includes('CONDIÇÕES METEOROLÓGICAS — NORMAL'), true);
   assert.equal($('.clima-indisponivel').length, 1);
   assert.equal(html.includes('Sem excesso'), false);
   assert.equal(html.includes('Windy: dados de teste'), false);
@@ -98,7 +98,7 @@ test('aviso oficial sem evento local não vira condição NORMAL', () => {
     severidade: { grau: 'ALERTA', eventos: [{ tipo: 'avisoInmet', grau: 'ALERTA' }] },
     avisosInmet: [{ descricao: 'Tempestade', severidade: 'Perigo', inicio: '09:00', fim: '18:00', riscos: ['Risco oficial'] }],
   }));
-  assert.equal(html.includes('CONDIÇÃO NORMAL'), false);
+  assert.equal(html.includes('CONDIÇÕES METEOROLÓGICAS — NORMAL'), false);
   assert.equal((html.match(/Aviso oficial INMET<\/div>/g) || []).length, 1);
 });
 
@@ -124,8 +124,8 @@ test('PDF ordena qualidade do ar, particulados e deixa o índice UV na última l
 
 test('PDF move o evento UV para depois dos demais preservando a ordem relativa', () => {
   const html = renderPdfHtml(relatorio());
-  const vento = html.indexOf('ATENÇÃO — VENTO');
-  const uv = html.indexOf('ALERTA — ÍNDICE UV ELEVADO');
+  const vento = html.indexOf('VENTO — ATENÇÃO');
+  const uv = html.indexOf('ÍNDICE UV — ALERTA');
   assert.ok(vento >= 0 && uv > vento);
   assert.match(html.slice(uv), /Índice UV extremo previsto/);
 });

@@ -38,14 +38,19 @@
    */
   function situacao(estado, { falhaServidor = false } = {}) {
     const est = estado && estado.estagio;
+    const calor = estado && estado.calor;
     const com = estado && estado.comunicados;
     const nivel = est && est.dados && estagioValido(est.dados.nivel) ? Number(est.dados.nivel) : null;
+    const nivelCalor = calor && calor.dados && estagioValido(calor.dados.nivel) ? Number(calor.dados.nivel) : null;
     const comConsultado = Boolean(com && com.consultadoEm);
     const itens = (com && com.itens) || [];
     return {
       nivel,
       estagio: nivel ? ESTAGIOS[nivel] : null,
       estagioDesatualizado: Boolean(nivel) && (est.status === 'desatualizado' || falhaServidor),
+      nivelCalor,
+      calor: nivelCalor ? ESTAGIOS[nivelCalor] : null,
+      calorDesatualizado: Boolean(nivelCalor) && (calor.status === 'desatualizado' || falhaServidor),
       comunicadosDesatualizados: comConsultado && (com.status === 'desatualizado' || falhaServidor),
       // 'indisponivel' (nunca consultado com sucesso) ≠ 'nenhum' (consultado, sem vigentes)
       comunicados: !comConsultado ? 'indisponivel' : itens.length ? 'disponivel' : 'nenhum',

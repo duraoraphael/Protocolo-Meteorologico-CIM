@@ -228,12 +228,12 @@ test("e-mail apresenta fenômeno, grau, fontes, valores e recomendações", () =
   };
   const html = renderAlertEmailHtml(base);
 
-  assert.match(html, /ALERTA — CHUVA INTENSA/);
+  assert.match(html, /CHUVA INTENSA — ALERTA/);
   assert.doesNotMatch(html, /Fonte do critério/);
   assert.match(html, /Fonte de dados: Open-Meteo/);
   assert.match(html, /Intensidade horária máxima prevista: 25 mm\/h/);
-  assert.match(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
-  assert.match(assuntoAlerta(base), /ALERTA — Rio de Janeiro\/RJ: Chuva intensa/);
+  assert.match(html, /Recomendações – Protocolo Meteorológico do COMPARTILHADO/);
+  assert.match(assuntoAlerta(base), /CHUVA INTENSA — ALERTA — Rio de Janeiro\/RJ/);
 });
 
 test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem duplicar", () => {
@@ -253,8 +253,9 @@ test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem
     report: { dataFormatadaCurta: "28/09/2026", horaConsulta: "15:00", ventoPorPeriodo: [] },
     alertas: [oficial],
   });
-  assert.match(html, /MUDANÇA DE AVISO OFICIAL INMET — TEMPESTADE/);
-  assert.match(html, /Classificação: NOVO ALERTA/);
+  assert.match(html, /TEMPESTADE COM RAIOS — ALERTA/);
+  assert.match(html, /MUDANÇA DE AVISO OFICIAL INMET · NOVO ALERTA/);
+  assert.match(html, /Classificação:<\/strong> ALERTA/);
   assert.match(html, /Instruções oficiais:/);
   assert.match(html, /Motivo do aviso:.*Chuva entre 30 e 60 mm\/h\. Ventos intensos de 60 a 100 km\/h\./);
   assert.match(html, /Fonte de dados: INMET/);
@@ -278,7 +279,8 @@ test("normalização oficial usa título, transição, motivo e cor verde padron
     }],
   });
 
-  assert.match(html, /NORMALIZAÇÃO DE AVISO OFICIAL INMET — CHUVAS INTENSAS/);
+  assert.match(html, /CHUVA INTENSA — NORMAL/);
+  assert.match(html, /NORMALIZAÇÃO DE AVISO OFICIAL INMET · NORMALIZAÇÃO/);
   assert.match(html, /ALERTA.*→.*NORMAL/s);
   assert.match(html, /O aviso oficial não consta mais entre os avisos ativos do INMET para esta base\./);
   assert.match(html, /#2E7D32/);
@@ -287,9 +289,9 @@ test("normalização oficial usa título, transição, motivo e cor verde padron
 test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {
   const cores = [
     ["NORMAL", "normal", "#2E7D32"],
-    ["ATENÇÃO", "atencao", "#F57C00"],
-    ["ALERTA", "alto", "#D32F2F"],
-    ["EMERGÊNCIA", "severo", "#B71C1C"],
+    ["ATENÇÃO", "atencao", "#FBC02D"],
+    ["ALERTA", "alto", "#EF6C00"],
+    ["EMERGÊNCIA", "severo", "#C62828"],
   ];
   for (const [grau, gravidade, cor] of cores) {
     const html = renderAlertEmailHtml({

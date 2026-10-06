@@ -85,9 +85,9 @@ test('ÍNDICE UV é a última célula e o evento UV fica após os demais sem reo
   assert.match(segundaLinha[0], /^QUALIDADE DO AR/);
   assert.match(segundaLinha[1], /^CHUVA ACUMULADA/);
   assert.match(segundaLinha[2], /^ÍNDICE UV/);
-  const vento = html.indexOf('ATENÇÃO — VENTO');
-  const chuva = html.indexOf('ALERTA — CHUVA');
-  const uv = html.indexOf('ALERTA — ÍNDICE UV ELEVADO');
+  const vento = html.indexOf('VENTO — ATENÇÃO');
+  const chuva = html.indexOf('CHUVA INTENSA — ALERTA');
+  const uv = html.indexOf('ÍNDICE UV — ALERTA');
   assert.ok(vento < chuva && chuva < uv);
   assert.match(html, /11\.2/);
   assert.match(html, /Extremo/);
@@ -129,7 +129,7 @@ test('alerta, aviso oficial e recomendações aparecem uma vez e na ordem solici
       riscos: ['Chuva entre 20 e 30 mm/h.'], instrucoes: ['Busque abrigo.'],
     }],
   })));
-  const alerta = html.indexOf('ALERTA — VENTO');
+  const alerta = html.indexOf('VENTO — ALERTA');
   const aviso = html.indexOf('AVISO OFICIAL INMET');
   const recomendacoes = html.indexOf('Recomendações - Protocolo Meteorológico do COMPARTILHADO');
   const fontes = html.indexOf('Fontes de dados:');
@@ -155,7 +155,7 @@ test('aviso oficial INMET reutiliza exatamente o componente visual dos demais ca
     avisosInmet: [{ descricao: 'Baixa Umidade', severidade: 'Perigo Potencial', riscos: ['Risco à saúde.'] }],
   })));
   const $ = cheerio.load(html);
-  const tituloLocal = $('div').filter((_, elemento) => $(elemento).text().trim() === 'ALERTA — VENTO').first();
+  const tituloLocal = $('div').filter((_, elemento) => $(elemento).text().trim() === 'VENTO — ALERTA').first();
   const tituloInmet = $('div').filter((_, elemento) => $(elemento).text().trim() === 'AVISO OFICIAL INMET').first();
   const cardLocal = tituloLocal.closest('table');
   const cardInmet = tituloInmet.closest('table');
