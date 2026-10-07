@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const cheerio = require("cheerio");
 const { renderPdfHtml } = require("../src/render/pdfTemplate");
 const { recomendacoes, recomendacoesChuvaAvisoInmet } = require("../src/logic/inmetAlertRules");
+const { RECOMENDACAO_NEUTRA, TIPOS_DOCUMENTO } = require("../src/logic/alertPresentation");
 
 function relatorio(alteracoes = {}) {
   return {
@@ -62,7 +63,7 @@ test("aviso INMET de chuva sem alerta equivalente da previsão traz as recomenda
   assert.equal(bloco.length, 1);
   assert.match(bloco.find("td.alerta-col-card").text(), /Aviso oficial INMET/);
   assert.match(bloco.find("td.alerta-col-card").text(), /Chuva entre 30 e 60 mm\/h/, "texto oficial preservado");
-  assert.match(bloco.find(".alerta-rec-sub").text(), /Chuva — nível ALERTA \(severidade oficial INMET: Perigo\)/);
+  assert.equal(bloco.find(".alerta-rec-sub").text(), "CHUVA INTENSA:");
   const itens = bloco.find("td.alerta-col-rec li").map((_, li) => $(li).text()).get();
   assert.deepEqual(itens, recomendacoes("chuva", "ALERTA"));
 });
@@ -75,7 +76,80 @@ test("aviso INMET de chuva não repete recomendações já listadas no alerta de
   const todos = $("td.alerta-col-rec li").map((_, li) => $(li).text()).get();
   assert.equal(new Set(todos).size, todos.length, "nenhum item repetido");
   assert.deepEqual(todos, recomendacoes("chuva", "ALERTA"));
-  assert.match($("table.alerta-bloco").last().text(), /já constam no alerta de chuva acima/);
+  assert.match($("table.alerta-bloco").last().text(), /já constam no alerta correspondente acima/);
+});
+
+test("cenário A: alerta NORMAL é removido antes da renderização do card", () => {
+  const normal = { ...eventoVento, grau: "Normal", titulo: "VENTO — NORMAL", recomendacoes: [] };
+  const html = renderPdfHtml(relatorio({
+    horarioAgendado: null,
+    tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO,
+    severidade: { grau: "NORMAL", eventos: [normal] },
+  }));
+  const $ = cheerio.load(html);
+  assert.equal($("table.alerta-bloco").length, 0);
+  assert.doesNotMatch(html, /VENTO — NORMAL|CONDIÇÕES METEOROLÓGICAS — NORMAL/);
+});
+
+for (const [horarioAgendado, tipoDocumento] of [
+  ["05:00", TIPOS_DOCUMENTO.INFORMATIVO_05H],
+  ["15:00", TIPOS_DOCUMENTO.INFORMATIVO_15H],
+]) {
+  test(`informativo programado das ${horarioAgendado} preserva o card NORMAL`, () => {
+    const normal = { ...eventoVento, grau: "NORMAL", titulo: "VENTO — NORMAL", recomendacoes: [] };
+    const html = renderPdfHtml(relatorio({ horarioAgendado, tipoDocumento, severidade: { grau: "NORMAL", eventos: [normal] } }));
+    assert.match(html, /VENTO — NORMAL/);
+    assert.doesNotMatch(html, /Não há recomendações cadastradas/);
+  });
+}
+
+test("cenário B: ATENÇÃO mantém recomendação local e não a substitui pela orientação do INMET", () => {
+  const local = { ...eventoVento, grau: "ATENÇÃO", titulo: "VENTO — ATENÇÃO", recomendacoes: ["Recomendação local cadastrada."] };
+  const aviso = { descricao: "Vento Forte", severidade: "Perigo Potencial", instrucoes: ["Orientação oficial que é apenas fallback."] };
+  const $ = cheerio.load(renderPdfHtml(relatorio({ severidade: { grau: "ATENÇÃO", eventos: [local] }, avisosInmet: [aviso] })));
+  const itens = $("table.alerta-bloco").first().find("td.alerta-col-rec li").map((_, li) => $(li).text()).get();
+  assert.deepEqual(itens, ["Recomendação local cadastrada."]);
+});
+
+for (const [nome, grau, severidade] of [
+  ["cenário C", "ATENÇÃO", "Perigo Potencial"],
+  ["cenário D", "ALERTA", "Perigo"],
+]) {
+  test(`${nome}: ${grau} sem recomendação local usa a orientação oficial do INMET`, () => {
+    const evento = { ...eventoVento, grau, titulo: `VENTO — ${grau}`, recomendacoes: [] };
+    const aviso = { descricao: "Vento Forte", severidade, instrucoes: ["Afaste-se de árvores e estruturas frágeis."] };
+    const $ = cheerio.load(renderPdfHtml(relatorio({ severidade: { grau, eventos: [evento] }, avisosInmet: [aviso] })));
+    const primeiroBloco = $("table.alerta-bloco").first();
+    assert.match(primeiroBloco.find(".alerta-rec-titulo").text(), /Orientações oficiais do INMET/);
+    assert.deepEqual(primeiroBloco.find("td.alerta-col-rec li").map((_, li) => $(li).text()).get(), ["Afaste-se de árvores e estruturas frágeis."]);
+  });
+}
+
+test("cenário E: sem recomendação local nem orientação do INMET usa somente o fallback neutro", () => {
+  const evento = { ...eventoVento, grau: "ATENÇÃO", titulo: "VENTO — ATENÇÃO", recomendacoes: [] };
+  const html = renderPdfHtml(relatorio({ severidade: { grau: "ATENÇÃO", eventos: [evento] }, avisosInmet: [] }));
+  const $ = cheerio.load(html);
+  assert.deepEqual($("table.alerta-bloco").first().find("td.alerta-col-rec li").map((_, li) => $(li).text()).get(), [RECOMENDACAO_NEUTRA]);
+  assert.doesNotMatch(html, /Não há recomendações cadastradas/);
+});
+
+test("títulos dos fenômenos ficam em caixa alta sem alterar o texto das recomendações", () => {
+  const eventos = [
+    { ...eventoVento, fenomeno: "Vento", titulo: "Vento — ALERTA", grau: "ALERTA", recomendacoes: ["Manter o monitoramento durante o dia."] },
+    { ...eventoChuva, fenomeno: "Tempestade", titulo: "Tempestade — ATENÇÃO", grau: "ATENÇÃO", recomendacoes: ["Reforçar comunicação preventiva."] },
+  ];
+  const $ = cheerio.load(renderPdfHtml(relatorio({ severidade: { grau: "ALERTA", eventos } })));
+  assert.deepEqual($(".alerta-rec-sub").map((_, el) => $(el).text()).get(), ["TEMPESTADE COM RAIOS:", "VENTO:"]);
+  assert.deepEqual($(".alerta-rec li").map((_, el) => $(el).text()).get(), [
+    "Reforçar comunicação preventiva.",
+    "Manter o monitoramento durante o dia.",
+  ]);
+});
+
+test("CSS mantém cada alerta com recomendações unido e reduz o espaço entre blocos", () => {
+  const html = renderPdfHtml(relatorio());
+  assert.match(html, /table\.alerta-bloco \{[^}]*margin: 10px 0[^}]*break-inside: avoid[^}]*page-break-inside: avoid/s);
+  assert.doesNotMatch(html, /table\.alerta-bloco \{[^}]*page-break-before:\s*always/s);
 });
 
 test("regra de chuva do INMET: só avisos de chuva, só severidades reconhecidas", () => {
@@ -106,6 +180,8 @@ test("títulos, tabelas e fontes de dados ficam no mesmo bloco, com a fonte logo
   assert.match(vento.find("p.fonte-tabela").text(), /Vento: maior velocidade média horária/);
   assert.match(vento.find("p.fonte-tabela").text(), /Rajada: maior rajada prevista na mesma janela/);
   assert.match(vento.text(), /Tarde\s*12h–18h/);
-  assert.match($.html(), /\.bloco-tabela, \.bloco-lista \{ break-inside: avoid/);
+  assert.match($.html(), /\.bloco-tabela \{ break-inside: avoid/);
+  assert.match($.html(), /\.bloco-lista \{ break-inside: auto/);
+  assert.match($.html(), /\.bloco-lista li \{ break-inside: avoid/);
   assert.match($.html(), /thead \{ display: table-header-group; \}/);
 });

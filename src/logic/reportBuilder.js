@@ -3,6 +3,7 @@ const { integrarWindy } = require('./windyMerge');
 const { buscarOpenMeteo, INICIO_JANELA_HOJE, PERIODOS: PERIODOS_HOJE } = require("../sources/openMeteo");
 const { buscarPrevisaoInmet, buscarAvisosInmet, deduplicarAvisosInmet } = require("../sources/inmet");
 const { montarOcorrencias } = require("./ocorrenciasPainel");
+const { tipoDocumentoPorHorario } = require("./alertPresentation");
 const { buscarMarComFallback } = require("../sources/marine");
 const { buscarQualidadeAr } = require("../sources/airQuality");
 const { buscarOceanop } = require("../sources/oceanop");
@@ -511,6 +512,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     climaSaude,
     geradoEmISO: dataNow.toISOString(),
     horarioAgendado,
+    tipoDocumento: tipoDocumentoPorHorario(horarioAgendado),
     periodoCoberto: horarioAgendado ? PERIODO_COBERTO_AGENDADO : null,
     // Só hoje: chuva e rajada na janela 05h–00h (as mesmas dos períodos acima).
     previsaoDias: horarioAgendado ? openMeteo.previsaoDias.slice(0, 1).map((dia) => ({

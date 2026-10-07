@@ -120,8 +120,8 @@ const Dashboard = (() => {
   // Relatórios sem `ocorrencias` (versões antigas/testes): eventos do
   // protocolo viram cards simples, sem fusão com avisos.
   function occurrencesOf(r) {
-    if (Array.isArray(r.ocorrencias)) return r.ocorrencias;
     const ordem = { 'EMERGÊNCIA':3, 'ALERTA':2, 'ATENÇÃO':1 };
+    if (Array.isArray(r.ocorrencias)) return r.ocorrencias.filter(o => o && ordem[o.grau]);
     return (r.severidade?.eventos || [])
       .filter(e => e && ordem[e.grau] && e.tipo !== 'avisoInmet')
       .sort((a, b) => ordem[b.grau] - ordem[a.grau])

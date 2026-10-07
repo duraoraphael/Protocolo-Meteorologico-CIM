@@ -1,0 +1,159 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const cheerio = require("cheerio");
+
+const {
+  TIPOS_DOCUMENTO,
+  deveExibirNoDocumento,
+  tipoDocumentoDoRelatorio,
+} = require("../src/logic/alertPresentation");
+const { renderPdfHtml } = require("../src/render/pdfTemplate");
+const { alertasCimExibiveis, renderAlertEmailHtml } = require("../src/render/alertEmailTemplate");
+const { enviarAlertaPorEmail } = require("../src/email/sendAlert");
+
+function report(extra = {}) {
+  return {
+    cidade: { nome: "Macaé", uf: "RJ" },
+    dataFormatadaLonga: "quarta-feira, 7 de outubro de 2026",
+    dataFormatadaCurta: "07/10/2026",
+    horaConsulta: "12:34",
+    condicaoGeral: "Parcialmente nublado",
+    tempMin: 21,
+    tempMax: 29,
+    tabelaTemperaturaUmidade: [],
+    ventoPorPeriodo: [],
+    chuvaPorPeriodo: [],
+    fontesPorCampo: {},
+    mar: null,
+    qualidadeAr: null,
+    severidade: { grau: "NORMAL", eventos: [] },
+    avisosInmet: [],
+    divergencias: [],
+    avisosColeta: [],
+    fontesAutomatizadas: [],
+    fontesManuais: [],
+    deslocamento: { pedestres: [], transporte: [], condutores: [] },
+    edificacao: [],
+    ...extra,
+  };
+}
+
+function evento(grau, tipo = "Vento") {
+  return {
+    tipo,
+    fenomeno: tipo,
+    grau,
+    titulo: `${tipo.toUpperCase()} — ${grau}`,
+    descricao: `Condição ${grau}`,
+    fonteDados: "Open-Meteo",
+    recomendacoes: grau === "NORMAL" ? [] : ["Orientação cadastrada."],
+  };
+}
+
+test("tipo explícito do documento prevalece sobre horário de geração", () => {
+  assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_05H }), TIPOS_DOCUMENTO.INFORMATIVO_05H);
+  assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_15H }), TIPOS_DOCUMENTO.INFORMATIVO_15H);
+  assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO, horarioAgendado: "05:00" }), TIPOS_DOCUMENTO.EXTRAORDINARIO);
+  assert.equal(tipoDocumentoDoRelatorio({}), TIPOS_DOCUMENTO.EXTRAORDINARIO);
+});
+
+for (const tipoDocumento of [TIPOS_DOCUMENTO.INFORMATIVO_05H, TIPOS_DOCUMENTO.INFORMATIVO_15H]) {
+  test(`${tipoDocumento}: NORMAL, ATENÇÃO, ALERTA e EMERGÊNCIA são elegíveis`, () => {
+    for (const nivel of ["NORMAL", "ATENÇÃO", "ALERTA", "EMERGÊNCIA"]) {
+      assert.equal(deveExibirNoDocumento({ nivel, tipoDocumento }), true, nivel);
+    }
+  });
+}
+
+for (const tipoDocumento of [TIPOS_DOCUMENTO.EXTRAORDINARIO, TIPOS_DOCUMENTO.ALERTA_CIM]) {
+  test(`${tipoDocumento}: somente ATENÇÃO, ALERTA e EMERGÊNCIA são elegíveis`, () => {
+    assert.equal(deveExibirNoDocumento({ nivel: "Normal", tipoDocumento }), false);
+    for (const nivel of ["Atenção", "Alerta", "Emergencial", "Emergência"]) {
+      assert.equal(deveExibirNoDocumento({ nivel, tipoDocumento }), true, nivel);
+    }
+  });
+}
+
+test("PDF extraordinário com tudo NORMAL não cria cards nem placeholders de alerta", () => {
+  const html = renderPdfHtml(report({
+    tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO,
+    severidade: { grau: "NORMAL", eventos: [evento("NORMAL")] },
+    climaSaude: { status: "operacional", dados: { nivel: { grau: "NORMAL" } } },
+    avisosInmet: [{ descricao: "Sem perigo", severidade: "Normal", instrucoes: [] }],
+  }));
+  const $ = cheerio.load(html);
+  assert.equal($(".evento-card, table.alerta-bloco").length, 0);
+  assert.doesNotMatch(html, /Não há recomendações cadastradas|CONDIÇÕES METEOROLÓGICAS — NORMAL/);
+});
+
+test("PDF extraordinário misto remove NORMAL e preserva ATENÇÃO ou superior", () => {
+  const html = renderPdfHtml(report({
+    tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO,
+    severidade: { grau: "ALERTA", eventos: [evento("NORMAL", "Calor"), evento("ATENÇÃO"), evento("ALERTA", "Chuva intensa")] },
+  }));
+  assert.doesNotMatch(html, /CALOR — NORMAL/);
+  assert.match(html, /VENTO — ATENÇÃO/);
+  assert.match(html, /CHUVA INTENSA — ALERTA/);
+});
+
+test("Alerta CIM misto filtra NORMAL antes de montar os cards", () => {
+  const alertas = [evento("NORMAL", "Calor"), evento("ATENÇÃO"), evento("EMERGÊNCIA", "Chuva intensa")];
+  assert.deepEqual(alertasCimExibiveis(alertas).map((a) => a.grau).sort(), ["ATENÇÃO", "EMERGÊNCIA"]);
+  const html = renderAlertEmailHtml({ cidade: report().cidade, report: report(), alertas });
+  assert.doesNotMatch(html, /CALOR — NORMAL/);
+  assert.match(html, /VENTO — ATENÇÃO/);
+  assert.match(html, /CHUVA INTENSA — EMERGÊNCIA/);
+});
+
+test("PDF e Alerta CIM ordenam ATENÇÃO, ALERTA e EMERGÊNCIA preservando empates", () => {
+  const alertas = [
+    evento("ALERTA", "Vento"),
+    evento("ATENCAO", "Tempestade"),
+    evento("ATENÇÃO", "Chuva"),
+    evento("EMERGENCIA", "Calor"),
+  ];
+  const esperado = ["Tempestade", "Chuva", "Vento", "Calor"];
+  assert.deepEqual(alertasCimExibiveis(alertas).map((a) => a.tipo), esperado);
+
+  const html = renderPdfHtml(report({
+    tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO,
+    severidade: { grau: "EMERGÊNCIA", eventos: alertas },
+  }));
+  const posicoes = [
+    "TEMPESTADE COM RAIOS — ATENÇÃO",
+    "CHUVA INTENSA — ATENÇÃO",
+    "VENTO — ALERTA",
+    "CALOR / RISCO À SAÚDE — EMERGÊNCIA",
+  ].map((titulo) => html.indexOf(titulo));
+  assert.ok(posicoes.every((posicao) => posicao >= 0));
+  assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes);
+});
+
+test("PDF programado ordena NORMAL antes de ATENÇÃO, ALERTA e EMERGÊNCIA", () => {
+  const alertas = [
+    evento("EMERGÊNCIA", "Calor"),
+    evento("NORMAL", "Umidade"),
+    evento("ALERTA", "Vento"),
+    evento("ATENÇÃO", "Chuva"),
+  ];
+  const html = renderPdfHtml(report({
+    tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_05H,
+    horarioAgendado: "05:00",
+    severidade: { grau: "EMERGÊNCIA", eventos: alertas },
+  }));
+  const posicoes = ["UMIDADE — NORMAL", "CHUVA INTENSA — ATENÇÃO", "VENTO — ALERTA", "CALOR / RISCO À SAÚDE — EMERGÊNCIA"]
+    .map((titulo) => html.indexOf(titulo));
+  assert.ok(posicoes.every((posicao) => posicao >= 0));
+  assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes);
+});
+
+test("Alerta CIM apenas NORMAL é suprimido antes de destinatários e SMTP", async () => {
+  const base = { chave: "base_sem_destinatario", cidade: report().cidade, report: report(), alertas: [evento("NORMAL")] };
+  assert.equal(renderAlertEmailHtml(base), "");
+  assert.deepEqual(await enviarAlertaPorEmail(base), {
+    messageId: null,
+    destinatarios: [],
+    ignorado: true,
+    motivo: "sem-alerta-relevante",
+  });
+});

@@ -77,7 +77,11 @@ function argumento(nome) {
         const envio = await enviarAlertaPorEmail(base, { teste });
         // Envio de teste não altera o histórico do monitor automático.
         if (!teste) marcarAlertasEnviados(base);
-        console.log(`[CIM] Alerta${teste ? " de TESTE" : ""} enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`);
+        if (envio.ignorado) {
+          console.log(`[CIM] Apenas condições normais em ${base.chave}; nenhum Alerta CIM foi enviado.`);
+        } else {
+          console.log(`[CIM] Alerta${teste ? " de TESTE" : ""} enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`);
+        }
       } catch (erro) {
         console.error(`[CIM] Falha ao enviar (${base.chave}): ${erro.message}`);
       }

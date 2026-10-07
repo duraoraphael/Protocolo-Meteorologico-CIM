@@ -15,6 +15,7 @@
 const { GRAUS, maiorGrau, LIMITES_ALERTA_INMET } = require("./inmetAlertRules");
 const { grauAvisoInmet, fenomenoAvisoInmet, dataAvisoEmMs } = require("../sources/inmet");
 const { eventoDeIndiceUv } = require("../render/eventOrdering");
+const { alertaExibivel } = require("./alertPresentation");
 
 // Tipo de evento do riskEngine -> fenômeno comparável ao dos avisos INMET.
 const FENOMENO_POR_TIPO = Object.freeze({
@@ -52,7 +53,7 @@ const ICONE_FENOMENO = Object.freeze({
 const FONTE_INMET = "INMET — aviso oficial";
 
 function grauRelevante(grau) {
-  return GRAUS[grau] > 0;
+  return alertaExibivel(grau);
 }
 
 function formatarDataHora(valor) {
@@ -232,6 +233,7 @@ function montarOcorrencias(report) {
   //    dia — os avisos já chegam filtrados por área e validade); avisos
   //    distintos do mesmo fenômeno geram cards próprios.
   for (const aviso of avisos) {
+    if (!grauRelevante(grauAvisoInmet(aviso.severidade ?? aviso.severity))) continue;
     const fenomeno = fenomenoAvisoInmet(aviso.descricao);
     const bloco = blocoInmet(aviso, linkOficial);
     let alvo = ocorrencias.find((o) => o.fenomeno === fenomeno && !o.blocos.some((b) => b.origem === "inmet"));
@@ -296,7 +298,7 @@ function montarOcorrencias(report) {
   }
 
   return ocorrencias
-    .filter((o) => grauRelevante(o.grau) || o.semMapeamento)
+    .filter((o) => grauRelevante(o.grau))
     .map((o, indice) => ({ ...o, ordemOriginal: indice }))
     .sort((a, b) => (GRAUS[b.grau] || 0) - (GRAUS[a.grau] || 0)
       || Number(Boolean(a.uv)) - Number(Boolean(b.uv))

@@ -117,7 +117,7 @@ test("rajada de 36 km/h aparece como ATENÇÃO laranja em tela, PDF e e-mail", (
   assert.match(pdf, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
   assert.match(pdf, /class="evento-titulo"[^>]*>.*VENTO — ATENÇÃO/);
   assert.match(pdf, /font-size: 15pt/);
-  assert.match(pdf, /padding: 18px 20px/);
+  assert.match(pdf, /padding: 14px 17px/);
 
   for (const html of [pdf, email]) {
     assert.match(html, /VENTO — ATENÇÃO/);
@@ -149,9 +149,9 @@ test("vento e chuva simultâneos permanecem visíveis com a maior severidade", (
   assert.match(email, /VENTO — ATENÇÃO/);
 });
 
-test("estados NORMAL, ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saídas", () => {
+test("NORMAL não gera card; ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saídas", () => {
   const casos = [
-    { rajadaMaxKmh: 25, grau: "NORMAL", corPdf: "#2E7D32", corEmail: "#2E7D32", classe: "sem-ocorrencias", titulo: "CONDIÇÕES METEOROLÓGICAS — NORMAL", tela: "Nenhuma ocorrência ativa" },
+    { rajadaMaxKmh: 25, grau: "NORMAL", classe: "sem-ocorrencias", tela: "Nenhuma ocorrência ativa" },
     { rajadaMaxKmh: 45, grau: "ALERTA", corPdf: "#D32F2F", corEmail: "#D32F2F", classe: "ocorrencia nivel-alerta", titulo: "VENTO — ALERTA", tela: "VENTO — ALERTA" },
     { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", corPdf: "#B71C1C", corEmail: "#B71C1C", classe: "ocorrencia nivel-emergencia", titulo: "VENTO — EMERGÊNCIA", tela: "VENTO — EMERGÊNCIA" },
   ];
@@ -163,18 +163,21 @@ test("estados NORMAL, ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saíd
     const tela = carregarPainel().executar("Dashboard.home")(report);
 
     assert.equal(report.severidade.grau, caso.grau);
-    assert.match(pdf, new RegExp(caso.titulo));
-    assert.match(email, new RegExp(caso.titulo));
-    assert.match(pdf, new RegExp(caso.corPdf));
-    assert.match(email, new RegExp(caso.corEmail));
     assert.match(tela, new RegExp(caso.classe));
     assert.match(tela, new RegExp(caso.tela));
-    if (caso.grau === "NORMAL") assert.doesNotMatch(tela, /class="ocorrencia /, "sem cards vazios");
-    if (caso.grau !== "NORMAL") {
+    if (caso.grau === "NORMAL") {
+      assert.doesNotMatch(pdf, /CONDIÇÕES METEOROLÓGICAS — NORMAL|class="alerta-bloco"/);
+      assert.doesNotMatch(email, /CONDIÇÕES METEOROLÓGICAS — NORMAL/);
+      assert.doesNotMatch(tela, /class="ocorrencia /, "sem cards vazios");
+    } else {
+      assert.match(pdf, new RegExp(caso.titulo));
+      assert.match(email, new RegExp(caso.titulo));
+      assert.match(pdf, new RegExp(caso.corPdf));
+      assert.match(email, new RegExp(caso.corEmail));
       assert.match(pdf, /class="evento-titulo"/);
       assert.match(pdf, /font-size: 15pt/);
       assert.match(pdf, /font-weight: 700/);
-      assert.match(pdf, /margin: 0 0 12px 0/);
+      assert.match(pdf, /margin: 0 0 8px 0/);
     }
   }
 });
@@ -248,7 +251,7 @@ test("rajada, fonte, recomendações e motivo oficial são consistentes em tela,
   assert.match(email, /Fonte: INMET/);
   assert.match(pdf, /class="header-logo-cim"/);
   assert.match(pdf, /alt="CIM — Centro Integrado de Monitoramento COMPARTILHADO"/);
-  assert.match(pdf, /padding: 18px 20px/);
+  assert.match(pdf, /padding: 14px 17px/);
   assert.doesNotMatch(tela + detalhes + email, /Deslocamento|Edificação/);
   assert.match(pdf, /Deslocamento/);
   assert.match(pdf, /Edificação/);

@@ -44,8 +44,9 @@ function relatorio() {
   };
 }
 
-function conferir(html, nome) {
-  for (const titulo of TITULOS) assert.ok(html.includes(titulo), `${nome}: ${titulo}`);
+function conferirInformativo(html, nome) {
+  for (const titulo of TITULOS.slice(0, 3)) assert.ok(html.includes(titulo), `${nome}: ${titulo}`);
+  assert.ok(!html.includes(TITULOS[3]), `${nome}: omite alerta NORMAL`);
   for (const antigo of ANTIGOS) assert.ok(!html.includes(antigo), `${nome}: remove ${antigo}`);
 }
 
@@ -58,15 +59,19 @@ test("formatador compartilhado produz os quatro títulos canônicos obrigatório
   ], TITULOS);
 });
 
-test("painel, informativo, PDF e e-mail de alerta usam parâmetro antes da classificação", () => {
+test("painel, informativo, PDF extraordinário e Alerta CIM padronizam títulos e omitem cards NORMAL", () => {
   const r = relatorio();
-  conferir(carregarPainel().executar("Dashboard.home")(r), "painel");
-  conferir(renderEmailHtml(r), "informativo");
-  conferir(renderPdfHtml(r), "PDF");
-  conferir(renderAlertEmailHtml({ cidade: r.cidade, report: r, alertas: [
+  const painel = carregarPainel().executar("Dashboard.home")(r);
+  for (const titulo of TITULOS.slice(0, 3)) assert.ok(painel.includes(titulo), `painel: ${titulo}`);
+  assert.ok(!painel.includes(`aria-label="${TITULOS[3]}"`), "painel: omite ocorrência NORMAL");
+  conferirInformativo(renderEmailHtml(r), "informativo");
+  conferirInformativo(renderPdfHtml(r), "PDF");
+  const alertaHtml = renderAlertEmailHtml({ cidade: r.cidade, report: r, alertas: [
     { tipo: "Tempestade com raios", grau: "EMERGÊNCIA" },
     { tipo: "Vento", grau: "ALERTA" },
     { tipo: "Qualidade do ar", grau: "ATENÇÃO" },
     { tipo: "Calor / risco à saúde", grau: "NORMAL" },
-  ] }), "e-mail de alerta");
+  ] });
+  for (const titulo of TITULOS.slice(0, 3)) assert.ok(alertaHtml.includes(titulo), `e-mail de alerta: ${titulo}`);
+  assert.ok(!alertaHtml.includes(TITULOS[3]), "Alerta CIM: omite ocorrência NORMAL");
 });

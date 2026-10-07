@@ -14,6 +14,7 @@ function relatorio(extra = {}) {
   return {
     cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
     dataFormatadaLonga: "sexta-feira, 2 de outubro de 2026", dataFormatadaCurta: "02/10/2026", horaConsulta: "11:00",
+    horarioAgendado: "05:00",
     tabelaTemperaturaUmidade: [], ventoPorPeriodo: [], chuvaPorPeriodo: [], mar: null, qualidadeAr: null,
     severidade: { grau: "NORMAL", eventos: [] },
     avisosInmet: [{ descricao: "Tempestade", severidade: "Perigo Potencial", inicio: "02/10/2026 09:00", fim: "02/10/2026 23:59", riscos: ["Chuva."], instrucoes: ["Abrigue-se."] }],
@@ -168,6 +169,18 @@ test("outras cidades: sem consulta, sem card e fontes intactas", async () => {
   assert.equal(resultado, null);
   assert.equal(r.corRio, undefined);
   assert.doesNotMatch(renderPdfHtml(r), /COR-Rio/);
+});
+
+test("extraordinário omite estágios 1 do COR-Rio, mas o programado os preserva", async () => {
+  const normal = estado({ nivel: 1, nivelCalor: 1 });
+  const programado = await html(normal);
+  assert.match(programado.html, /ESTÁGIO 1/);
+  assert.match(programado.html, /ESTÁGIO DE CALOR 1/);
+
+  const r = relatorio({ horarioAgendado: null, tipoDocumento: "ALERTA_EXTRAORDINARIO" });
+  await anexarCorRioAoRelatorio(r, { integracaoCorRio: true }, { servico: { obter: async () => normal }, logger: { error() {} } });
+  const extraordinario = renderPdfHtml(r);
+  assert.doesNotMatch(extraordinario, /Comunicado oficial COR-Rio|ESTÁGIO 1|ESTÁGIO DE CALOR 1/);
 });
 
 test("falha inesperada do serviço não impede o PDF: card indisponível", async () => {

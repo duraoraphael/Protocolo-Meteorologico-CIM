@@ -226,9 +226,13 @@ function iniciarMonitorAlertas(onResultado) {
           try {
             const envio = await enviarAlertaPorEmail(base);
             marcarAlertasEnviados(base);
-            console.log(
-              `[CIM] Alerta enviado (${base.chave}): ${base.alertas.map((a) => a.tipo).join(", ")} -> ${envio.destinatarios.length} destinatário(s).`
-            );
+            if (envio.ignorado) {
+              console.log(`[CIM] Normalização registrada (${base.chave}); nenhum Alerta CIM foi enviado.`);
+            } else {
+              console.log(
+                `[CIM] Alerta enviado (${base.chave}): ${base.alertas.map((a) => a.tipo).join(", ")} -> ${envio.destinatarios.length} destinatário(s).`
+              );
+            }
             onResultado?.(null, { base, envio });
           } catch (erro) {
             console.error(`[CIM] Falha ao enviar alerta (${base.chave}):`, erro.message);

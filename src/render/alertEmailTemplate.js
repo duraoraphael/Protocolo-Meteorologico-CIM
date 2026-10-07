@@ -9,7 +9,17 @@ const {
   renderEmailHeader,
   renderStatusChangeCard,
 } = require("./emailComponents");
-const { ordenarEventosParaExibicao } = require("./eventOrdering");
+const { ordenarEventosParaExibicao, prioridadeNivel } = require("./eventOrdering");
+const { TIPOS_DOCUMENTO, deveExibirNoDocumento } = require("../logic/alertPresentation");
+
+function alertasCimExibiveis(alertas) {
+  return ordenarEventosParaExibicao((Array.isArray(alertas) ? alertas : []).filter((alerta) =>
+    deveExibirNoDocumento({
+      nivel: normalizarGrau(alerta?.grau),
+      tipoDocumento: TIPOS_DOCUMENTO.ALERTA_CIM,
+    })
+  ));
+}
 
 function blocoAlerta(a) {
   return renderStatusChangeCard({
@@ -34,9 +44,9 @@ function blocoAlerta(a) {
 function renderAlertEmailHtml(base) {
   const r = base.report;
   const cidade = base.cidade;
-  const apenasCalorEhf = base.alertas.every((alerta) => alerta.assinatura === 'calor-ehf');
-  const somenteNormalizacoes = base.alertas.length > 0 && base.alertas.every((alerta) => normalizarGrau(alerta.grau) === "NORMAL");
-  const tituloCabecalho = somenteNormalizacoes ? "ATUALIZAÇÃO METEOROLÓGICA" : "ALERTA METEOROLÓGICO";
+  const alertas = alertasCimExibiveis(base.alertas);
+  if (!alertas.length) return "";
+  const apenasCalorEhf = alertas.every((alerta) => alerta.assinatura === 'calor-ehf');
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -47,7 +57,7 @@ function renderAlertEmailHtml(base) {
       <!--[if mso]><table role="presentation" width="850" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:850px;background:#ffffff;">
         ${renderEmailHeader({
-          titulo: tituloCabecalho,
+          titulo: "ALERTA METEOROLÓGICO",
           cidade: cidade.nome,
           uf: cidade.uf,
           data: r.dataFormatadaCurta,
@@ -59,7 +69,7 @@ function renderAlertEmailHtml(base) {
         </td></tr>
 
         <tr><td style="padding:12px 22px 4px 22px;">
-          ${ordenarEventosParaExibicao(base.alertas).map(blocoAlerta).join("")}
+          ${alertas.map(blocoAlerta).join("")}
         </td></tr>
 
         <tr><td style="padding:6px 22px 4px 22px;">
@@ -104,14 +114,15 @@ function renderAlertEmailHtml(base) {
 }
 
 function assuntoAlerta(base) {
-  const tipos = [...new Set(base.alertas.map((a) => nomeParametroAlerta(a.tipo)))].slice(0, 2).join(" / ");
-  const ordem = { NORMAL: 0, "ATENÇÃO": 1, ALERTA: 2, "EMERGÊNCIA": 3 };
-  const grau = base.alertas
+  const alertas = alertasCimExibiveis(base.alertas);
+  if (!alertas.length) return "";
+  const tipos = [...new Set(alertas.map((a) => nomeParametroAlerta(a.tipo)))].slice(0, 2).join(" / ");
+  const grau = alertas
     .map((a) => normalizarGrau(a.grau))
     .filter(Boolean)
-    .sort((a, b) => ordem[b] - ordem[a])[0] || "ALERTA";
+    .sort((a, b) => prioridadeNivel(b) - prioridadeNivel(a))[0] || "ALERTA";
   const simbolo = { NORMAL: "🟢", "ATENÇÃO": "🟡", ALERTA: "🟠", "EMERGÊNCIA": "🔴" }[grau];
   return `${simbolo} ${tipos} — ${nivelExibicao(grau)} — ${base.cidade.nome}/${base.cidade.uf}`;
 }
 
-module.exports = { renderAlertEmailHtml, assuntoAlerta };
+module.exports = { alertasCimExibiveis, renderAlertEmailHtml, assuntoAlerta };

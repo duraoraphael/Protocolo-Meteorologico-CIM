@@ -38,7 +38,7 @@ function conferirHtml({ nome, alerta, titulo, cor }) {
   assert.equal(new Set(recomendacoesRenderizadas).size, recomendacoesRenderizadas.length, `${nome}: sem duplicação`);
 }
 
-test("gera os quatro cenários obrigatórios com título, cor e 100% das recomendações cadastradas", () => {
+test("gera os alertas operacionais com título, cor e 100% das recomendações cadastradas", () => {
   const vento = classificarCondicoesMeteorologicas({
     rajadaKmh: 40,
     chuvaHorariaMmH: 0,
@@ -49,7 +49,6 @@ test("gera os quatro cenários obrigatórios com título, cor e 100% das recomen
     chuvaHorariaMmH: 30,
     chuvaDiariaMm: 50,
   }).eventos.find((evento) => evento.assinatura === "chuva");
-  const calorNormal = nivelEhf("Sem excesso");
   const calorAtencao = nivelEhf("Baixo");
 
   const casos = [
@@ -58,20 +57,6 @@ test("gera os quatro cenários obrigatórios com título, cor e 100% das recomen
       titulo: "VENTO — ALERTA",
       cor: "#EF6C00",
       alerta: vento,
-    },
-    {
-      nome: "calor normal",
-      titulo: "CALOR / RISCO À SAÚDE — NORMAL",
-      cor: "#2E7D32",
-      alerta: {
-        tipo: "Calor / risco à saúde",
-        assinatura: "calor-ehf",
-        grauAnterior: "ATENÇÃO",
-        grau: calorNormal.grau,
-        motivo: "normalizou",
-        detalhe: "EHF Sem excesso.",
-        recomendacoes: recomendacoesCalor(calorNormal),
-      },
     },
     {
       nome: "calor em atenção",
@@ -95,6 +80,20 @@ test("gera os quatro cenários obrigatórios com título, cor e 100% das recomen
   ];
 
   for (const caso of casos) conferirHtml(caso);
+});
+
+test("calor NORMAL não gera card no Alerta CIM", () => {
+  const calorNormal = nivelEhf("Sem excesso");
+  const html = renderizar({
+    tipo: "Calor / risco à saúde",
+    assinatura: "calor-ehf",
+    grauAnterior: "ATENÇÃO",
+    grau: calorNormal.grau,
+    motivo: "normalizou",
+    detalhe: "EHF Sem excesso.",
+    recomendacoes: recomendacoesCalor(calorNormal),
+  });
+  assert.equal(html, "");
 });
 
 test("padroniza os demais nomes de parâmetro e exibe emergencial sem alterar o grau interno", () => {

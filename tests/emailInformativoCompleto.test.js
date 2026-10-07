@@ -71,7 +71,7 @@ test('card de qualidade do ar exibe somente a classificação dinâmica', () => 
   assert.ok(!html.includes('27.4 µg/m³'));
 });
 
-test('CALOR é a última célula e o evento UV fica após os demais sem reordená-los', () => {
+test('CALOR é a última célula e alertas ficam em severidade crescente com empate estável', () => {
   const html = semImagem(renderEmailHtml(relatorio({
     severidade: { grau: 'ALERTA', eventos: [
       { tipo: 'uvAlto', assinatura: 'uv', grau: 'ALERTA', titulo: 'ALERTA — ÍNDICE UV ELEVADO', descricao: 'Índice UV extremo', fonteDados: 'Open-Meteo Air Quality' },
@@ -89,7 +89,7 @@ test('CALOR é a última célula e o evento UV fica após os demais sem reorden�
   const vento = html.indexOf('VENTO — ATENÇÃO');
   const chuva = html.indexOf('CHUVA INTENSA — ALERTA');
   const uv = html.indexOf('ÍNDICE UV — ALERTA');
-  assert.ok(vento < chuva && chuva < uv);
+  assert.ok(vento < uv && uv < chuva);
   assert.match(html, /Índice UV extremo/, 'o evento de UV continua no e-mail');
 });
 

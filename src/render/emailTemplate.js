@@ -1,11 +1,17 @@
 const { esc } = require("./pdfTemplate");
 const { renderDailyChanges, renderEmailHeader } = require("./emailComponents");
 const { ordenarEventosParaExibicao } = require("./eventOrdering");
-const { consolidarAvisosInmet } = require("../sources/inmet");
+const { consolidarAvisosInmet, fenomenoAvisoInmet, grauAvisoInmet } = require("../sources/inmet");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
 const AlertTitle = require("../../public/alert-title");
 const { calorPorData, dataLocal } = require("../logic/calorPorData");
+const {
+  alertaExibivel,
+  avisosExibiveis,
+  fenomenoDoEvento,
+  resolverRecomendacoesAlerta,
+} = require("../logic/alertPresentation");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
 // bgcolor + background) para que nenhum cliente herde áreas escuras. Só o
@@ -136,7 +142,10 @@ function cartao(titulo, cor, linhas, corTitulo = cor) {
 function eventosLocais(r) {
   const todos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
   return ordenarEventosParaExibicao(
-    (Array.isArray(todos) ? todos : []).filter((evento) => evento && evento.tipo !== "avisoInmet")
+    (Array.isArray(todos) ? todos : []).filter((evento) =>
+      evento && evento.tipo !== "avisoInmet"
+      && alertaExibivel(evento.grau || AlertTitle.normalizarGrau(evento.titulo))
+    )
   );
 }
 
@@ -154,6 +163,7 @@ function cartaoCalor(climaSaude) {
   const dados = climaSaude?.dados;
   if (!dados) return "";
   const grau = dados.nivel?.grau || "NORMAL";
+  if (!alertaExibivel(grau)) return "";
   const temp = numeroUnidade(dados.temperatura?.maxima, "°C");
   const linhas = [
     `<div>EHF: ${texto(dados.ehf?.classificacao)} · Temperatura máxima prevista: ${temp}</div>`,
@@ -173,7 +183,7 @@ function textoOficial(valor) {
 }
 
 function avisosInmet(r) {
-  const avisos = consolidarAvisosInmet(r.avisosInmet);
+  const avisos = avisosExibiveis(consolidarAvisosInmet(r.avisosInmet));
   return avisos.map((aviso) => {
     const evento = aviso.event || aviso.evento || aviso.descricao || aviso.headline;
     const severidade = aviso.severity || aviso.severidade;
@@ -205,10 +215,41 @@ function grupoRecomendacoes(rotulo, grau, itens) {
 }
 
 function recomendacoes(r, eventos) {
-  const grupos = eventos.map((evento) => grupoRecomendacoes(nomeFenomeno(evento), evento.grau || evento.titulo, evento.recomendacoes)).filter(Boolean);
+  const grupos = eventos.map((evento) => {
+    const resolucao = resolverRecomendacoesAlerta({ evento, avisosInmet: r.avisosInmet });
+    const sufixo = resolucao.origem === "inmet" ? " — orientação oficial INMET" : "";
+    return grupoRecomendacoes(`${nomeFenomeno(evento)}${sufixo}`, evento.grau || evento.titulo, resolucao.itens);
+  }).filter(Boolean);
+  const fenomenosRepresentados = new Set(eventos.map(fenomenoDoEvento));
   const dadosCalor = r.climaSaude?.dados;
-  const calor = dadosCalor && grupoRecomendacoes("CALOR / RISCO À SAÚDE", dadosCalor.nivel?.grau, dadosCalor.recomendacoes);
+  const calorResolvido = dadosCalor && alertaExibivel(dadosCalor.nivel?.grau)
+    ? resolverRecomendacoesAlerta({
+      evento: { fenomeno: "calor", grau: dadosCalor.nivel.grau, recomendacoes: dadosCalor.recomendacoes },
+      avisosInmet: r.avisosInmet,
+    })
+    : null;
+  const calor = calorResolvido && grupoRecomendacoes(
+    `CALOR / RISCO À SAÚDE${calorResolvido.origem === "inmet" ? " — orientação oficial INMET" : ""}`,
+    dadosCalor.nivel.grau,
+    calorResolvido.itens
+  );
   if (calor) grupos.push(calor);
+  if (calor) fenomenosRepresentados.add("calor");
+
+  for (const aviso of avisosExibiveis(consolidarAvisosInmet(r.avisosInmet))) {
+    const fenomeno = fenomenoAvisoInmet(aviso.descricao || aviso.event || aviso.evento || aviso.headline);
+    if (fenomenosRepresentados.has(fenomeno)) continue;
+    const resolucao = resolverRecomendacoesAlerta({ aviso, eventosLocais: eventos });
+    const rotulo = AlertTitle.nomeParametro(
+      aviso.descricao || aviso.event || aviso.evento || aviso.headline || "AVISO OFICIAL INMET"
+    );
+    grupos.push(grupoRecomendacoes(
+      `${rotulo}${resolucao.origem === "inmet" ? " — orientação oficial INMET" : ""}`,
+      grauAvisoInmet(aviso.severidade ?? aviso.severity),
+      resolucao.itens
+    ));
+    fenomenosRepresentados.add(fenomeno);
+  }
   if (!grupos.length) return "";
   // Até três colunas por linha; tabelas mantêm a leitura em Outlook sem Flexbox.
   const linhas = [];
@@ -252,9 +293,6 @@ function fontesDeDados(r, eventos) {
 
 function renderEmailHtml(r) {
   const eventos = eventosLocais(r);
-  const normal = !eventos.length && r.severidade?.grau === "NORMAL"
-    ? cartao(AlertTitle.formatarTitulo("CONDIÇÕES METEOROLÓGICAS", "NORMAL"), corGrau("NORMAL"), ["<div>Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.</div>"])
-    : "";
   const mudancas = renderDailyChanges(r.mudancasDia);
 
   return `<!doctype html>
@@ -274,7 +312,7 @@ function renderEmailHtml(r) {
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:11px 25px 3px;color:${COR.texto};font:16px/1.4 Arial,sans-serif;"><strong>Hora da consulta:</strong> ${texto(r.horaConsulta)} (Horário de Brasília)</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:5px 20px;">${resumoMeteorologico(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:3px 20px 0;">${marECondicao(r)}</td></tr>
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${eventos.map((evento) => cartaoEvento(evento, r.severidade?.grau)).join("")}${normal}${cartaoCalor(r.climaSaude)}${mudancas}</td></tr>
+        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${eventos.map((evento) => cartaoEvento(evento, r.severidade?.grau)).join("")}${cartaoCalor(r.climaSaude)}${mudancas}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}${avisosInmet(r)}</td></tr>
         ${recomendacoes(r, eventos)}
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:10px 25px 6px;color:${COR.texto};font:14px/1.4 Arial,sans-serif;"><strong>Fontes de dados:</strong><br>${fontesDeDados(r, eventos)}</td></tr>

@@ -111,13 +111,13 @@ test("todos os tipos de e-mail reutilizam o cabeçalho institucional completo", 
   });
   const semanal = renderWeeklyEmailHtml(relatorioSemanal());
 
-  for (const htmlOriginal of [diario, alerta, normalizacao, semanal]) {
+  for (const htmlOriginal of [diario, alerta, semanal]) {
     const html = semImagens(htmlOriginal);
     assert.match(html, /max-width:850px/);
   }
   validarCabecalho(diario, "INFORMATIVO METEOROLÓGICO");
   validarCabecalho(alerta, "ALERTA METEOROLÓGICO");
-  validarCabecalho(normalizacao, "ATUALIZAÇÃO METEOROLÓGICA");
+  assert.equal(normalizacao, "", "Alerta CIM somente com NORMAL não gera HTML vazio de conteúdo");
   validarCabecalho(semanal, "RELATÓRIO METEOROLÓGICO SEMANAL");
   assert.match(diario, /<img src="cid:logo-petrobras-header@cim"[^>]*alt="Petrobras"/);
 });
@@ -142,17 +142,13 @@ test("identidade CIM permanece completa quando todas as imagens são bloqueadas"
   }
 });
 
-test("normalização usa o título de atualização e continua com header verde institucional", () => {
+test("normalização isolada não gera Alerta CIM nem estrutura vazia", () => {
   const html = semImagens(renderAlertEmailHtml({
     cidade: { nome: "Macaé", uf: "RJ" },
     report: { dataFormatadaCurta: "30/09/2026", horaConsulta: "15:10", ventoPorPeriodo: [] },
     alertas: [{ tipo: "Vento", grauAnterior: "ALERTA", grau: "NORMAL", motivo: "normalizou", fonteDados: "Open-Meteo" }],
   }));
-  assert.match(html, /ATUALIZAÇÃO METEOROLÓGICA/);
-  assert.match(html, /NORMALIZAÇÃO/);
-  assert.match(html, /#2E7D32/);
-  assert.match(html, /ALERTA → NORMAL/);
-  validarCabecalho(html, "ATUALIZAÇÃO METEOROLÓGICA");
+  assert.equal(html, "");
 });
 
 test("todas as transições recebem classificação e cor pelo status de destino", () => {
