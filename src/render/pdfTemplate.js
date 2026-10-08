@@ -1,21 +1,11 @@
 const brand = require("./brand");
 const { HEADER_AMARELO, HEADER_VERDE, LOGOS_HEADER, logoHeaderDataUri } = require("../config/headerAssets");
-const { ordenarEventosParaExibicao } = require("./eventOrdering");
-const { consolidarAvisosInmet, grauAvisoInmet } = require("../sources/inmet");
+const { montarCardsAlerta, visualNivel } = require("./alertCards");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const monitorSecas = require("../sources/monitorSecas");
 const CorRio = require("../../public/cor-rio-compartilhado");
 const { comunicadoDoDia } = require("./corRioEmail");
-const AlertTitle = require("../../public/alert-title");
-const { recomendacoesChuvaAvisoInmet } = require("../logic/inmetAlertRules");
-const {
-  alertaExibivel,
-  avisosExibiveis,
-  deveExibirNoDocumento,
-  informativoProgramado,
-  resolverRecomendacoesAlerta,
-  tipoDocumentoDoRelatorio,
-} = require("../logic/alertPresentation");
+const { informativoProgramado, tipoDocumentoDoRelatorio } = require("../logic/alertPresentation");
 const { calorPorData, fonteCalor, DESCRICAO_CALOR } = require("../logic/calorPorData");
 
 function esc(valor) {
@@ -34,50 +24,9 @@ function listaHtml(itens) {
   return `<ul>${itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
 }
 
-// Mesmo mapeamento de severidade usado nas recomendações (grauAvisoInmet):
-// "Perigo Potencial" é ATENÇÃO — antes caía na regra de "perigo" (vermelho).
-function corSeveridade(severidade = "") {
-  const grau = grauAvisoInmet(severidade);
-  if (grau === "EMERGÊNCIA") return "#B71C1C";
-  if (grau === "ALERTA") return "#D32F2F";
-  if (grau === "ATENÇÃO" || /aten[çc][ãa]o/i.test(String(severidade))) return "#F57C00";
-  return "#2E7D32";
-}
-
-function visualCard(grau) {
-  return grau === "NORMAL" ? { cor: "#2E7D32", fundo: "#E8F5E9" } : brand.statusVisual(grau);
-}
-
-function eventosLocais(r) {
-  const eventos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
-  const tipoDocumento = tipoDocumentoDoRelatorio(r);
-  return ordenarEventosParaExibicao(
-    (Array.isArray(eventos) ? eventos : []).filter((evento) =>
-      evento && evento.tipo !== "avisoInmet"
-      && deveExibirNoDocumento({
-        nivel: evento.grau || AlertTitle.normalizarGrau(evento.titulo),
-        tipoDocumento,
-      })
-    )
-  );
-}
-
 function textoOficialHtml(valor) {
   const texto = Array.isArray(valor) ? valor.filter(Boolean).join(" ") : valor;
   return esc(texto).replace(/\r?\n/g, "<br>");
-}
-
-function cardEvento({ titulo, grau, descricao, janela, fonteDados, detalhes = "", semFonte = false }) {
-  const visual = visualCard(grau);
-  const tituloFormatado = AlertTitle.formatarTitulo(titulo, grau);
-  const classeTitulo = tituloFormatado.length > 34 ? " evento-titulo-longo" : "";
-  return `<div class="evento-card" style="border-color:${visual.cor};background:${visual.fundo};">
-    <div class="evento-titulo${classeTitulo}" style="color:${visual.cor};"><span class="evento-icone">●</span> ${esc(tituloFormatado)}</div>
-    ${descricao ? `<p class="evento-descricao">${esc(descricao)}</p>` : ""}
-    ${detalhes}
-    ${janela ? `<p class="evento-linha"><em>Janela prevista:</em> ${esc(janela)}</p>` : ""}
-    ${semFonte ? "" : `<p class="evento-linha">Fonte de dados: ${esc(fonteDados || "Indisponível")}</p>`}
-  </div>`;
 }
 
 // Tabela com título e fonte de dados num bloco só: se o conjunto couber numa
@@ -93,56 +42,48 @@ function blocoTabela({ titulo = "", tabela, fonte = "", antes = "" }) {
   </section>`;
 }
 
-const TITULO_RECOMENDACOES = "Recomendações - Protocolo Meteorológico do COMPARTILHADO";
-
-function tituloFenomenoRecomendacao(valor) {
-  return `${AlertTitle.nomeParametro(valor).toUpperCase()}:`;
+function linhaCardHtml(item) {
+  if (item.lista) {
+    return `<div class="evento-linha"><strong>${esc(item.rotulo)}:</strong>${listaHtml(item.lista)}</div>`;
+  }
+  const valor = item.multilinha ? textoOficialHtml(item.texto) : esc(item.texto);
+  return `<p class="${item.rotulo ? "evento-linha" : "evento-descricao"}">${item.rotulo ? `<strong>${esc(item.rotulo)}:</strong> ` : ""}${valor}</p>`;
 }
 
-// Alerta à esquerda (tipo, nível e descrição) e as recomendações cadastradas
-// à direita, no mesmo bloco indivisível.
-function blocoAlerta(cardHtml, { grau, itens = [], subtitulo = "", nota = "", tituloRecomendacoes = TITULO_RECOMENDACOES }) {
-  const cor = visualCard(grau).cor;
-  return `<table class="alerta-bloco" role="presentation"><tr>
-    <td class="alerta-col-card">${cardHtml}</td>
-    <td class="alerta-col-rec"><div class="alerta-rec" style="border-top-color:${cor};">
-      <div class="alerta-rec-titulo">${esc(tituloRecomendacoes)}</div>
-      ${subtitulo ? `<div class="alerta-rec-sub" style="color:${cor};">${subtitulo}</div>` : ""}
-      ${itens.length ? listaHtml(itens) : ""}
-      ${nota ? `<p class="alerta-rec-nota">${nota}</p>` : ""}
-    </div></td>
-  </tr></table>`;
+// Alerta e recomendações num card único (modelo em ./alertCards, o mesmo do
+// e-mail): card inteiro no tom claro do nível, com a seção
+// RECOMENDAÇÕES dentro da mesma borda. Paginação: o card inteiro vai para a
+// próxima página quando cabe nela; maior que uma página, continua na seguinte
+// com a borda repetida, sem cortar linha e sem deixar o título sozinho.
+function cardAlertaHtml(card) {
+  const v = card.visual;
+  const rec = card.recomendacoes;
+  const classeTitulo = card.titulo.length > 34 ? " card-alerta-titulo-longo" : "";
+  return `<section class="card-alerta" data-nivel="${escAtributo(card.nivel)}" style="border-color:${v.cor};background:${v.fundo};">
+    <div class="card-alerta-topo">
+      <div class="card-alerta-cab" style="background:${v.fundo};border-bottom-color:${v.cor};">
+        <div class="card-alerta-meta"><span class="card-alerta-selo" style="background:${v.selo};color:${v.textoSelo};">${esc(v.rotulo)}</span> ${esc(card.rotuloOrigem)}</div>
+        <div class="card-alerta-titulo${classeTitulo}" style="color:${v.texto};"><span class="evento-icone" style="color:${v.cor};">●</span> ${esc(card.titulo)}</div>
+      </div>
+      ${card.linhas.slice(0, 1).map(linhaCardHtml).join("")}
+    </div>
+    <div class="card-alerta-corpo">${card.linhas.slice(1).map(linhaCardHtml).join("")}</div>
+    ${rec && rec.itens.length ? `<div class="card-alerta-rec">
+      <div class="card-alerta-rec-cab">
+        <div class="card-alerta-rec-titulo" style="color:${v.texto};">RECOMENDAÇÕES</div>
+        <div class="card-alerta-rec-origem">${esc(rec.titulo)}</div>
+      </div>
+      ${listaHtml(rec.itens)}
+    </div>` : ""}
+  </section>`;
 }
 
-// recomendacoesExibidas: itens já listados — os avisos do INMET,
-// renderizados depois, não os repetem.
-function blocoEventoExtremo(r, recomendacoesExibidas = new Set()) {
-  const eventos = eventosLocais(r);
-  if (eventos.length) {
-    return eventos.map((evento) => {
-      const grau = evento.grau || AlertTitle.normalizarGrau(evento.titulo) || "NORMAL";
-      const card = cardEvento({ ...evento, grau });
-      if (!alertaExibivel(grau)) return card;
-      const resolucao = resolverRecomendacoesAlerta({ evento, avisosInmet: r.avisosInmet });
-      const itens = resolucao.itens;
-      itens.forEach((item) => recomendacoesExibidas.add(item));
-      return blocoAlerta(card, {
-        grau,
-        itens,
-        tituloRecomendacoes: resolucao.origem === "inmet" ? "Orientações oficiais do INMET" : TITULO_RECOMENDACOES,
-        subtitulo: tituloFenomenoRecomendacao(evento.fenomeno || evento.titulo || evento.tipo),
-      });
-    }).join("");
-  }
-  if (informativoProgramado(tipoDocumentoDoRelatorio(r)) && (r.severidade?.grau || "NORMAL") === "NORMAL") {
-    return cardEvento({
-      titulo: "CONDIÇÕES METEOROLÓGICAS",
-      grau: "NORMAL",
-      descricao: "Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.",
-      semFonte: true,
-    });
-  }
-  return "";
+function blocoCardsAlerta(r) {
+  return montarCardsAlerta(r, {
+    tipoDocumento: tipoDocumentoDoRelatorio(r),
+    detalhado: true,
+    cardCondicoesNormais: true,
+  }).map(cardAlertaHtml).join("");
 }
 
 function blocoDivergencias(divergencias) {
@@ -345,58 +286,6 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
       ${relacao}` : `<p class="cor-continua">Continua na próxima parte.</p>`}
     </div>`;
   }).join("") + outrosHtml;
-}
-
-// Aviso oficial do INMET (texto preservado, origem identificada). Aviso de
-// chuva aplicável à base traz ao lado as recomendações de chuva cadastradas
-// para o nível correspondente à severidade oficial — mesmo sem alerta
-// equivalente da previsão. Itens já listados em outro alerta de chuva deste
-// documento não são repetidos.
-function blocoAvisosInmet(r, recomendacoesExibidas = new Set()) {
-  const tipoDocumento = tipoDocumentoDoRelatorio(r);
-  const consolidados = avisosExibiveis(consolidarAvisosInmet(r.avisosInmet), tipoDocumento);
-  const eventos = eventosLocais(r);
-  if (!consolidados.length) return "";
-  return consolidados
-    .map(
-      (a) => {
-        const evento = a.event || a.evento || a.descricao || a.headline;
-        const severidade = a.severity || a.severidade;
-        const inicio = a.onset || a.inicio;
-        const fim = a.expires || a.fim;
-        const motivo = a.description || a.riscos;
-        const instrucoes = a.instruction || a.instrucoes;
-        const grau = grauAvisoInmet(severidade) || "NORMAL";
-        const cor = corSeveridade(severidade);
-        const card = `<div class="aviso-inmet evento-card" style="border-color:${cor};background:#FFF8F0;">
-        <div class="evento-titulo" style="color:${cor};"><span class="evento-icone">●</span> Aviso oficial INMET</div>
-        <p class="evento-descricao"><strong>${esc(evento)}</strong> — <strong style="color:${cor};">${esc(severidade)}</strong></p>
-        ${(inicio || fim) ? `<p class="evento-linha"><strong>Vigência:</strong> ${esc(inicio)} até ${esc(fim)}</p>` : ""}
-        <p class="evento-linha"><strong>Fonte de dados:</strong> INMET</p>
-        ${motivo?.length ? `<p class="evento-linha"><strong>Motivo do aviso:</strong> ${textoOficialHtml(motivo)}</p>` : ""}
-        ${instrucoes?.length ? `<p class="evento-linha"><strong>Instruções oficiais:</strong> ${textoOficialHtml(instrucoes)}</p>` : ""}
-      </div>`;
-        // Informativos programados preservam o quadro completo, inclusive
-        // avisos em condição normal. Recomendações só acompanham níveis que
-        // configuram alerta operacional.
-        if (!alertaExibivel(grau)) return card;
-        const chuva = recomendacoesChuvaAvisoInmet(a);
-        const resolucao = resolverRecomendacoesAlerta({ aviso: a, eventosLocais: eventos });
-        const novas = resolucao.itens.filter((item) => !recomendacoesExibidas.has(item));
-        const repetidas = resolucao.itens.length - novas.length;
-        novas.forEach((item) => recomendacoesExibidas.add(item));
-        return blocoAlerta(card, {
-          grau,
-          itens: novas,
-          tituloRecomendacoes: resolucao.origem === "inmet" ? "Orientações oficiais do INMET" : TITULO_RECOMENDACOES,
-          subtitulo: tituloFenomenoRecomendacao(evento || "Aviso oficial INMET"),
-          nota: repetidas
-            ? `${novas.length ? "As demais recomendações" : "As recomendações"} deste aviso já constam no alerta correspondente acima e não foram repetidas.`
-            : "",
-        });
-      }
-    )
-    .join("");
 }
 
 function tabelaTemperatura(linhas) {
@@ -703,7 +592,7 @@ const NAO_DISPONIVEL = `<span class="p3d-nd">Não disponível</span>`;
 function celulaCalor(climaSaude, dataIso) {
   const calor = calorPorData(climaSaude, dataIso);
   if (!calor) return `<span class="calor-nd">Indisponível</span>`;
-  return `<span class="calor-nivel" style="color:${visualCard(calor.grau).cor};">${esc(calor.rotulo)}</span>`;
+  return `<span class="calor-nivel" style="color:${visualNivel(calor.grau).texto};">${esc(calor.rotulo)}</span>`;
 }
 
 function numeroBr(valor, casas) {
@@ -821,40 +710,12 @@ function blocosPrevisao(r) {
   return `${previsao}${temperatura || (previsao ? "" : tituloSecao)}${vento}${chuva}`;
 }
 
-function blocoClimaSaude(r) {
+// Clima e Saúde sem dados: só o aviso de indisponibilidade (o card de calor,
+// quando há dados, vem de blocoCardsAlerta, ordenado com os demais alertas).
+function blocoClimaSaudeIndisponivel(r) {
   const integracao = r.climaSaude;
-  if (!integracao) return '';
-  const dados = integracao.dados;
-  if (!dados) return `<p class="clima-indisponivel">${esc(integracao.mensagem || "Dados do Clima e Saúde indisponíveis nesta atualização.")}</p>`;
-  const nivel = dados.nivel || { grau: "NORMAL" };
-  if (!deveExibirNoDocumento({ nivel: nivel.grau, tipoDocumento: tipoDocumentoDoRelatorio(r) })) return "";
-  const temperatura = dados.temperatura || {};
-  const previsao = (dados.previsaoDias || []).map((dia) => `<li>${esc(dia.data)}: EHF ${esc(dia.classificacao)}; máxima ${dia.tempMax == null ? 'indisponível' : `${esc(dia.tempMax)} °C`}</li>`).join('');
-  const detalhes = `<p class="evento-linha">Temperatura média: ${temperatura.media == null ? 'indisponível' : `${esc(temperatura.media)} °C`}</p>
-    <p class="evento-linha">Temperatura máxima prevista: ${temperatura.maxima == null ? 'indisponível' : `${esc(temperatura.maxima)} °C`}</p>
-    <p class="evento-linha">Temperatura mínima: ${temperatura.minima == null ? 'indisponível' : `${esc(temperatura.minima)} °C`}</p>
-    <p class="evento-linha">RISCO COMBINADO À SAÚDE: ${esc(dados.riscoCombinado)}</p>
-    <p class="evento-linha">GeoSES / vulnerabilidade social: ${dados.geoses?.valor == null ? 'indisponível' : esc(dados.geoses.valor)}${dados.geoses?.classificacao ? ` (${esc(dados.geoses.classificacao)})` : ''}</p>
-    <p class="evento-linha">Consulta: ${esc(dados.consultadoEm)}${integracao.status === 'armazenado' ? ' — última coleta válida armazenada' : ''}</p>
-    ${previsao ? `<div class="evento-linha"><strong>Previsão Clima e Saúde</strong><ul>${previsao}</ul></div>` : ''}`;
-  const card = cardEvento({
-    titulo: "CALOR / RISCO À SAÚDE",
-    grau: nivel.grau,
-    descricao: `EHF: ${dados.ehf?.classificacao || "Indisponível"}${dados.ehf?.valor == null ? '' : ` (${dados.ehf.valor})`}`,
-    fonteDados: dados.source,
-    detalhes,
-  });
-  if (!alertaExibivel(nivel.grau)) return card;
-  const resolucao = resolverRecomendacoesAlerta({
-    evento: { fenomeno: "calor", grau: nivel.grau, recomendacoes: dados.recomendacoes },
-    avisosInmet: r.avisosInmet,
-  });
-  return blocoAlerta(card, {
-    grau: nivel.grau,
-    itens: resolucao.itens,
-    tituloRecomendacoes: resolucao.origem === "inmet" ? "Orientações oficiais do INMET" : TITULO_RECOMENDACOES,
-    subtitulo: tituloFenomenoRecomendacao("Calor / risco à saúde"),
-  });
+  if (!integracao || integracao.dados) return "";
+  return `<p class="clima-indisponivel">${esc(integracao.mensagem || "Dados do Clima e Saúde indisponíveis nesta atualização.")}</p>`;
 }
 
 // Cabeçalho institucional dos PDFs (diário e semanal): CIM à esquerda,
@@ -937,9 +798,6 @@ function cabecalhoPdfHtml({ titulo, linhaLocal }) {
  *   comunicado do dia (PDF anexado ao e-mail).
  */
 function renderPdfHtml(r, opcoes = {}) {
-  // Itens de recomendação de chuva já exibidos (evita repetição entre o
-  // alerta da previsão e os avisos do INMET).
-  const recomendacoesExibidas = new Set();
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -1004,19 +862,41 @@ function renderPdfHtml(r, opcoes = {}) {
   .bloco-tabela td small { color: #666; font-size: 8.5pt; }
   .fonte-tabela { font-family: ${brand.fontePrincipal}; font-size: 8.5pt; line-height: 1.45; color: #555; text-align: left; margin: 5px 0 14px 0; }
   .rotulo-tabela { font-size: 10pt; margin: 10px 0 4px 0; }
-  /* Alerta à esquerda, recomendações à direita, no mesmo bloco. */
-  table.alerta-bloco { table-layout: fixed; border-collapse: collapse; margin: 10px 0; font-size: inherit; break-before: auto; break-after: auto; break-inside: avoid; page-break-before: auto; page-break-after: auto; page-break-inside: avoid; }
-  table.alerta-bloco > tbody > tr > td { padding: 0; border: 0; vertical-align: top; }
-  td.alerta-col-card { width: 55%; padding-right: 9px !important; }
-  td.alerta-col-card .evento-card { margin: 0; padding: 11px 14px; }
-  td.alerta-col-card .evento-titulo { white-space: normal; font-size: 12.5pt; }
-  td.alerta-col-card .evento-titulo-longo { font-size: 11pt; }
-  .alerta-rec { border: 1px solid ${brand.cinzaBorda}; border-top: 4px solid; border-radius: 5px; padding: 10px 12px; font-size: 9.5pt; line-height: 1.38; background: #ffffff; }
-  .alerta-rec-titulo { font-weight: 700; font-size: 9.5pt; color: ${brand.verdeEscuro}; }
-  .alerta-rec-sub { font-weight: 700; font-size: 9.5pt; margin: 3px 0 0 0; text-transform: uppercase; }
-  .alerta-rec ul { margin: 4px 0 0 0; padding-left: 16px; }
-  .alerta-rec li { margin-bottom: 3px; }
-  .alerta-rec-nota { font-size: 9pt; color: #555; margin: 6px 0 0 0; }
+  /* Card de alerta único (alerta + recomendações na mesma borda). Inteiro
+     na próxima página quando cabe nela; maior que uma página, continua com
+     a borda repetida, sem cortar linhas e sem título isolado. */
+  .card-alerta {
+    border: 1.5px solid;
+    border-left-width: 6px;
+    border-radius: 5px;
+    margin: 12px 0;
+    background: #ffffff;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .card-alerta-topo { break-inside: avoid; page-break-inside: avoid; }
+  .card-alerta-cab { padding: 9px 15px 10px; border-bottom: 1px solid; border-radius: 3px 3px 0 0; }
+  .card-alerta-meta { font-size: 9pt; color: #555; line-height: 1.3; }
+  .card-alerta-selo { display: inline-block; padding: 2px 9px; margin-right: 6px; border-radius: 3px; font-size: 8.5pt; font-weight: 800; letter-spacing: 0.6px; }
+  .card-alerta-titulo { font-size: 14.5pt; font-weight: 700; line-height: 1.3; margin-top: 5px; }
+  .card-alerta-titulo-longo { font-size: 12pt; }
+  .card-alerta-topo > p, .card-alerta-topo > div.evento-linha { margin: 10px 15px 0; }
+  .card-alerta-corpo { padding: 0 15px 10px; }
+  .card-alerta-corpo:empty { padding-bottom: 4px; }
+  .card-alerta-corpo .evento-linha, .card-alerta-corpo .evento-descricao { break-inside: avoid; page-break-inside: avoid; }
+  .card-alerta-corpo ul { margin: 4px 0 0 0; }
+  .card-alerta-rec { margin: 0 15px; padding: 9px 0 10px; border-top: 1px solid ${brand.cinzaBorda}; }
+  .card-alerta-rec-cab { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+  .card-alerta-rec-titulo { font-size: 10.5pt; font-weight: 800; letter-spacing: 0.5px; }
+  .card-alerta-rec-origem { font-size: 8.5pt; color: #555; }
+  .card-alerta-rec ul { margin: 5px 0 0 0; padding-left: 18px; font-size: 10pt; }
+  .card-alerta-rec li { margin-bottom: 4px; break-inside: avoid; page-break-inside: avoid; }
   .evento-card {
     width: 100%;
     border: 1.5px solid;
@@ -1030,23 +910,10 @@ function renderPdfHtml(r, opcoes = {}) {
     page-break-inside: avoid;
     -webkit-column-break-inside: avoid;
   }
-  .evento-titulo {
-    font-size: 15pt;
-    font-weight: 700;
-    line-height: 1.4;
-    margin: 0 0 8px 0;
-    white-space: nowrap;
-    word-break: keep-all;
-    overflow-wrap: normal;
-    break-after: avoid;
-    page-break-after: avoid;
-  }
-  .evento-titulo-longo { font-size: 11.5pt; letter-spacing: -0.1px; }
   .evento-icone { font-size: 11pt; vertical-align: 1px; }
   .evento-descricao { margin: 0 0 7px 0; line-height: 1.48; }
   .evento-linha { margin: 6px 0 0 0; line-height: 1.48; }
   .evento-linha ul { margin-bottom: 0; }
-  .recomendacao-grupo ul { margin: 5px 0 0 0; }
   .clima-indisponivel { color: #666; font-size: 10pt; margin: 12px 0; }
   .warning-box {
     border-left: 4px solid ${brand.vermelhoAlerta};
@@ -1055,7 +922,6 @@ function renderPdfHtml(r, opcoes = {}) {
     margin: 14px 0;
     font-size: 10pt;
   }
-  .aviso-inmet { break-inside: avoid; page-break-inside: avoid; }
   .cor-card { border-width: 1.5px; border-left-width: 7px; border-radius: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #1F2A26; }
   .cor-card-continuacao { margin-top: 10px; }
   .cor-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
@@ -1138,10 +1004,9 @@ function renderPdfHtml(r, opcoes = {}) {
 
   ${tabelaMar(r.mar, r.fontesPorCampo)}
   ${tabelaQualidadeAr(r.qualidadeAr, r.fontesPorCampo)}
-  ${blocoEventoExtremo(r, recomendacoesExibidas)}
-  ${blocoClimaSaude(r)}
+  ${blocoCardsAlerta(r)}
+  ${blocoClimaSaudeIndisponivel(r)}
   ${blocoCorRio(r, { somenteDoDia: opcoes.corRioSomenteDoDia })}
-  ${blocoAvisosInmet(r, recomendacoesExibidas)}
   ${blocoMonitorSecas(r)}
   ${blocoAvisosColeta(r)}
 

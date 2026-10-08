@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const cheerio = require('cheerio');
 const { renderPdfHtml } = require('../src/render/pdfTemplate');
+const { VISUAL_NIVEL } = require('../src/render/alertCards');
 
 function relatorio(alteracoes = {}) {
   return {
@@ -45,21 +46,23 @@ function relatorio(alteracoes = {}) {
 test('cards locais, calor e aviso oficial seguem o mesmo padrão, sem duplicar INMET', () => {
   const html = renderPdfHtml(relatorio());
   const $ = cheerio.load(html);
-  assert.equal($('.evento-card').length, 3);
-  assert.equal($('.aviso-inmet.evento-card').length, 1);
-  assert.equal($('.evento-card').filter((_, e) => $(e).text().includes('CALOR / RISCO À SAÚDE')).length, 0);
+  const cards = $('section.card-alerta');
+  assert.equal(cards.length, 3);
+  assert.equal(cards.filter((_, e) => $(e).find('.card-alerta-meta').text().includes('Aviso oficial INMET')).length, 1);
+  assert.equal(cards.filter((_, e) => $(e).text().includes('CALOR / RISCO À SAÚDE')).length, 0);
   assert.equal(html.includes('Aviso oficial INMET ativo; consulte o texto completo.'), false);
   assert.equal(html.includes('Rajada prevista/registrada'), false);
   assert.equal(html.includes('Windy: dados de teste'), false);
-  assert.match(html, /border-color:#D32F2F/);
-  assert.match(html, /border-color:#F57C00/);
+  assert.ok(html.includes(`border-color:${VISUAL_NIVEL.ALERTA.cor}`));
+  assert.ok(html.includes(`border-color:${VISUAL_NIVEL['ATENÇÃO'].cor}`));
   assert.doesNotMatch(html, /CALOR \/ RISCO À SAÚDE — NORMAL/);
-  assert.match(html, /\.evento-card \{[^}]*page-break-inside: avoid/s);
-  assert.match(html, /\.aviso-inmet \{[^}]*page-break-inside: avoid/s);
+  assert.match(html, /\.card-alerta \{[^}]*page-break-inside: avoid/s);
   assert.equal($('h4.subsecao').filter((_, e) => $(e).text() === 'CALOR / RISCO À SAÚDE').length, 0);
   assert.match(html, /<strong>Motivo do aviso:<\/strong> Chuva entre 20 e 30 mm\/h\./);
   assert.match(html, /<strong>Instruções oficiais:<\/strong> Busque abrigo\./);
-  assert.match(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
+  // Cada card traz a própria seção RECOMENDAÇÕES, dentro da mesma borda.
+  assert.equal(cards.filter((_, e) => $(e).find('.card-alerta-rec-titulo').text() === 'RECOMENDAÇÕES').length, 3);
+  assert.doesNotMatch(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
 });
 
 test('PDF identifica dado marítimo armazenado com horário de Brasília', () => {
@@ -82,8 +85,7 @@ test('aviso e calor ausentes não geram cards falsos; Windy só aparece com dado
   });
   const html = renderPdfHtml(base);
   const $ = cheerio.load(html);
-  assert.equal($('.aviso-inmet').length, 0);
-  assert.equal($('.evento-card').length, 0);
+  assert.equal($('.card-alerta').length, 0);
   assert.equal(html.includes('CONDIÇÕES METEOROLÓGICAS — NORMAL'), false);
   assert.equal($('.clima-indisponivel').length, 1);
   assert.equal(html.includes('Sem excesso'), false);
@@ -122,12 +124,12 @@ test('PDF ordena qualidade do ar, particulados e deixa o índice UV na última l
   assert.match(linhas.last().text(), /Índice UV.*11\.2.*12:00.*Extremo.*Faixas OMS/s);
 });
 
-test('PDF ordena eventos por severidade crescente', () => {
+test('PDF ordena eventos por severidade decrescente', () => {
   const html = renderPdfHtml(relatorio());
   const vento = html.indexOf('VENTO — ATENÇÃO');
   const uv = html.indexOf('ÍNDICE UV — ALERTA');
-  assert.ok(vento >= 0 && uv > vento);
-  assert.match(html.slice(uv), /Índice UV extremo previsto/);
+  assert.ok(uv >= 0 && vento > uv);
+  assert.match(html.slice(uv, vento), /Índice UV extremo previsto/);
 });
 
 test('ressalva aparece uma vez depois das fontes manuais', () => {

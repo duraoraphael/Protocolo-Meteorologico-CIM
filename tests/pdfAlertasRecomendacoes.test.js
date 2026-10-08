@@ -46,37 +46,44 @@ const avisoChuva = {
   riscos: ["Chuva entre 30 e 60 mm/h ou 50 e 100 mm/dia."], instrucoes: ["Evite enfrentar o mau tempo."],
 };
 
-test("cada alerta traz ao lado, no mesmo bloco, todas as recomendações cadastradas", () => {
+const recItens = ($, card) => $(card).find(".card-alerta-rec li").map((_, li) => $(li).text()).get();
+
+test("cada alerta traz, dentro do mesmo card, todas as recomendações cadastradas", () => {
   const $ = cheerio.load(renderPdfHtml(relatorio({ severidade: { grau: "ALERTA", eventos: [eventoVento] } })));
-  const bloco = $("table.alerta-bloco");
-  assert.equal(bloco.length, 1);
-  assert.match(bloco.find("td.alerta-col-card").text(), /VENTO — ALERTA/);
-  assert.match(bloco.find("td.alerta-col-card").text(), /Rajada prevista: 48 km\/h/);
-  const itens = bloco.find("td.alerta-col-rec li").map((_, li) => $(li).text()).get();
-  assert.deepEqual(itens, recomendacoes("vento", "ALERTA"));
+  const card = $("section.card-alerta");
+  assert.equal(card.length, 1);
+  assert.equal($("table.alerta-bloco").length, 0, "sem o bloco lateral antigo");
+  assert.match(card.find(".card-alerta-titulo").text(), /VENTO — ALERTA/);
+  assert.match(card.text(), /Rajada prevista: 48 km\/h/);
+  assert.equal(card.find(".card-alerta-rec-titulo").text(), "RECOMENDAÇÕES");
+  assert.deepEqual(recItens($, card), recomendacoes("vento", "ALERTA"));
 });
 
 test("aviso INMET de chuva sem alerta equivalente da previsão traz as recomendações do nível oficial", () => {
-  const html = renderPdfHtml(relatorio({ avisosInmet: [avisoChuva] }));
-  const $ = cheerio.load(html);
-  const bloco = $("table.alerta-bloco");
-  assert.equal(bloco.length, 1);
-  assert.match(bloco.find("td.alerta-col-card").text(), /Aviso oficial INMET/);
-  assert.match(bloco.find("td.alerta-col-card").text(), /Chuva entre 30 e 60 mm\/h/, "texto oficial preservado");
-  assert.equal(bloco.find(".alerta-rec-sub").text(), "CHUVA INTENSA:");
-  const itens = bloco.find("td.alerta-col-rec li").map((_, li) => $(li).text()).get();
-  assert.deepEqual(itens, recomendacoes("chuva", "ALERTA"));
+  const $ = cheerio.load(renderPdfHtml(relatorio({ avisosInmet: [avisoChuva] })));
+  // Sem evento da previsão, o programado mantém o card de condições normais — por último.
+  assert.deepEqual($("section.card-alerta").map((_, c) => $(c).attr("data-nivel")).get(), ["ALERTA", "NORMAL"]);
+  const card = $("section.card-alerta").first();
+  assert.match(card.find(".card-alerta-meta").text(), /Aviso oficial INMET/);
+  assert.match(card.find(".card-alerta-titulo").text(), /CHUVA INTENSA — ALERTA/);
+  assert.match(card.text(), /Chuva entre 30 e 60 mm\/h/, "texto oficial preservado");
+  assert.deepEqual(recItens($, card), recomendacoes("chuva", "ALERTA"));
 });
 
-test("aviso INMET de chuva não repete recomendações já listadas no alerta de chuva da previsão", () => {
+test("alerta da previsão e aviso INMET do mesmo fenômeno trazem cada um a lista completa do seu nível", () => {
   const $ = cheerio.load(renderPdfHtml(relatorio({
     severidade: { grau: "ALERTA", eventos: [eventoChuva] },
     avisosInmet: [avisoChuva],
   })));
-  const todos = $("td.alerta-col-rec li").map((_, li) => $(li).text()).get();
-  assert.equal(new Set(todos).size, todos.length, "nenhum item repetido");
-  assert.deepEqual(todos, recomendacoes("chuva", "ALERTA"));
-  assert.match($("table.alerta-bloco").last().text(), /já constam no alerta correspondente acima/);
+  const cards = $("section.card-alerta");
+  assert.deepEqual(cards.map((_, c) => $(c).attr("data-nivel")).get(), ["ALERTA", "ATENÇÃO"], "ALERTA (INMET) antes de ATENÇÃO");
+  assert.deepEqual(recItens($, cards[0]), recomendacoes("chuva", "ALERTA"));
+  assert.deepEqual(recItens($, cards[1]), recomendacoes("chuva", "ATENÇÃO"));
+  for (const card of cards.toArray()) {
+    const itens = recItens($, card);
+    assert.equal(new Set(itens).size, itens.length, "nenhum item repetido dentro do card");
+  }
+  assert.doesNotMatch($.html(), /já constam no alerta correspondente/);
 });
 
 test("cenário A: alerta NORMAL é removido antes da renderização do card", () => {
@@ -87,7 +94,7 @@ test("cenário A: alerta NORMAL é removido antes da renderização do card", ()
     severidade: { grau: "NORMAL", eventos: [normal] },
   }));
   const $ = cheerio.load(html);
-  assert.equal($("table.alerta-bloco").length, 0);
+  assert.equal($("section.card-alerta").length, 0);
   assert.doesNotMatch(html, /VENTO — NORMAL|CONDIÇÕES METEOROLÓGICAS — NORMAL/);
 });
 
@@ -95,10 +102,12 @@ for (const [horarioAgendado, tipoDocumento] of [
   ["05:00", TIPOS_DOCUMENTO.INFORMATIVO_05H],
   ["15:00", TIPOS_DOCUMENTO.INFORMATIVO_15H],
 ]) {
-  test(`informativo programado das ${horarioAgendado} preserva o card NORMAL`, () => {
+  test(`informativo programado das ${horarioAgendado} preserva o card NORMAL, sem recomendações`, () => {
     const normal = { ...eventoVento, grau: "NORMAL", titulo: "VENTO — NORMAL", recomendacoes: [] };
     const html = renderPdfHtml(relatorio({ horarioAgendado, tipoDocumento, severidade: { grau: "NORMAL", eventos: [normal] } }));
+    const $ = cheerio.load(html);
     assert.match(html, /VENTO — NORMAL/);
+    assert.equal($("section.card-alerta[data-nivel=NORMAL] .card-alerta-rec").length, 0);
     assert.doesNotMatch(html, /Não há recomendações cadastradas/);
   });
 }
@@ -107,8 +116,7 @@ test("cenário B: ATENÇÃO mantém recomendação local e não a substitui pela
   const local = { ...eventoVento, grau: "ATENÇÃO", titulo: "VENTO — ATENÇÃO", recomendacoes: ["Recomendação local cadastrada."] };
   const aviso = { descricao: "Vento Forte", severidade: "Perigo Potencial", instrucoes: ["Orientação oficial que é apenas fallback."] };
   const $ = cheerio.load(renderPdfHtml(relatorio({ severidade: { grau: "ATENÇÃO", eventos: [local] }, avisosInmet: [aviso] })));
-  const itens = $("table.alerta-bloco").first().find("td.alerta-col-rec li").map((_, li) => $(li).text()).get();
-  assert.deepEqual(itens, ["Recomendação local cadastrada."]);
+  assert.deepEqual(recItens($, $("section.card-alerta").first()), ["Recomendação local cadastrada."]);
 });
 
 for (const [nome, grau, severidade] of [
@@ -119,9 +127,9 @@ for (const [nome, grau, severidade] of [
     const evento = { ...eventoVento, grau, titulo: `VENTO — ${grau}`, recomendacoes: [] };
     const aviso = { descricao: "Vento Forte", severidade, instrucoes: ["Afaste-se de árvores e estruturas frágeis."] };
     const $ = cheerio.load(renderPdfHtml(relatorio({ severidade: { grau, eventos: [evento] }, avisosInmet: [aviso] })));
-    const primeiroBloco = $("table.alerta-bloco").first();
-    assert.match(primeiroBloco.find(".alerta-rec-titulo").text(), /Orientações oficiais do INMET/);
-    assert.deepEqual(primeiroBloco.find("td.alerta-col-rec li").map((_, li) => $(li).text()).get(), ["Afaste-se de árvores e estruturas frágeis."]);
+    const primeiro = $("section.card-alerta").first();
+    assert.match(primeiro.find(".card-alerta-rec-origem").text(), /Orientações oficiais do INMET/);
+    assert.deepEqual(recItens($, primeiro), ["Afaste-se de árvores e estruturas frágeis."]);
   });
 }
 
@@ -129,27 +137,30 @@ test("cenário E: sem recomendação local nem orientação do INMET usa somente
   const evento = { ...eventoVento, grau: "ATENÇÃO", titulo: "VENTO — ATENÇÃO", recomendacoes: [] };
   const html = renderPdfHtml(relatorio({ severidade: { grau: "ATENÇÃO", eventos: [evento] }, avisosInmet: [] }));
   const $ = cheerio.load(html);
-  assert.deepEqual($("table.alerta-bloco").first().find("td.alerta-col-rec li").map((_, li) => $(li).text()).get(), [RECOMENDACAO_NEUTRA]);
+  assert.deepEqual(recItens($, $("section.card-alerta").first()), [RECOMENDACAO_NEUTRA]);
   assert.doesNotMatch(html, /Não há recomendações cadastradas/);
 });
 
-test("títulos dos fenômenos ficam em caixa alta sem alterar o texto das recomendações", () => {
+test("títulos FENÔMENO — NÍVEL em caixa alta, por severidade, sem alterar o texto das recomendações", () => {
   const eventos = [
-    { ...eventoVento, fenomeno: "Vento", titulo: "Vento — ALERTA", grau: "ALERTA", recomendacoes: ["Manter o monitoramento durante o dia."] },
     { ...eventoChuva, fenomeno: "Tempestade", titulo: "Tempestade — ATENÇÃO", grau: "ATENÇÃO", recomendacoes: ["Reforçar comunicação preventiva."] },
+    { ...eventoVento, fenomeno: "Vento", titulo: "Vento — ALERTA", grau: "ALERTA", recomendacoes: ["Manter o monitoramento durante o dia."] },
   ];
   const $ = cheerio.load(renderPdfHtml(relatorio({ severidade: { grau: "ALERTA", eventos } })));
-  assert.deepEqual($(".alerta-rec-sub").map((_, el) => $(el).text()).get(), ["TEMPESTADE COM RAIOS:", "VENTO:"]);
-  assert.deepEqual($(".alerta-rec li").map((_, el) => $(el).text()).get(), [
-    "Reforçar comunicação preventiva.",
+  assert.deepEqual($(".card-alerta-titulo").map((_, el) => $(el).text().replace("●", "").trim()).get(), ["VENTO — ALERTA", "TEMPESTADE COM RAIOS — ATENÇÃO"]);
+  assert.deepEqual($(".card-alerta-rec li").map((_, el) => $(el).text()).get(), [
     "Manter o monitoramento durante o dia.",
+    "Reforçar comunicação preventiva.",
   ]);
 });
 
-test("CSS mantém cada alerta com recomendações unido e reduz o espaço entre blocos", () => {
+test("CSS: card inteiro na próxima página quando cabe; maior que a página continua sem título isolado", () => {
   const html = renderPdfHtml(relatorio());
-  assert.match(html, /table\.alerta-bloco \{[^}]*margin: 10px 0[^}]*break-inside: avoid[^}]*page-break-inside: avoid/s);
-  assert.doesNotMatch(html, /table\.alerta-bloco \{[^}]*page-break-before:\s*always/s);
+  assert.match(html, /\.card-alerta \{[^}]*break-inside: avoid[^}]*page-break-inside: avoid[^}]*box-decoration-break: clone/s);
+  assert.match(html, /\.card-alerta-topo \{ break-inside: avoid/);
+  assert.match(html, /\.card-alerta-rec-cab \{ break-after: avoid/);
+  assert.match(html, /\.card-alerta-rec li \{[^}]*break-inside: avoid/);
+  assert.doesNotMatch(html, /\.card-alerta \{[^}]*page-break-before:\s*always/s);
 });
 
 test("regra de chuva do INMET: só avisos de chuva, só severidades reconhecidas", () => {

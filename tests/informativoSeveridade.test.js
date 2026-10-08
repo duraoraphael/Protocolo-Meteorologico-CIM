@@ -15,6 +15,12 @@ const { renderEmailHtml } = require("../src/render/emailTemplate");
 const { recomendacoes } = require("../src/logic/inmetAlertRules");
 const { carregarPainel } = require("./helpers/fakeDom");
 const { montarOcorrencias } = require("../src/logic/ocorrenciasPainel");
+const { VISUAL_NIVEL } = require("../src/render/alertCards");
+
+// Texto visível do documento (rótulos em <strong>, quebras de linha como espaço).
+function textoPlano(html) {
+  return html.replace(/<br\s*\/?>/g, " ").replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+}
 
 function conferir(casos, criarEntrada) {
   for (const [valor, grau, cor] of casos) {
@@ -105,7 +111,7 @@ test("maior grau entre vento e chuva determina o status geral", () => {
   assert.equal(avaliarRiscos(consolidado({ rajadaKmh: 61, chuvaHorariaMmH: 40 })).severidade.grau, "EMERGÊNCIA");
 });
 
-test("rajada de 36 km/h aparece como ATENÇÃO laranja em tela, PDF e e-mail", () => {
+test("rajada de 36 km/h aparece como ATENÇÃO em tela (laranja), PDF e e-mail (amarelo)", () => {
   const report = relatorioRenderizado({ rajadaKmh: 36, chuvaHorariaMmH: 15, chuvaDiariaMm: 0 });
   const pdf = renderPdfHtml(report);
   const email = renderEmailHtml(report);
@@ -114,14 +120,14 @@ test("rajada de 36 km/h aparece como ATENÇÃO laranja em tela, PDF e e-mail", (
   assert.equal(report.severidade.grau, "ATENÇÃO");
   assert.equal(report.eventoMaisRelevante.titulo, "VENTO — ATENÇÃO");
   assert.deepEqual(report.eventoMaisRelevante.recomendacoes, ["Manter o monitoramento durante o dia."]);
-  assert.match(pdf, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
-  assert.match(pdf, /class="evento-titulo"[^>]*>.*VENTO — ATENÇÃO/);
-  assert.match(pdf, /font-size: 15pt/);
-  assert.match(pdf, /padding: 14px 17px/);
+  assert.match(pdf, /class="card-alerta-titulo"[^>]*>.*VENTO — ATENÇÃO/);
+  assert.match(pdf, /class="card-alerta-rec-titulo"[^>]*>RECOMENDAÇÕES</);
 
   for (const html of [pdf, email]) {
     assert.match(html, /VENTO — ATENÇÃO/);
-    assert.match(html, /#F57C00/);
+    assert.ok(html.includes(VISUAL_NIVEL["ATENÇÃO"].cor));
+    assert.match(html, /RECOMENDAÇÕES/);
+    assert.match(html, /Protocolo Meteorológico do COMPARTILHADO/);
     assert.match(html, /Manter o monitoramento durante o dia/);
     assert.doesNotMatch(html, /Não foi identificado evento climático extremo/);
     assert.doesNotMatch(html, /Sem risco meteorológico relevante identificado/);
@@ -152,8 +158,8 @@ test("vento e chuva simultâneos permanecem visíveis com a maior severidade", (
 test("NORMAL não gera card; ALERTA e EMERGÊNCIA mantêm cor e classe iguais nas saídas", () => {
   const casos = [
     { rajadaMaxKmh: 25, grau: "NORMAL", classe: "sem-ocorrencias", tela: "Nenhuma ocorrência ativa" },
-    { rajadaMaxKmh: 45, grau: "ALERTA", corPdf: "#D32F2F", corEmail: "#D32F2F", classe: "ocorrencia nivel-alerta", titulo: "VENTO — ALERTA", tela: "VENTO — ALERTA" },
-    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", corPdf: "#B71C1C", corEmail: "#B71C1C", classe: "ocorrencia nivel-emergencia", titulo: "VENTO — EMERGÊNCIA", tela: "VENTO — EMERGÊNCIA" },
+    { rajadaMaxKmh: 45, grau: "ALERTA", classe: "ocorrencia nivel-alerta", titulo: "VENTO — ALERTA", tela: "VENTO — ALERTA" },
+    { rajadaMaxKmh: 65, grau: "EMERGÊNCIA", classe: "ocorrencia nivel-emergencia", titulo: "VENTO — EMERGÊNCIA", tela: "VENTO — EMERGÊNCIA" },
   ];
 
   for (const caso of casos) {
@@ -166,18 +172,17 @@ test("NORMAL não gera card; ALERTA e EMERGÊNCIA mantêm cor e classe iguais na
     assert.match(tela, new RegExp(caso.classe));
     assert.match(tela, new RegExp(caso.tela));
     if (caso.grau === "NORMAL") {
-      assert.doesNotMatch(pdf, /CONDIÇÕES METEOROLÓGICAS — NORMAL|class="alerta-bloco"/);
+      assert.doesNotMatch(pdf, /CONDIÇÕES METEOROLÓGICAS — NORMAL|class="card-alerta"/);
       assert.doesNotMatch(email, /CONDIÇÕES METEOROLÓGICAS — NORMAL/);
       assert.doesNotMatch(tela, /class="ocorrencia /, "sem cards vazios");
     } else {
       assert.match(pdf, new RegExp(caso.titulo));
       assert.match(email, new RegExp(caso.titulo));
-      assert.match(pdf, new RegExp(caso.corPdf));
-      assert.match(email, new RegExp(caso.corEmail));
-      assert.match(pdf, /class="evento-titulo"/);
-      assert.match(pdf, /font-size: 15pt/);
-      assert.match(pdf, /font-weight: 700/);
-      assert.match(pdf, /margin: 0 0 8px 0/);
+      const v = VISUAL_NIVEL[caso.grau];
+      assert.ok(pdf.includes(`data-nivel="${caso.grau}" style="border-color:${v.cor};background:${v.fundo};"`));
+      assert.ok(email.includes(`background:${v.fundo};border:1.5px solid ${v.cor}`));
+      assert.match(pdf, new RegExp(`class="card-alerta-titulo"[^>]*style="color:${v.texto};"`));
+      assert.match(email, new RegExp(`data-alert-title="true" style="color:${v.texto};`));
     }
   }
 });
@@ -237,21 +242,23 @@ test("rajada, fonte, recomendações e motivo oficial são consistentes em tela,
   assert.match(tela, /Fonte: Open-Meteo/);
   assert.match(tela, /Chuva entre 20 e 30 mm\/h\. Ventos intensos entre 40 e 60 km\/h\./);
   assert.doesNotMatch(tela, /consulte o (texto|site|aviso)/i);
-  for (const html of [detalheVento, pdf, email]) {
+  assert.match(detalheVento, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
+  for (const html of [detalheVento, textoPlano(pdf), textoPlano(email)]) {
     assert.match(html, /Rajada prevista: 41 km\/h/);
     assert.match(html, /Fonte de dados: Open-Meteo/);
-    assert.match(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
     assert.doesNotMatch(html, /Rajada máxima prevista\/registrada|A condição atingiu|Fonte de critério/);
   }
-  for (const html of [detalhes, pdf, email]) {
+  for (const html of [pdf, email]) {
+    assert.match(textoPlano(html), /RECOMENDAÇÕES Protocolo Meteorológico do COMPARTILHADO/);
+  }
+  for (const html of [detalhes, textoPlano(pdf), textoPlano(email)]) {
     assert.match(html, /Motivo do aviso:.*Chuva entre 20 e 30 mm\/h\. Ventos intensos entre 40 e 60 km\/h\./);
   }
   assert.match(detalhes, /Fonte de dados: INMET/);
   assert.match(pdf, /Fonte de dados:<\/strong> INMET/);
-  assert.match(email, /Fonte: INMET/);
+  assert.match(email, /Fonte de dados:<\/strong> INMET/);
   assert.match(pdf, /class="header-logo-cim"/);
   assert.match(pdf, /alt="CIM — Centro Integrado de Monitoramento COMPARTILHADO"/);
-  assert.match(pdf, /padding: 14px 17px/);
   assert.doesNotMatch(tela + detalhes + email, /Deslocamento|Edificação/);
   assert.match(pdf, /Deslocamento/);
   assert.match(pdf, /Edificação/);

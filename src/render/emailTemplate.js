@@ -1,17 +1,11 @@
 const { esc } = require("./pdfTemplate");
 const { renderDailyChanges, renderEmailHeader } = require("./emailComponents");
-const { ordenarEventosParaExibicao } = require("./eventOrdering");
-const { consolidarAvisosInmet, fenomenoAvisoInmet, grauAvisoInmet } = require("../sources/inmet");
+const { montarCardsAlerta, visualNivel } = require("./alertCards");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
 const AlertTitle = require("../../public/alert-title");
 const { calorPorData, dataLocal } = require("../logic/calorPorData");
-const {
-  alertaExibivel,
-  avisosExibiveis,
-  fenomenoDoEvento,
-  resolverRecomendacoesAlerta,
-} = require("../logic/alertPresentation");
+const { TIPOS_DOCUMENTO, alertaExibivel } = require("../logic/alertPresentation");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
 // bgcolor + background) para que nenhum cliente herde áreas escuras. Só o
@@ -52,27 +46,6 @@ function rajadaMaxima(r) {
   return { valor: maximo.rajadaMaxKmh, periodo: maximo.periodo };
 }
 
-function corGrau(grau) {
-  const normalizado = String(grau || "").toUpperCase();
-  if (normalizado.includes("EMERGÊNCIA") || normalizado.includes("EMERGENCIA")) return "#B71C1C";
-  if (normalizado.includes("ALERTA")) return "#D32F2F";
-  if (normalizado.includes("ATENÇÃO") || normalizado.includes("ATENCAO")) return "#F57C00";
-  return "#2E7D32";
-}
-
-// O laranja de ATENÇÃO (#F57C00) fica abaixo do contraste mínimo como texto
-// sobre branco; bordas mantêm a cor original e textos usam o tom escuro.
-function corTexto(cor) {
-  return cor === "#F57C00" ? "#E65100" : cor;
-}
-
-function corAvisoInmet(severidade) {
-  const valor = String(severidade || "").toLowerCase();
-  if (valor.includes("grande perigo") || valor.includes("extreme")) return "#B71C1C";
-  if (valor.includes("perigo") || valor.includes("severe")) return "#D32F2F";
-  if (valor.includes("atenção") || valor.includes("atencao") || valor.includes("moderate")) return "#F57C00";
-  return "#2E7D32";
-}
 
 function celulaMetrica(rotulo, valor, ultimaColuna = false) {
   return `<td width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:${ultimaColuna ? "0" : `1px solid ${COR.borda}`};border-bottom:1px solid ${COR.borda};padding:13px 8px 12px;text-align:center;">
@@ -87,7 +60,7 @@ function valorCalor(r) {
   const hoje = dataLocal(r.geradoEmISO || Date.now(), r.cidade?.fuso);
   const calor = calorPorData(r.climaSaude, hoje);
   if (!calor) return `<span style="color:${COR.secundario};font:bold 21px/1.2 Arial,sans-serif;">Indisponível</span>`;
-  return `<span style="color:${corTexto(corGrau(calor.grau))};">${esc(calor.rotulo)}</span>`;
+  return `<span style="color:${visualNivel(calor.grau).texto};">${esc(calor.rotulo)}</span>`;
 }
 
 function resumoMeteorologico(r) {
@@ -130,140 +103,51 @@ function marECondicao(r) {
   </table>`;
 }
 
-function cartao(titulo, cor, linhas, corTitulo = cor) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1.5px solid ${cor};border-left:5px solid ${cor};margin-top:9px;">
-    <tr><td bgcolor="${COR.celula}" style="padding:13px 18px 14px;background:${COR.celula};color:${COR.texto};font:15px/1.5 Arial,sans-serif;">
-      <div style="color:${corTexto(corTitulo)};font:bold 20px/1.25 Arial,sans-serif;margin-bottom:5px;">${titulo}</div>
-      ${linhas.join("")}
-    </td></tr>
-  </table>`;
-}
-
 function eventosLocais(r) {
   const todos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
-  return ordenarEventosParaExibicao(
-    (Array.isArray(todos) ? todos : []).filter((evento) =>
-      evento && evento.tipo !== "avisoInmet"
-      && alertaExibivel(evento.grau || AlertTitle.normalizarGrau(evento.titulo))
-    )
+  return (Array.isArray(todos) ? todos : []).filter((evento) =>
+    evento && evento.tipo !== "avisoInmet"
+    && alertaExibivel(evento.grau || AlertTitle.normalizarGrau(evento.titulo))
   );
 }
 
-function cartaoEvento(evento, grauGeral) {
-  const grau = evento.grau || AlertTitle.normalizarGrau(evento.titulo) || grauGeral;
-  const linhas = [
-    `<div>${texto(evento.descricao)}</div>`,
-    presente(evento.janela) ? `<div style="margin-top:3px;"><em>Janela prevista:</em> ${esc(evento.janela)}</div>` : "",
-    `<div style="margin-top:3px;">Fonte de dados: ${texto(evento.fonteDados)}</div>`,
-  ];
-  return cartao(esc(AlertTitle.tituloEvento(evento, grau)), corGrau(grau), linhas);
-}
-
-function cartaoCalor(climaSaude) {
-  const dados = climaSaude?.dados;
-  if (!dados) return "";
-  const grau = dados.nivel?.grau || "NORMAL";
-  if (!alertaExibivel(grau)) return "";
-  const temp = numeroUnidade(dados.temperatura?.maxima, "°C");
-  const linhas = [
-    `<div>EHF: ${texto(dados.ehf?.classificacao)} · Temperatura máxima prevista: ${temp}</div>`,
-    `<div style="margin-top:3px;">RISCO COMBINADO À SAÚDE: ${texto(dados.riscoCombinado)}</div>`,
-    `<div style="margin-top:3px;">Fonte de dados: ${texto(dados.source)}</div>`,
-  ];
-  return cartao(esc(AlertTitle.formatarTitulo("CALOR / RISCO À SAÚDE", grau)), corGrau(grau), linhas);
-}
-
-function listaOficial(valor) {
-  if (Array.isArray(valor)) return valor.filter(presente);
-  return presente(valor) ? [valor] : [];
-}
-
-function textoOficial(valor) {
-  return esc(valor).replace(/\r?\n/g, "<br>");
-}
-
-function avisosInmet(r) {
-  const avisos = avisosExibiveis(consolidarAvisosInmet(r.avisosInmet));
-  return avisos.map((aviso) => {
-    const evento = aviso.event || aviso.evento || aviso.descricao || aviso.headline;
-    const severidade = aviso.severity || aviso.severidade;
-    const inicio = aviso.onset || aviso.inicio;
-    const fim = aviso.expires || aviso.fim;
-    const cor = corAvisoInmet(severidade);
-    const vigencia = presente(inicio) || presente(fim)
-      ? `<div style="margin-top:3px;">Vigência: ${texto(inicio)} até ${texto(fim)}</div>` : "";
-    const riscos = listaOficial(aviso.description || aviso.riscos);
-    const instrucoes = listaOficial(aviso.instruction || aviso.instrucoes);
-    const linhas = [
-      `<div style="color:${COR.texto};">${texto(evento)} — <strong style="color:${COR.texto};">${texto(severidade)}</strong></div>`,
-      vigencia,
-      riscos.length ? `<div style="margin-top:3px;"><strong>Motivo do aviso:</strong> ${riscos.map(textoOficial).join(" ")}</div>` : "",
-      instrucoes.length ? `<div style="margin-top:3px;"><strong>Instruções oficiais:</strong><br>${instrucoes.map(textoOficial).join("<br>")}</div>` : "",
-      `<div style="margin-top:3px;">Fonte: INMET</div>`,
-    ];
-    return cartao("AVISO OFICIAL INMET", cor, linhas, corGrau("ALERTA"));
-  }).join("");
-}
-
-function nomeFenomeno(evento) {
-  return AlertTitle.nomeParametro(evento.fenomeno || evento.titulo || evento.tipo);
-}
-
-function grupoRecomendacoes(rotulo, grau, itens) {
-  if (!Array.isArray(itens) || !itens.length) return null;
-  return { rotulo, cor: corGrau(grau), itens: itens.filter(presente) };
-}
-
-function recomendacoes(r, eventos) {
-  const grupos = eventos.map((evento) => {
-    const resolucao = resolverRecomendacoesAlerta({ evento, avisosInmet: r.avisosInmet });
-    const sufixo = resolucao.origem === "inmet" ? " — orientação oficial INMET" : "";
-    return grupoRecomendacoes(`${nomeFenomeno(evento)}${sufixo}`, evento.grau || evento.titulo, resolucao.itens);
-  }).filter(Boolean);
-  const fenomenosRepresentados = new Set(eventos.map(fenomenoDoEvento));
-  const dadosCalor = r.climaSaude?.dados;
-  const calorResolvido = dadosCalor && alertaExibivel(dadosCalor.nivel?.grau)
-    ? resolverRecomendacoesAlerta({
-      evento: { fenomeno: "calor", grau: dadosCalor.nivel.grau, recomendacoes: dadosCalor.recomendacoes },
-      avisosInmet: r.avisosInmet,
-    })
-    : null;
-  const calor = calorResolvido && grupoRecomendacoes(
-    `CALOR / RISCO À SAÚDE${calorResolvido.origem === "inmet" ? " — orientação oficial INMET" : ""}`,
-    dadosCalor.nivel.grau,
-    calorResolvido.itens
-  );
-  if (calor) grupos.push(calor);
-  if (calor) fenomenosRepresentados.add("calor");
-
-  for (const aviso of avisosExibiveis(consolidarAvisosInmet(r.avisosInmet))) {
-    const fenomeno = fenomenoAvisoInmet(aviso.descricao || aviso.event || aviso.evento || aviso.headline);
-    if (fenomenosRepresentados.has(fenomeno)) continue;
-    const resolucao = resolverRecomendacoesAlerta({ aviso, eventosLocais: eventos });
-    const rotulo = AlertTitle.nomeParametro(
-      aviso.descricao || aviso.event || aviso.evento || aviso.headline || "AVISO OFICIAL INMET"
-    );
-    grupos.push(grupoRecomendacoes(
-      `${rotulo}${resolucao.origem === "inmet" ? " — orientação oficial INMET" : ""}`,
-      grauAvisoInmet(aviso.severidade ?? aviso.severity),
-      resolucao.itens
-    ));
-    fenomenosRepresentados.add(fenomeno);
+function linhaCard(item) {
+  const valor = item.multilinha ? esc(item.texto).replace(/\r?\n/g, "<br>") : esc(item.texto);
+  if (item.lista) {
+    return `<div style="margin-top:6px;"><strong>${esc(item.rotulo)}:</strong><ul style="margin:3px 0 0;padding-left:20px;">${item.lista.map((i) => `<li style="margin-bottom:2px;">${esc(i)}</li>`).join("")}</ul></div>`;
   }
-  if (!grupos.length) return "";
-  // Até três colunas por linha; tabelas mantêm a leitura em Outlook sem Flexbox.
-  const linhas = [];
-  for (let i = 0; i < grupos.length; i += 3) {
-    const fatia = grupos.slice(i, i + 3);
-    linhas.push(`<tr>${fatia.map((grupo) => `<td class="email-stack" width="${Math.floor(100 / fatia.length)}%" valign="top" style="width:${Math.floor(100 / fatia.length)}%;padding:4px 15px 7px 4px;color:${COR.texto};font:14px/1.4 Arial,sans-serif;">
-      <div style="color:${corTexto(grupo.cor)};font:bold 16px/1.3 Arial,sans-serif;margin-bottom:5px;">${esc(grupo.rotulo)}:</div>
-      <ul style="margin:0;padding-left:20px;">${grupo.itens.map((item) => `<li style="margin-bottom:3px;">${esc(item)}</li>`).join("")}</ul>
-    </td>`).join("")}</tr>`);
-  }
-  return `<tr><td bgcolor="${COR.painel}" style="padding:11px 25px 2px;background:${COR.painel};">
-    <div style="color:${COR.verde};font:bold 19px/1.3 Arial,sans-serif;margin-bottom:5px;">Recomendações - Protocolo Meteorológico do COMPARTILHADO</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.painel}" style="width:100%;background:${COR.painel};">${linhas.join("")}</table>
-  </td></tr>`;
+  return `<div style="margin-top:6px;">${item.rotulo ? `<strong>${esc(item.rotulo)}:</strong> ` : ""}${valor}</div>`;
+}
+
+// Card único (alerta + recomendações) em tabelas e estilos inline para o
+// Outlook: faixa lateral numa célula própria (bgcolor) e card inteiro no tom
+// claro do nível. Uma só coluna de texto — lê bem no celular.
+function cartaoAlerta(card) {
+  const v = card.visual;
+  const rec = card.recomendacoes;
+  const recomendacoesHtml = rec && rec.itens.length ? `<tr><td data-alert-recommendations="true" bgcolor="${v.fundo}" style="background:${v.fundo};padding:0 16px 14px;">
+      <div style="border-top:1px solid ${COR.borda};padding-top:11px;">
+        <div style="color:${v.texto};font:bold 15px/1.3 Arial,sans-serif;letter-spacing:0.4px;">RECOMENDAÇÕES</div>
+        <div style="color:${COR.secundario};font:12px/1.35 Arial,sans-serif;margin-top:1px;">${esc(rec.titulo)}</div>
+        <ul style="margin:7px 0 0;padding-left:20px;color:${COR.texto};font:14px/1.45 Arial,sans-serif;">${rec.itens.map((item) => `<li data-alert-recommendation="true" style="margin-bottom:4px;">${esc(item)}</li>`).join("")}</ul>
+      </div>
+    </td></tr>` : "";
+  return `<table data-alert-card="true" data-nivel="${esc(card.nivel)}" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${v.fundo}" style="width:100%;background:${v.fundo};border:1.5px solid ${v.cor};border-collapse:separate;margin-top:10px;">
+    <tr>
+      <td width="6" bgcolor="${v.cor}" style="width:6px;min-width:6px;background:${v.cor};font-size:0;line-height:0;">&nbsp;</td>
+      <td valign="top" style="padding:0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
+          <tr><td bgcolor="${v.fundo}" style="background:${v.fundo};padding:10px 16px 11px;border-bottom:1px solid ${v.cor};">
+            <span data-alert-level="${esc(card.nivel)}" style="display:inline-block;background:${v.selo};color:${v.textoSelo};padding:3px 9px;font:bold 11px/1.3 Arial,sans-serif;letter-spacing:0.6px;">${esc(v.rotulo)}</span>
+            <span style="color:${COR.secundario};font:12px/1.3 Arial,sans-serif;padding-left:6px;">${esc(card.rotuloOrigem)}</span>
+            <div data-alert-title="true" style="color:${v.texto};font:bold 19px/1.3 Arial,sans-serif;margin-top:6px;"><span style="color:${v.cor};">&#9679;</span> ${esc(card.titulo)}</div>
+          </td></tr>
+          <tr><td bgcolor="${v.fundo}" style="background:${v.fundo};padding:6px 16px 12px;color:${COR.texto};font:14px/1.5 Arial,sans-serif;">${card.linhas.map(linhaCard).join("")}</td></tr>
+          ${recomendacoesHtml}
+        </table>
+      </td>
+    </tr>
+  </table>`;
 }
 
 function fontesDeDados(r, eventos) {
@@ -294,6 +178,9 @@ function fontesDeDados(r, eventos) {
 function renderEmailHtml(r) {
   const eventos = eventosLocais(r);
   const mudancas = renderDailyChanges(r.mudancasDia);
+  // O corpo do e-mail mantém o filtro de antes (oculta NORMAL); ordem, cores
+  // e recomendações vêm do mesmo modelo usado no PDF.
+  const cartoesAlerta = montarCardsAlerta(r, { tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO }).map(cartaoAlerta).join("");
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -312,9 +199,8 @@ function renderEmailHtml(r) {
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:11px 25px 3px;color:${COR.texto};font:16px/1.4 Arial,sans-serif;"><strong>Hora da consulta:</strong> ${texto(r.horaConsulta)} (Horário de Brasília)</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:5px 20px;">${resumoMeteorologico(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:3px 20px 0;">${marECondicao(r)}</td></tr>
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${eventos.map((evento) => cartaoEvento(evento, r.severidade?.grau)).join("")}${cartaoCalor(r.climaSaude)}${mudancas}</td></tr>
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}${avisosInmet(r)}</td></tr>
-        ${recomendacoes(r, eventos)}
+        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${cartoesAlerta}${mudancas}</td></tr>
+        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:10px 25px 6px;color:${COR.texto};font:14px/1.4 Arial,sans-serif;"><strong>Fontes de dados:</strong><br>${fontesDeDados(r, eventos)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-left:4px solid ${COR.verde};"><tr><td bgcolor="${COR.celula}" style="padding:11px 17px;background:${COR.celula};color:#333333;font:14px/1.4 Arial,sans-serif;">Relatório completo com todas as tabelas, avisos oficiais, fontes consultadas e recomendações detalhadas em anexo (PDF).</td></tr></table></td></tr>
         <tr><td bgcolor="${COR.amarelo}" style="height:3px;background:${COR.amarelo};font-size:0;line-height:3px;">&nbsp;</td></tr>

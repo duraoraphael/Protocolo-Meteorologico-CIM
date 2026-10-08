@@ -106,9 +106,11 @@ test("conteúdo: título, conteúdo/orientações, abrangência, publicação, f
   assert.match($(".cor-outros").text(), /Comunicado 2/);
 });
 
-test("card fica antes dos avisos INMET", async () => {
+test("card vem logo depois dos cards de alerta, incluindo os avisos INMET", async () => {
   const { html: h } = await html(estado());
-  assert.ok(h.indexOf("Comunicado oficial COR-Rio") < h.indexOf("Aviso oficial INMET"));
+  const ultimoCardAlerta = h.lastIndexOf('class="card-alerta"');
+  assert.ok(h.indexOf("Aviso oficial INMET") > 0);
+  assert.ok(ultimoCardAlerta > 0 && ultimoCardAlerta < h.indexOf("Comunicado oficial COR-Rio"));
 });
 
 test("comunicado anterior ao início do estágio é sinalizado; estágio não é atribuído a ele", async () => {

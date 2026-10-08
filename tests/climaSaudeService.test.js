@@ -136,7 +136,8 @@ test('PDF, e-mail e painel exibem bloco próprio sem alterar severidade meteorol
     assert.match(html, /CALOR \/ RISCO À SAÚDE|Calor \/ risco à saúde/);
     assert.match(html, /ALERTA/);
     assert.match(html, /RISCO COMBINADO À SAÚDE/);
-    assert.match(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
+    assert.match(html, /RECOMENDAÇÕES/);
+    assert.match(html, /Protocolo Meteorológico do COMPARTILHADO/);
   }
   // Painel: calor em ALERTA vira card na área de destaque e no card compacto;
   // risco combinado e recomendações ficam em "Ver detalhes".

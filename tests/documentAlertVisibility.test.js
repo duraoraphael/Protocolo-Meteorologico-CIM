@@ -82,7 +82,7 @@ test("PDF extraordinário com tudo NORMAL não cria cards nem placeholders de al
     avisosInmet: [{ descricao: "Sem perigo", severidade: "Normal", instrucoes: [] }],
   }));
   const $ = cheerio.load(html);
-  assert.equal($(".evento-card, table.alerta-bloco").length, 0);
+  assert.equal($(".card-alerta").length, 0);
   assert.doesNotMatch(html, /Não há recomendações cadastradas|CONDIÇÕES METEOROLÓGICAS — NORMAL/);
 });
 
@@ -105,14 +105,14 @@ test("Alerta CIM misto filtra NORMAL antes de montar os cards", () => {
   assert.match(html, /CHUVA INTENSA — EMERGÊNCIA/);
 });
 
-test("PDF e Alerta CIM ordenam ATENÇÃO, ALERTA e EMERGÊNCIA preservando empates", () => {
+test("PDF e Alerta CIM ordenam EMERGÊNCIA, ALERTA e ATENÇÃO preservando empates", () => {
   const alertas = [
     evento("ALERTA", "Vento"),
     evento("ATENCAO", "Tempestade"),
     evento("ATENÇÃO", "Chuva"),
     evento("EMERGENCIA", "Calor"),
   ];
-  const esperado = ["Tempestade", "Chuva", "Vento", "Calor"];
+  const esperado = ["Calor", "Vento", "Tempestade", "Chuva"];
   assert.deepEqual(alertasCimExibiveis(alertas).map((a) => a.tipo), esperado);
 
   const html = renderPdfHtml(report({
@@ -120,16 +120,16 @@ test("PDF e Alerta CIM ordenam ATENÇÃO, ALERTA e EMERGÊNCIA preservando empat
     severidade: { grau: "EMERGÊNCIA", eventos: alertas },
   }));
   const posicoes = [
+    "CALOR / RISCO À SAÚDE — EMERGÊNCIA",
+    "VENTO — ALERTA",
     "TEMPESTADE COM RAIOS — ATENÇÃO",
     "CHUVA INTENSA — ATENÇÃO",
-    "VENTO — ALERTA",
-    "CALOR / RISCO À SAÚDE — EMERGÊNCIA",
   ].map((titulo) => html.indexOf(titulo));
   assert.ok(posicoes.every((posicao) => posicao >= 0));
   assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes);
 });
 
-test("PDF programado ordena NORMAL antes de ATENÇÃO, ALERTA e EMERGÊNCIA", () => {
+test("PDF programado ordena EMERGÊNCIA, ALERTA, ATENÇÃO e NORMAL por último", () => {
   const alertas = [
     evento("EMERGÊNCIA", "Calor"),
     evento("NORMAL", "Umidade"),
@@ -141,7 +141,7 @@ test("PDF programado ordena NORMAL antes de ATENÇÃO, ALERTA e EMERGÊNCIA", ()
     horarioAgendado: "05:00",
     severidade: { grau: "EMERGÊNCIA", eventos: alertas },
   }));
-  const posicoes = ["UMIDADE — NORMAL", "CHUVA INTENSA — ATENÇÃO", "VENTO — ALERTA", "CALOR / RISCO À SAÚDE — EMERGÊNCIA"]
+  const posicoes = ["CALOR / RISCO À SAÚDE — EMERGÊNCIA", "VENTO — ALERTA", "CHUVA INTENSA — ATENÇÃO", "UMIDADE — NORMAL"]
     .map((titulo) => html.indexOf(titulo));
   assert.ok(posicoes.every((posicao) => posicao >= 0));
   assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes);

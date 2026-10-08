@@ -150,7 +150,7 @@ test("PDF: cada destino mostra só a sua UF, entre recomendação e fontes", asy
     const html = renderPdfHtml(relatorio(cidade, dados));
     const secao = secaoSeca(html);
 
-    const iRec = html.indexOf("Recomendações - Protocolo Meteorológico");
+    const iRec = html.indexOf("class=\"card-alerta-rec-titulo\"");
     assert.ok(iRec > 0 && iRec < html.indexOf("Monitor de Secas — Agosto/2026"), chave);
     assert.match(secao, /<img class="ms-mapa" src="data:image\/png;base64,/);
     assert.match(secao, new RegExp(`Situação da seca — ${esperado[cidade.uf]}`));
@@ -191,6 +191,7 @@ test("PDF: seção indisponível aparece sem quebrar o relatório", () => {
     urls: { pagina: ms.urlPaginaMapa(AGOSTO) },
   }));
   const iMs = html.indexOf("Monitor de Secas — Agosto/2026");
-  assert.ok(iMs > html.indexOf("Recomendações - Protocolo Meteorológico") && iMs < html.indexOf("Fontes Consultadas"));
+  const iRec = html.indexOf("class=\"card-alerta-rec-titulo\"");
+  assert.ok(iRec > 0 && iMs > iRec && iMs < html.indexOf("Fontes Consultadas"));
   assert.match(html, /Não disponível na fonte para agosto\/2026/);
 });
