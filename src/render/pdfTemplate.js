@@ -288,16 +288,23 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
   }).join("") + outrosHtml;
 }
 
+// Quatro colunas iguais, sem coluna "Fonte": a origem de cada valor fica só
+// na nota abaixo da tabela. Decimal com vírgula, sem casas fixas (38°C).
+function valorTemperaturaUmidade(valor, unidade) {
+  return Number.isFinite(valor) ? `${esc(String(valor).replace(".", ","))}${unidade}` : `<span class="nd">Não disponível</span>`;
+}
+
 function tabelaTemperatura(linhas) {
   if (!linhas?.length) return "";
-  return `<table>
-    <thead><tr><th>Fonte</th><th>Temp. Mínima</th><th>Temp. Máxima</th><th>Umidade Mínima</th><th>Umidade Máxima</th></tr></thead>
+  return `<table class="tabela-temp-umidade">
+    <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
+    <thead><tr><th>Temp. Mínima</th><th>Temp. Máxima</th><th>Umidade Mínima</th><th>Umidade Máxima</th></tr></thead>
     <tbody>
       ${linhas
         .map(
-          (l, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
-            <td>${esc(l.fonte)}</td><td>${Number.isFinite(l.tempMin) ? `${esc(l.tempMin)}°C` : "Não disponível"}</td><td>${Number.isFinite(l.tempMax) ? `${esc(l.tempMax)}°C` : "Não disponível"}</td>
-            <td>${Number.isFinite(l.umidadeMin) ? `${esc(l.umidadeMin)}%` : "Não disponível"}</td><td>${Number.isFinite(l.umidadeMax) ? `${esc(l.umidadeMax)}%` : "Não disponível"}</td>
+          (l) => `<tr>
+            <td>${valorTemperaturaUmidade(l.tempMin, "°C")}</td><td>${valorTemperaturaUmidade(l.tempMax, "°C")}</td>
+            <td>${valorTemperaturaUmidade(l.umidadeMin, "%")}</td><td>${valorTemperaturaUmidade(l.umidadeMax, "%")}</td>
           </tr>`
         )
         .join("")}
@@ -355,7 +362,7 @@ function tabelaCalor(r) {
     : "Não disponível";
   return blocoTabela({
     titulo: `<h4 class="subsecao">Condições de Calor — Indicadores e Previsões</h4>`,
-    tabela: `<table><thead><tr><th>Período</th><th>Temperatura prevista (mín./máx.)</th><th>Umidade relativa</th><th>Indicador de calor</th><th>Classificação</th></tr></thead><tbody><tr><td>Dia (sem detalhamento por período)</td><td>${temperatura}</td><td>Não disponível</td><td>${Number.isFinite(dados?.ehf?.valor) ? `EHF ${esc(dados.ehf.valor)}` : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td></tr></tbody></table>`,
+    tabela: `<table class="tabela-calor"><colgroup><col style="width:15%"><col style="width:31%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>Período</th><th>Temperatura prevista (mín./máx.)</th><th>Umidade relativa</th><th>Indicador de calor</th><th>Classificação</th></tr></thead><tbody><tr><td>Dia</td><td>${temperatura}</td><td>Não disponível</td><td>${Number.isFinite(dados?.ehf?.valor) ? `EHF ${esc(dados.ehf.valor)}` : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td></tr></tbody></table>`,
     fonte: `Fonte: Clima e Saúde — Ministério da Saúde. A interface pública consultada fornece temperatura e EHF em base diária; não publicou umidade relativa nem previsão por período para esta localidade nesta emissão.`,
   });
 }
@@ -722,11 +729,11 @@ function referenciaConsulta(r) {
 function blocosPrevisao(r) {
   const tituloSecao = `<h3 class="secao">1. Previsão</h3>`;
   const previsao = blocoPrevisaoAgendada(r, tituloSecao);
-  const fontesTemperatura = [...new Set((r.tabelaTemperaturaUmidade || []).map((l) => l.fonte).filter(Boolean))].join(", ");
+  const fontesTemperatura = [...new Set((r.tabelaTemperaturaUmidade || []).map((l) => l.fonte).filter((f) => f && f !== "Indisponível"))].join(" / ");
   const temperatura = blocoTabela({
-    titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao">Temperatura e umidade</h4>`,
+    titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao">Temperatura e umidade</h4><p class="subtitulo-tabela">Indicadores consolidados do período consultado.</p>`,
     tabela: tabelaTemperatura(r.tabelaTemperaturaUmidade),
-    fonte: `Fonte de dados: ${esc(fontesTemperatura || "indisponível")}, conforme a coluna “Fonte”. Clima e Saúde é prioritário; cada campo ausente utiliza Open-Meteo como alternativa autorizada.`,
+    fonte: `Fonte de dados: ${esc(fontesTemperatura || "indisponível")}. Clima e Saúde é prioritário; campos indisponíveis utilizam Open-Meteo como alternativa.`,
   });
   const vento = blocoTabela({
     titulo: `<h4 class="subsecao">Vento por período</h4>`,
@@ -895,6 +902,15 @@ function renderPdfHtml(r, opcoes = {}) {
   .bloco-tabela td small { color: #666; font-size: 8.5pt; }
   .fonte-tabela { font-family: ${brand.fontePrincipal}; font-size: 8.5pt; line-height: 1.45; color: #555; text-align: left; margin: 5px 0 14px 0; }
   .rotulo-tabela { font-size: 10pt; margin: 10px 0 4px 0; }
+  /* Calor: cabeçalho numa linha só, na mesma altura das demais tabelas. */
+  .tabela-calor th { white-space: nowrap; }
+  /* Temperatura e umidade: subtítulo discreto e quatro colunas iguais,
+     centralizadas, com valores em destaque. */
+  h4.subsecao + .subtitulo-tabela { margin: -3px 0 0 0; font-size: 9pt; color: #666; }
+  .tabela-temp-umidade { table-layout: fixed; }
+  .tabela-temp-umidade th { text-align: center; }
+  .tabela-temp-umidade td { text-align: center; font-weight: bold; font-size: 11.5pt; background: #ffffff; border: 1px solid ${brand.cinzaBorda}; }
+  .tabela-temp-umidade td .nd { font-weight: normal; font-size: 9.5pt; color: #666; }
   /* Card de alerta único (alerta + recomendações na mesma borda). Inteiro
      na próxima página quando cabe nela; maior que uma página, continua com
      a borda repetida, sem cortar linhas e sem título isolado. */

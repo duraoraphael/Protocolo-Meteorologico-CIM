@@ -35,9 +35,27 @@ test("ordem obrigatória: mar, calor, qualidade do ar", () => {
   assert.deepEqual([...pos].sort((a, b) => a - b), pos);
 });
 
+test("temperatura e umidade: quatro colunas sem coluna Fonte e fonte só na nota", () => {
+  for (const horarioAgendado of ["05:00", "15:00"]) {
+    const $ = cheerio.load(renderPdfHtml(report({
+      horarioAgendado,
+      tabelaTemperaturaUmidade: [{ fonte: "Clima e Saúde — Ministério da Saúde / Open-Meteo", tempMin: 23.2, tempMax: 38, umidadeMin: 84, umidadeMax: 97 }],
+    })));
+    const tabela = $("table.tabela-temp-umidade");
+    assert.equal(tabela.length, 1);
+    assert.deepEqual(tabela.find("th").map((_, th) => $(th).text()).get(), ["Temp. Mínima", "Temp. Máxima", "Umidade Mínima", "Umidade Máxima"]);
+    assert.deepEqual(tabela.find("tbody td").map((_, td) => $(td).text()).get(), ["23,2°C", "38°C", "84%", "97%"]);
+    assert.doesNotMatch(tabela.text(), /Clima e Saúde|Open-Meteo/);
+    const bloco = tabela.closest("section");
+    assert.equal(bloco.find(".subtitulo-tabela").text(), "Indicadores consolidados do período consultado.");
+    assert.match(bloco.find(".fonte-tabela").text(), /^Fonte de dados: Clima e Saúde — Ministério da Saúde \/ Open-Meteo\./);
+  }
+});
+
 test("tabela de calor não fabrica umidade nem períodos", () => {
   const html = renderPdfHtml(report());
-  assert.match(html, /Dia \(sem detalhamento por período\)/);
+  assert.match(html, /<td>Dia<\/td>/);
+  assert.doesNotMatch(html, /sem detalhamento por período/);
   assert.match(html, /EHF 4\.57/);
   assert.match(html, /não publicou umidade relativa nem previsão por período/i);
 });

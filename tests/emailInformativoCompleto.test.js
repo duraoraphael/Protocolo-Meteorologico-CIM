@@ -58,17 +58,22 @@ test('cabeçalho, oito cards e rodapé usam dados e fontes do relatório', () =>
   assert.ok(!html.includes('display:grid') && !html.includes('display:flex'));
 });
 
-test('card de rajada usa a edição, mostra a fonte e não duplica a frase no cabeçalho', () => {
+test('previsão da edição fica fora do card de rajada, sobre a 3ª coluna, e o card não mostra a fonte', () => {
   for (const [horarioAgendado, frase] of [['05:00', 'Previsão até as 15hrs'], ['15:00', 'Previsão até as 00h']]) {
     const html = semImagem(renderEmailHtml(relatorio({ horarioAgendado, previsaoAte: horarioAgendado === '05:00' ? '15h' : '00h' })));
     const $ = cheerio.load(html);
     const card = $('div').filter((_, elemento) => $(elemento).text().trim() === 'RAJADA PREVISTA').first().closest('td');
     const textoCard = card.text().replace(/\s+/g, ' ').trim();
-    assert.ok(textoCard.indexOf(frase) < textoCard.indexOf('RAJADA PREVISTA'));
-    assert.match(textoCard, /36 km\/h/);
-    assert.match(textoCard, /Fonte: Open-Meteo/);
+    assert.equal(textoCard, 'RAJADA PREVISTA 36 km/h');
+    const celulaFrase = $('td').filter((_, el) => $(el).text().trim() === frase);
+    assert.equal(celulaFrase.length, 1);
+    assert.equal(celulaFrase.attr('width'), '33.33%');
+    assert.equal(celulaFrase.attr('align'), 'center');
+    assert.match(celulaFrase.prev('td').text(), /Hora da consulta:/);
+    assert.ok(html.indexOf(frase) < html.indexOf('RAJADA PREVISTA'));
     assert.equal((html.match(new RegExp(frase, 'g')) || []).length, 1);
     assert.doesNotMatch(html, /\| Previsão até/);
+    assert.match($.text(), /Fontes de dados:[^]*Open-Meteo/);
   }
 });
 

@@ -47,13 +47,31 @@ function rajadaMaxima(r) {
 }
 
 
-function celulaMetrica(rotulo, valor, ultimaColuna = false, { antesRotulo = "", fonte = "" } = {}) {
+function celulaMetrica(rotulo, valor, ultimaColuna = false) {
   return `<td width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:${ultimaColuna ? "0" : `1px solid ${COR.borda}`};border-bottom:1px solid ${COR.borda};padding:13px 8px 12px;text-align:center;">
-    ${antesRotulo ? `<div style="color:${COR.verde};font:bold 11px/1.3 Arial,sans-serif;margin-bottom:4px;text-align:center;">${esc(antesRotulo)}</div>` : ""}
     <div style="color:${COR.secundario};font:13px/1.3 Arial,sans-serif;text-transform:uppercase;">${rotulo}</div>
     <div style="color:${COR.texto};font:bold 25px/1.2 Arial,sans-serif;margin-top:3px;">${valor}</div>
-    ${fonte ? `<div style="color:${COR.secundario};font:11px/1.3 Arial,sans-serif;margin-top:4px;text-align:center;">Fonte: ${esc(fonte)}</div>` : ""}
   </td>`;
+}
+
+// A janela da previsão depende da edição (horário agendado), não da hora em
+// que o e-mail é aberto.
+function frasePrevisao(r) {
+  if (r.horarioAgendado === "05:00") return "Previsão até as 15hrs";
+  if (r.horarioAgendado === "15:00") return "Previsão até as 00h";
+  return "";
+}
+
+// Linha acima dos cards: "Hora da consulta" à esquerda e a janela da previsão
+// fora do card, centralizada sobre a 3ª coluna (RAJADA PREVISTA). As colunas
+// 66,67% + 33,33% espelham a tabela de cards, inclusive no Outlook.
+function linhaReferencia(r) {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.painel}" style="width:100%;background:${COR.painel};border-collapse:collapse;">
+    <tr>
+      <td width="66.67%" valign="bottom" align="left" bgcolor="${COR.painel}" style="width:66.67%;background:${COR.painel};padding:0 0 0 5px;color:${COR.texto};font:16px/1.4 Arial,sans-serif;text-align:left;"><strong>Hora da consulta:</strong> ${texto(r.horaConsulta)} (Horário de Brasília)</td>
+      <td width="33.33%" valign="bottom" align="center" bgcolor="${COR.painel}" style="width:33.33%;background:${COR.painel};padding:0 4px 1px;color:${COR.verde};font:bold 12px/1.4 Arial,sans-serif;text-align:center;">${esc(frasePrevisao(r))}</td>
+    </tr>
+  </table>`;
 }
 
 // Card "CALOR": classificação de hoje do Clima e Saúde (EHF), na cor do
@@ -68,19 +86,12 @@ function valorCalor(r) {
 function resumoMeteorologico(r) {
   const rajada = rajadaMaxima(r);
   const rajadaValor = Number.isFinite(rajada.valor) ? numeroUnidade(rajada.valor, "km/h") : "Dado indisponível";
-  const fraseRajada = r.horarioAgendado === "05:00"
-    ? "Previsão até as 15hrs"
-    : r.horarioAgendado === "15:00" ? "Previsão até as 00h" : "";
-  const fonteRajada = r.fontesPorCampo?.rajadaMaxKmh
-    || (rajada.periodo
-      ? r.fontesPorCampo?.[`periodos.${String(rajada.periodo).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}.rajadaMaxKmh`]
-      : "");
   const ar = texto(r.qualidadeAr?.pm25Classificacao?.nivel);
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-bottom:0;border-collapse:separate;">
     <tr>
       ${celulaMetrica("TEMP. MÍN/MÁX", parOuTraco(r.tempMin, r.tempMax, "°", "°C"))}
       ${celulaMetrica("UMIDADE MÍN/MÁX", parOuTraco(r.umidadeMin, r.umidadeMax, "%", "%"))}
-      ${celulaMetrica("RAJADA PREVISTA", rajadaValor, true, { antesRotulo: fraseRajada, fonte: fonteRajada })}
+      ${celulaMetrica("RAJADA PREVISTA", rajadaValor, true)}
     </tr>
     <tr>
       ${celulaMetrica("QUALIDADE DO AR", ar)}
@@ -206,8 +217,8 @@ function renderEmailHtml(r) {
           uf: r.cidade?.uf,
           data: r.dataFormatadaLonga,
         })}
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:11px 25px 3px;color:${COR.texto};font:16px/1.4 Arial,sans-serif;"><strong>Hora da consulta:</strong> ${texto(r.horaConsulta)} (Horário de Brasília)</td></tr>
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:5px 20px;">${resumoMeteorologico(r)}</td></tr>
+        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:11px 20px 0;">${linhaReferencia(r)}</td></tr>
+        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:4px 20px 5px;">${resumoMeteorologico(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:3px 20px 0;">${marECondicao(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${cartoesAlerta}${mudancas}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}</td></tr>
