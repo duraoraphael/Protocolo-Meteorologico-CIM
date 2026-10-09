@@ -134,7 +134,7 @@ function secaoSeca(html) {
   return html.slice(inicio, html.indexOf("Fontes Consultadas"));
 }
 
-test("PDF: cada destino mostra só a sua UF, entre recomendação e fontes", async (t) => {
+test("PDF: cada destino mostra só a sua UF, antes da previsão futura e das fontes", async (t) => {
   silenciar(t);
   const pasta = pastaTemporaria(t);
   await ms.obterMonitorSecas({ uf: "RJ", competencia: AGOSTO, fetchFn: fetchFalso(), pasta });
@@ -150,8 +150,7 @@ test("PDF: cada destino mostra só a sua UF, entre recomendação e fontes", asy
     const html = renderPdfHtml(relatorio(cidade, dados));
     const secao = secaoSeca(html);
 
-    const iRec = html.indexOf("class=\"card-alerta-rec-titulo\"");
-    assert.ok(iRec > 0 && iRec < html.indexOf("Monitor de Secas — Agosto/2026"), chave);
+    assert.ok(html.indexOf("Monitor de Secas — Agosto/2026") < html.indexOf("Fontes Consultadas"), chave);
     assert.match(secao, /<img class="ms-mapa" src="data:image\/png;base64,/);
     assert.match(secao, new RegExp(`Situação da seca — ${esperado[cidade.uf]}`));
     assert.match(secao, new RegExp(`Resumo estadual — ${cidade.uf}; sem detalhamento municipal disponível na fonte\\.`));
@@ -191,7 +190,6 @@ test("PDF: seção indisponível aparece sem quebrar o relatório", () => {
     urls: { pagina: ms.urlPaginaMapa(AGOSTO) },
   }));
   const iMs = html.indexOf("Monitor de Secas — Agosto/2026");
-  const iRec = html.indexOf("class=\"card-alerta-rec-titulo\"");
-  assert.ok(iRec > 0 && iMs > iRec && iMs < html.indexOf("Fontes Consultadas"));
+  assert.ok(iMs > 0 && iMs < html.indexOf("Fontes Consultadas"));
   assert.match(html, /Não disponível na fonte para agosto\/2026/);
 });

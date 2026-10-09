@@ -78,19 +78,20 @@ const PERIODOS = {
 
 const hh = (hora) => `${String(hora % 24).padStart(2, "0")}h`;
 
-function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANELA_HOJE } = {}) {
+function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANELA_HOJE, fimHora = 24 } = {}) {
   const { horaInicio, horaFim } = PERIODOS[chave];
   const inicio = Math.max(horaInicio, inicioHora);
+  const fim = Math.min(horaFim, fimHora);
   // Os horários da Open-Meteo vêm no fuso pedido ("AAAA-MM-DDTHH:MM", sem
   // offset): compara-se o texto, sem depender do fuso da máquina.
   const idxs = horas.time
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => {
       const h = Number(t.slice(11, 13));
-      return t.slice(0, 10) === dataReferencia && h >= inicio && h < horaFim;
+      return t.slice(0, 10) === dataReferencia && h >= inicio && h < fim;
     })
     .map(({ i }) => i);
-  const janela = { inicioHora: inicio, fimHora: horaFim, janela: `${hh(inicio)}–${hh(horaFim)}` };
+  const janela = { inicioHora: inicio, fimHora: fim, janela: `${hh(inicio)}–${hh(fim)}` };
 
   if (idxs.length === 0) {
     return {
@@ -102,9 +103,10 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
       velocidadeMaxKmh: null,
       rajadaMaxKmh: null,
       probabilidadeChuva: null,
-      precipitacaoMm: 0,
+      precipitacaoMm: null,
       precipitacaoHorariaMaxMm: null,
       tempestade: false,
+      disponivel: false,
     };
   }
 
@@ -148,6 +150,7 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
         ? null
         : Math.round(precipitacaoHorariaMaxMm * 10) / 10,
     tempestade,
+    disponivel: true,
   };
 }
 
@@ -163,6 +166,7 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
  */
 async function buscarOpenMeteo(latitude, longitude, {
   inicioHora = INICIO_JANELA_HOJE,
+  fimHora = 24,
   diasPrevisao = 1,
   agregarJanela = false,
   fuso = "America/Sao_Paulo",
@@ -195,7 +199,10 @@ async function buscarOpenMeteo(latitude, longitude, {
   const dia = json.daily;
   const dataReferencia = dia.time[0];
   const indicesJanela = horas.time.map((instante, i) => ({ instante, i }))
-    .filter(({ instante }) => instante.slice(0, 10) === dataReferencia && Number(instante.slice(11, 13)) >= inicioHora)
+    .filter(({ instante }) => {
+      const hora = Number(instante.slice(11, 13));
+      return instante.slice(0, 10) === dataReferencia && hora >= inicioHora && hora < fimHora;
+    })
     .map(({ i }) => i);
   if (agregarJanela && !indicesJanela.length) throw new Error("Open-Meteo não retornou horas para a janela solicitada.");
   const valoresJanela = (campo) => indicesJanela.map((i) => horas[campo]?.[i]).filter(Number.isFinite);
@@ -203,13 +210,21 @@ async function buscarOpenMeteo(latitude, longitude, {
   const maximoJanela = (campo) => valoresJanela(campo).length ? Math.max(...valoresJanela(campo)) : null;
 
   const periodos = {
-    manha: resumirPeriodo(horas, "manha", { dataReferencia, inicioHora }),
-    tarde: resumirPeriodo(horas, "tarde", { dataReferencia, inicioHora }),
-    noite: resumirPeriodo(horas, "noite", { dataReferencia, inicioHora }),
+    manha: resumirPeriodo(horas, "manha", { dataReferencia, inicioHora, fimHora }),
+    tarde: resumirPeriodo(horas, "tarde", { dataReferencia, inicioHora, fimHora }),
+    noite: resumirPeriodo(horas, "noite", { dataReferencia, inicioHora, fimHora }),
+  };
+  // A tabela histórica de chuva do PDF cobre o dia operacional completo e
+  // mantém os três grupos originais, independentemente da janela do card da
+  // edição. É derivada da mesma resposta horária, sem nova consulta.
+  const periodosDiaCompleto = {
+    manha: resumirPeriodo(horas, "manha", { dataReferencia, inicioHora: INICIO_JANELA_HOJE, fimHora: 24 }),
+    tarde: resumirPeriodo(horas, "tarde", { dataReferencia, inicioHora: INICIO_JANELA_HOJE, fimHora: 24 }),
+    noite: resumirPeriodo(horas, "noite", { dataReferencia, inicioHora: INICIO_JANELA_HOJE, fimHora: 24 }),
   };
 
   const umidades = horas.relative_humidity_2m;
-  const listaPeriodos = Object.values(periodos);
+  const listaPeriodos = Object.values(periodos).filter((p) => p.disponivel);
   const temTempestadeHoje = listaPeriodos.some((p) => p.tempestade);
 
   // Importante: os totais/máximos abaixo são derivados dos MESMOS períodos
@@ -219,19 +234,24 @@ async function buscarOpenMeteo(latitude, longitude, {
   // baseados em picos de madrugada que já haviam passado na hora da consulta.
   const precipitacaoTotalMm =
     Math.round(listaPeriodos.reduce((soma, p) => soma + (p.precipitacaoMm || 0), 0) * 10) / 10;
-  const precipitacaoHorariaMaxMm = Math.max(
-    ...listaPeriodos.map((p) => p.precipitacaoHorariaMaxMm ?? 0)
-  );
-  const probabilidadeChuvaMax = Math.max(...listaPeriodos.map((p) => p.probabilidadeChuva ?? 0));
-  const rajadaMaxKmh = Math.max(...listaPeriodos.map((p) => p.rajadaMaxKmh ?? 0));
-  const velocidadeMaxKmh = Math.max(...listaPeriodos.map((p) => p.velocidadeMaxKmh ?? 0));
+  const maximoOuNulo = (valores) => valores.length ? Math.max(...valores) : null;
+  const precipitacaoHorariaMaxMm = maximoOuNulo(listaPeriodos.map((p) => p.precipitacaoHorariaMaxMm).filter(Number.isFinite));
+  const probabilidadeChuvaMax = maximoOuNulo(listaPeriodos.map((p) => p.probabilidadeChuva).filter(Number.isFinite));
+  const rajadaMaxKmh = maximoOuNulo(listaPeriodos.map((p) => p.rajadaMaxKmh).filter(Number.isFinite));
+  const velocidadeMaxKmh = maximoOuNulo(listaPeriodos.map((p) => p.velocidadeMaxKmh).filter(Number.isFinite));
+  const chuvaHoraria = indicesJanela.map((i) => ({
+    horario: horas.time[i].slice(11, 16),
+    intervalo: `${horas.time[i].slice(11, 16)}–${hh(Number(horas.time[i].slice(11, 13)) + 1).replace("h", ":00")}`,
+    precipitacaoMm: Number.isFinite(horas.precipitation?.[i]) ? Math.round(horas.precipitation[i] * 10) / 10 : null,
+    probabilidade: Number.isFinite(horas.precipitation_probability?.[i]) ? Math.round(horas.precipitation_probability[i]) : null,
+  }));
 
   return {
     fonte: "Open-Meteo",
     url,
     dataReferencia: dia.time[0],
     fuso,
-    janelaHoje: { inicioHora, fimHora: 24, rotulo: `${hh(inicioHora)}–00h` },
+    janelaHoje: { inicioHora, fimHora, rotulo: `${hh(inicioHora)}–${hh(fimHora)}` },
     condicaoGeral: !agregarJanela
       ? descreverCodigo(dia.weather_code[0])
       : descreverCodigo(horas.weather_code[indicesJanela[0]]),
@@ -247,12 +267,15 @@ async function buscarOpenMeteo(latitude, longitude, {
     umidadeMin: !agregarJanela ? Math.round(Math.min(...umidades)) : minimoJanela("relative_humidity_2m"),
     umidadeMax: !agregarJanela ? Math.round(Math.max(...umidades)) : maximoJanela("relative_humidity_2m"),
     precipitacaoTotalMm,
+    precipitacaoDiariaMm: Number.isFinite(dia.precipitation_sum[0]) ? Math.round(dia.precipitation_sum[0] * 10) / 10 : null,
     precipitacaoHorariaMaxMm,
     probabilidadeChuvaMax,
     rajadaMaxKmh,
     velocidadeMaxKmh,
     temTempestadeHoje,
     periodos,
+    periodosDiaCompleto,
+    chuvaHoraria,
     previsaoDias: dia.time.map((data, i) => ({
       data,
       condicao: descreverCodigo(dia.weather_code[i]),

@@ -9,9 +9,8 @@
 // Duas regras guiam o desenho, ambas para não virar spam (alerta que é
 // ignorado não protege ninguém):
 //
-// 1. SÓ O QUE EXIGE AÇÃO. Chuva intensa e rajadas entram a partir do grau de
-//    ATENÇÃO definido nos critérios INMET; as demais categorias preservam os
-//    limiares graves já existentes.
+// 1. SÓ O QUE EXIGE AÇÃO. Chuva intensa e vento entram exclusivamente por
+//    aviso oficial do INMET; as demais categorias preservam suas fontes.
 //
 // 2. SÓ MUDANÇAS. Cada fenômeno tem uma assinatura; o último grau confirmado
 //    pelo SMTP fica em data/alertas-notificados.json. Grau inalterado não reenvia.
@@ -20,11 +19,9 @@ const fs = require("fs");
 const path = require("path");
 const { CIDADES, getCidade } = require("../config/cities");
 const { montarRelatorio } = require("./reportBuilder");
-const { LIMIARES } = require("./riskEngine");
-const {
-  classificarCondicoesMeteorologicas,
-  recomendacoes,
-} = require("./inmetAlertRules");
+const { LIMIARES, grauUvConfigurado } = require("./riskEngine");
+const { recomendacoes } = require("./inmetAlertRules");
+const { recomendacoesProtecao } = require("./healthProtection");
 const {
   consolidarAvisosInmet,
   fenomenoAvisoInmet,
@@ -71,26 +68,6 @@ const GRAVIDADE_POR_GRAU = {
   ALERTA: "alto",
   "EMERGÊNCIA": "severo",
 };
-
-function maximoNumerico(valores) {
-  const validos = valores.filter(Number.isFinite);
-  return validos.length ? Math.max(...validos) : null;
-}
-
-function somaNumerica(valores) {
-  const validos = valores.filter(Number.isFinite);
-  return validos.length
-    ? Math.round(validos.reduce((soma, valor) => soma + valor, 0) * 10) / 10
-    : null;
-}
-
-function fontesDoDado(report, campos) {
-  return [...new Set(
-    campos
-      .map((campo) => report.fontesPorCampo?.[campo])
-      .filter((fonte) => fonte && fonte !== "Indisponível")
-  )].join(" / ") || "Fonte numérica indisponível";
-}
 
 function consolidarPorFenomeno(achados) {
   const porAssinatura = new Map();
@@ -141,6 +118,11 @@ function detectarAlertasGraves(report) {
     const grau = grauAvisoInmet(aviso.severidade);
     if (!grau) continue;
     const fenomeno = fenomenoAvisoInmet(aviso.descricao);
+    const texto = [aviso.descricao, ...(aviso.riscos || [])].join(" ")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const protocolos = [];
+    if (fenomeno === "chuva" || (fenomeno === "tempestade" && /chuva|alagamento/.test(texto))) protocolos.push("chuva");
+    if (fenomeno === "vento" || (fenomeno === "tempestade" && /vento|rajada/.test(texto))) protocolos.push("vento");
     const janela = [aviso.inicio, aviso.fim].filter(Boolean).join(" até ");
 
     achados.push({
@@ -154,67 +136,8 @@ function detectarAlertasGraves(report) {
       janela: janela || null,
       naturezaDado: "Aviso oficial",
       fonteDados: "INMET",
-      recomendacoes: ["chuva", "vento"].includes(fenomeno) ? recomendacoes(fenomeno, grau) : [],
+      recomendacoes: [...new Set(protocolos.flatMap((protocolo) => recomendacoes(protocolo, grau)))],
       assinatura: `inmet:${fenomeno}`,
-    });
-  }
-
-  // 2. Tempestade com raios detectada na previsão horária.
-  if (report.eventoMaisRelevante?.tipo === "raios") {
-    achados.push({
-      origem: "Previsão",
-      fonteDados: report.eventoMaisRelevante.fonteDados || "Previsão meteorológica",
-      tipo: "Tempestade com raios",
-      gravidade: "severo",
-      detalhe: report.eventoMaisRelevante.descricao,
-      janela: report.eventoMaisRelevante.janela,
-      assinatura: "raios",
-    });
-  }
-
-  // 3. Chuva intensa e rajada: critérios INMET centralizados. Os valores são
-  // previsões numéricas e mantêm a fonte real registrada no relatório.
-  const rajada = Number.isFinite(report.rajadaMaxKmh)
-    ? report.rajadaMaxKmh
-    : maximoNumerico((report.ventoPorPeriodo || []).map((p) => p.rajadaMaxKmh));
-  const chuva = report.chuvaPorPeriodo || [];
-  const intensidadeHoraria = Number.isFinite(report.precipitacaoHorariaMaxMm)
-    ? report.precipitacaoHorariaMaxMm
-    : maximoNumerico(chuva.map((p) => p.precipitacaoHorariaMaxMm));
-  const acumulado = Number.isFinite(report.precipitacaoTotalMm)
-    ? report.precipitacaoTotalMm
-    : somaNumerica(chuva.map((p) => p.precipitacaoMm));
-
-  const eventosProtocolo = classificarCondicoesMeteorologicas({
-    rajadaKmh: rajada,
-    chuvaHorariaMmH: intensidadeHoraria,
-    chuvaDiariaMm: acumulado,
-  }).eventos;
-
-  for (const evento of eventosProtocolo) {
-    const chuvaIntensa = evento.assinatura === "chuva";
-    const linhaPeriodo = chuvaIntensa
-      ? chuva.find((p) => p.precipitacaoHorariaMaxMm === intensidadeHoraria)
-      : (report.ventoPorPeriodo || []).find((p) => p.rajadaMaxKmh === rajada);
-    const periodo = linhaPeriodo && (linhaPeriodo.janela ? `${linhaPeriodo.periodo} (${linhaPeriodo.janela})` : linhaPeriodo.periodo);
-    achados.push({
-      origem: "INMET",
-      fonteDados: fontesDoDado(
-        report,
-        chuvaIntensa
-          ? ["precipitacaoHorariaMaxMm", "precipitacaoTotalMm"]
-          : ["rajadaMaxKmh"]
-      ),
-      naturezaDado: "Previsão",
-      tipo: evento.tipo,
-      grau: evento.grau,
-      gravidade: GRAVIDADE_POR_GRAU[evento.grau],
-      detalhe: evento.detalhe,
-      valores: evento.valores,
-      unidade: evento.unidade,
-      janela: periodo || (chuvaIntensa ? "restante do dia" : "próximas horas"),
-      recomendacoes: evento.recomendacoes,
-      assinatura: evento.assinatura,
     });
   }
 
@@ -243,13 +166,16 @@ function detectarAlertasGraves(report) {
   }
 
   if (report.qualidadeAr?.uvMax != null && report.qualidadeAr.uvMax >= LIMIARES.uvExtremo) {
+    const grau = grauUvConfigurado("extremo");
     achados.push({
       origem: "Previsão",
       fonteDados: report.fontesPorCampo?.["ar.uvMax"] || "Previsão de UV",
       tipo: "Índice UV extremo",
-      gravidade: "alto",
+      grau,
+      gravidade: GRAVIDADE_POR_GRAU[grau],
       detalhe: `Índice UV de ${report.qualidadeAr.uvMax}`,
       janela: report.qualidadeAr.horaPicoUv ? `pico ~${report.qualidadeAr.horaPicoUv}` : "meio do dia",
+      recomendacoes: recomendacoesProtecao(grau),
       assinatura: "uv",
     });
   }

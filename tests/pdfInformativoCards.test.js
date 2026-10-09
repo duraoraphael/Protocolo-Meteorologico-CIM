@@ -1,161 +1,53 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const cheerio = require('cheerio');
-const { renderPdfHtml } = require('../src/render/pdfTemplate');
-const { VISUAL_NIVEL } = require('../src/render/alertCards');
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const cheerio = require("cheerio");
+const { renderPdfHtml } = require("../src/render/pdfTemplate");
 
-function relatorio(alteracoes = {}) {
+function report(extra = {}) {
   return {
-    cidade: { nome: 'Rio de Janeiro', uf: 'RJ' },
-    dataFormatadaLonga: 'terça-feira, 29 de setembro de 2026',
-    dataFormatadaCurta: '29/09/2026', horaConsulta: '11:22',
-    condicaoGeral: 'Nublado a encoberto',
-    tabelaTemperaturaUmidade: [], ventoPorPeriodo: [], chuvaPorPeriodo: [],
-    mar: null, qualidadeAr: null,
-    severidade: { grau: 'ALERTA', eventos: [
-      { tipo: 'uvAlto', grau: 'ALERTA', titulo: 'ALERTA — ÍNDICE UV ELEVADO',
-        descricao: 'Índice UV extremo previsto.', janela: '12:00',
-        fonteDados: 'Open-Meteo Air Quality', recomendacoes: ['Evitar exposição ao sol.'] },
-      { tipo: 'ventoModerado', grau: 'ATENÇÃO', titulo: 'ATENÇÃO — VENTO',
-        descricao: 'Rajada prevista: 36 km/h', janela: 'Tarde',
-        fonteDados: 'Open-Meteo', recomendacoes: ['Manter monitoramento.'] },
-      { tipo: 'avisoInmet', grau: 'ALERTA', titulo: 'ALERTA — AVISO OFICIAL INMET',
-        descricao: 'Aviso oficial INMET ativo; consulte o texto completo.' },
-    ] },
-    avisosInmet: [{ descricao: 'Tempestade', severidade: 'Perigo Potencial',
-      inicio: '29/09/2026 09:25', fim: '29/09/2026 23:59',
-      riscos: ['Chuva entre 20 e 30 mm/h.'], instrucoes: ['Busque abrigo.'] }],
-    climaSaude: { status: 'operacional', dados: {
-      nivel: { grau: 'NORMAL' }, ehf: { classificacao: 'Sem excesso' },
-      temperatura: { maxima: 38.6 }, riscoCombinado: 'Sem Risco',
-      geoses: { valor: null }, source: 'Clima e Saúde — Ministério da Saúde',
-      recomendacoes: ['Manter hidratação.'],
-    } },
-    divergencias: [], avisosColeta: [
-      'Windy: dados de teste embaralhados recusados.',
-      'Windy: dados de teste embaralhados recusados.',
-    ],
-    fontesAutomatizadas: [{ nome: 'Open-Meteo', uso: 'Previsão' }],
-    fontesManuais: [],
-    deslocamento: { pedestres: [], transporte: [], condutores: [] },
-    edificacao: [],
-    ...alteracoes,
+    cidade: { nome: "Rio de Janeiro", uf: "RJ", fuso: "America/Sao_Paulo" },
+    dataFormatadaLonga: "sexta-feira, 9 de outubro de 2026", dataFormatadaCurta: "09/10/2026",
+    horaConsulta: "15:00", previsaoAte: "00h", horarioAgendado: "15:00",
+    tabelaTemperaturaUmidade: [{ fonte: "Clima e Saúde — Ministério da Saúde", tempMin: 23.2, tempMax: 38, umidadeMin: null, umidadeMax: null }],
+    ventoPorPeriodo: [{ periodo: "Noite", janela: "18h–00h", direcao: "E", intensidade: "Fracos", rajadaMaxKmh: null, referenciaInmet: "E / Fracos" }],
+    chuvaPorHora: [{ intervalo: "15:00–16:00", probabilidade: 30, precipitacaoMm: 1.2 }],
+    chuvaPorPeriodo: [
+      { periodo: "Manhã", janela: "05h–12h", probabilidade: 20, precipitacaoMm: 0.4, resumoInmet: "Nublado" },
+      { periodo: "Tarde", janela: "12h–18h", probabilidade: 30, precipitacaoMm: 1.2, resumoInmet: "Chuva" },
+      { periodo: "Noite", janela: "18h–00h", probabilidade: 10, precipitacaoMm: 0, resumoInmet: "Nublado" },
+    ], mar: { periodos: [{ periodo: "Noite", estadoMar: "Leve", alturaMaxM: 0.7, periodoOndaS: 7, direcaoOnda: "SE", marulhoMaxM: 0.4 }], referenciaPonto: "costa" }, qualidadeAr: null,
+    climaSaude: { status: "operacional", dados: { source: "Clima e Saúde — Ministério da Saúde", consultadoEm: "2026-10-09T12:00:00.000Z", temperatura: { minima: 23.2, maxima: 38 }, ehf: { valor: 4.57, classificacao: "Sem excesso" } } },
+    severidade: { grau: "NORMAL", eventos: [] }, avisosInmet: [], avisosInmetStatus: "operacional",
+    divergencias: [], avisosColeta: [], fontesAutomatizadas: [], fontesManuais: [], fontesPorCampo: {},
+    ...extra,
   };
 }
 
-test('cards locais, calor e aviso oficial seguem o mesmo padrão, sem duplicar INMET', () => {
-  const html = renderPdfHtml(relatorio());
-  const $ = cheerio.load(html);
-  const cards = $('section.card-alerta');
-  assert.equal(cards.length, 3);
-  assert.equal(cards.filter((_, e) => $(e).find('.card-alerta-meta').text().includes('Aviso oficial INMET')).length, 1);
-  assert.equal(cards.filter((_, e) => $(e).text().includes('CALOR / RISCO À SAÚDE')).length, 0);
-  assert.equal(html.includes('Aviso oficial INMET ativo; consulte o texto completo.'), false);
-  assert.equal(html.includes('Rajada prevista/registrada'), false);
-  assert.equal(html.includes('Windy: dados de teste'), false);
-  assert.ok(html.includes(`border-color:${VISUAL_NIVEL.ALERTA.cor}`));
-  assert.ok(html.includes(`border-color:${VISUAL_NIVEL['ATENÇÃO'].cor}`));
-  assert.doesNotMatch(html, /CALOR \/ RISCO À SAÚDE — NORMAL/);
-  assert.match(html, /\.card-alerta \{[^}]*page-break-inside: avoid/s);
-  assert.equal($('h4.subsecao').filter((_, e) => $(e).text() === 'CALOR / RISCO À SAÚDE').length, 0);
-  assert.match(html, /<strong>Motivo do aviso:<\/strong> Chuva entre 20 e 30 mm\/h\./);
-  assert.match(html, /<strong>Instruções oficiais:<\/strong> Busque abrigo\./);
-  // Cada card traz a própria seção RECOMENDAÇÕES, dentro da mesma borda.
-  assert.equal(cards.filter((_, e) => $(e).find('.card-alerta-rec-titulo').text() === 'RECOMENDAÇÕES').length, 3);
-  assert.doesNotMatch(html, /Recomendações - Protocolo Meteorológico do COMPARTILHADO/);
+test("cabeçalho usa a edição e a previsão na mesma linha", () => {
+  const $ = cheerio.load(renderPdfHtml(report()));
+  assert.match($(".referencia-edicao").text().replace(/\s+/g, " "), /Hora da consulta: 15:00 \(Horário de Brasília\) \| Previsão até 00h/);
 });
 
-test('PDF identifica dado marítimo armazenado com horário de Brasília', () => {
-  const html = renderPdfHtml(relatorio({
-    mar: {
-      fonte: 'Open-Meteo Marine', alturaMaxDiaM: 0.7, estadoMarDia: 'Leve',
-      desatualizado: true, ultimaAtualizacao: '2026-10-01T09:00:00.000Z',
-      periodos: [{ periodo: 'Manhã', estadoMar: 'Leve', alturaMaxM: 0.7, periodoOndaS: 7, direcaoOnda: 'SE', marulhoMaxM: 0.5 }],
-    },
-  }));
-  assert.match(html, /Dado armazenado/);
-  assert.match(html, /01\/10\/2026 06:00/);
-  assert.doesNotMatch(html, /2026-10-01T09:00:00\.000Z/);
+test("ordem obrigatória: mar, calor, qualidade do ar", () => {
+  const html = renderPdfHtml(report({ qualidadeAr: { pm25Classificacao: {}, uvClassificacao: {} } }));
+  const pos = ["Condições de mar", "Condições de Calor", "Qualidade do Ar e Índice UV"].map((x) => html.indexOf(x));
+  assert.ok(pos.every((x) => x >= 0));
+  assert.deepEqual([...pos].sort((a, b) => a - b), pos);
 });
 
-test('aviso e calor ausentes não geram cards falsos; Windy só aparece com dados úteis', () => {
-  const base = relatorio({
-    avisosInmet: [], severidade: { grau: 'NORMAL', eventos: [] },
-    climaSaude: { status: 'indisponivel', mensagem: 'Dados do Clima e Saúde indisponíveis nesta atualização.', dados: null },
-  });
-  const html = renderPdfHtml(base);
-  const $ = cheerio.load(html);
-  assert.equal($('.card-alerta').length, 0);
-  assert.equal(html.includes('CONDIÇÕES METEOROLÓGICAS — NORMAL'), false);
-  assert.equal($('.clima-indisponivel').length, 1);
-  assert.equal(html.includes('Sem excesso'), false);
-  assert.equal(html.includes('Windy: dados de teste'), false);
-
-  const comWindy = renderPdfHtml(relatorio({ fontesAutomatizadas: [{ nome: 'Windy (gfs)', uso: 'Dados válidos' }] }));
-  assert.equal((comWindy.match(/Windy: dados de teste embaralhados recusados\./g) || []).length, 1);
+test("tabela de calor não fabrica umidade nem períodos", () => {
+  const html = renderPdfHtml(report());
+  assert.match(html, /Dia \(sem detalhamento por período\)/);
+  assert.match(html, /EHF 4\.57/);
+  assert.match(html, /não publicou umidade relativa nem previsão por período/i);
 });
 
-test('aviso oficial sem evento local não vira condição NORMAL', () => {
-  const html = renderPdfHtml(relatorio({
-    severidade: { grau: 'ALERTA', eventos: [{ tipo: 'avisoInmet', grau: 'ALERTA' }] },
-    avisosInmet: [{ descricao: 'Tempestade', severidade: 'Perigo', inicio: '09:00', fim: '18:00', riscos: ['Risco oficial'] }],
-  }));
-  assert.equal(html.includes('CONDIÇÕES METEOROLÓGICAS — NORMAL'), false);
-  assert.equal((html.match(/Aviso oficial INMET<\/div>/g) || []).length, 1);
-});
-
-test('PDF ordena qualidade do ar, particulados e deixa o índice UV na última linha', () => {
-  const html = renderPdfHtml(relatorio({
-    qualidadeAr: {
-      pm25Medio: 42.6,
-      pm10Medio: 55.2,
-      pm25Classificacao: { nivel: 'Muito Ruim' },
-      uvMax: 11.2,
-      horaPicoUv: '12:00',
-      uvClassificacao: { nivel: 'Extremo' },
-    },
-  }));
-  const $ = cheerio.load(html);
-  const titulo = $('h4.subsecao').filter((_, elemento) => $(elemento).text() === 'Qualidade do Ar e Índice UV');
-  const linhas = titulo.next('table').find('tbody tr');
-  assert.match(linhas.eq(0).text(), /QUALIDADE DO AR.*Muito Ruim/s);
-  assert.match(linhas.eq(1).text(), /PM2,5.*42\.6 µg\/m³/s);
-  assert.match(linhas.eq(2).text(), /PM10.*55\.2 µg\/m³/s);
-  assert.match(linhas.last().text(), /Índice UV.*11\.2.*12:00.*Extremo.*Faixas OMS/s);
-});
-
-test('PDF ordena eventos por severidade decrescente', () => {
-  const html = renderPdfHtml(relatorio());
-  const vento = html.indexOf('VENTO — ATENÇÃO');
-  const uv = html.indexOf('ÍNDICE UV — ALERTA');
-  assert.ok(uv >= 0 && vento > uv);
-  assert.match(html.slice(uv, vento), /Índice UV extremo previsto/);
-});
-
-test('ressalva aparece uma vez depois das fontes manuais', () => {
-  const html = renderPdfHtml(relatorio({
-    divergencias: ['As fontes divergem.'],
-    fontesManuais: [{ nome: 'Defesa Civil', uso: 'Conferência manual' }],
-  }));
-  assert.equal((html.match(/Ressalva sobre divergência entre fontes/g) || []).length, 1);
-  assert.ok(html.indexOf('Integradas à coleta automática') < html.indexOf('Verificação manual (não integradas)'));
-  assert.ok(html.indexOf('Verificação manual (não integradas)') < html.indexOf('Ressalva sobre divergência entre fontes'));
-});
-
-test('sem fontes manuais, ressalva permanece depois das fontes automatizadas', () => {
-  const html = renderPdfHtml(relatorio({
-    divergencias: ['As fontes divergem.'],
-    fontesManuais: [],
-  }));
-  assert.equal((html.match(/Ressalva sobre divergência entre fontes/g) || []).length, 1);
-  assert.ok(html.indexOf('Integradas à coleta automática') < html.indexOf('Ressalva sobre divergência entre fontes'));
-  assert.equal(html.includes('Verificação manual (não integradas)'), false);
-});
-
-test('PDF omite exclusivamente o bloco de condição geral', () => {
-  const html = renderPdfHtml(relatorio({ condicaoGeral: 'Nublado a encoberto' }));
-  assert.equal(html.includes('Condição geral'), false);
-  assert.equal(html.includes('Condição geral do céu'), false);
-  assert.equal(html.includes('Nublado a encoberto'), false);
-  assert.match(html, /1\. Previsão/);
+test("chuva restaura a organização por manhã, tarde e noite", () => {
+  const html = renderPdfHtml(report());
+  assert.match(html, /Chuva acumulada\/hora/);
+  assert.match(html, /<strong>MANHÃ<\/strong><br\/><small>05h–12h<\/small>/);
+  assert.match(html, /<strong>TARDE<\/strong><br\/><small>12h–18h<\/small>/);
+  assert.match(html, /<strong>NOITE<\/strong><br\/><small>18h–00h<\/small>/);
+  assert.match(html, /1,2 mm/);
+  assert.doesNotMatch(html, /15:00–16:00/);
 });

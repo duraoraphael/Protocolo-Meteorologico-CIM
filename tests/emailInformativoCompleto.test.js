@@ -11,7 +11,7 @@ function relatorio(sobrescritas = {}) {
     dataFormatadaCurta: '28/09/2026', horaConsulta: '10:09',
     condicaoGeral: 'Muitas nuvens com pancadas de chuva',
     tempMin: 21, tempMax: 33, umidadeMin: 55, umidadeMax: 100,
-    precipitacaoTotalMm: 0,
+    precipitacaoTotalMm: 0, precipitacaoDiariaMm: 0,
     ventoPorPeriodo: [
       { periodo: 'Manhã', rajadaMaxKmh: 24 },
       { periodo: 'Tarde', rajadaMaxKmh: 36 },
@@ -23,7 +23,7 @@ function relatorio(sobrescritas = {}) {
       condicaoGeral: 'INMET', tempMin: 'INMET', tempMax: 'INMET',
       umidadeMin: 'INMET', umidadeMax: 'INMET',
       'periodos.tarde.rajadaMaxKmh': 'Open-Meteo',
-      precipitacaoTotalMm: 'Open-Meteo', 'ar.pm25Medio': 'Open-Meteo Air Quality',
+      precipitacaoTotalMm: 'Open-Meteo', precipitacaoDiariaMm: 'Open-Meteo — estimativa diária', 'ar.pm25Medio': 'Open-Meteo Air Quality',
       'ar.uvMax': 'Open-Meteo Air Quality', 'mar.alturaMaxDiaM': 'Open-Meteo Marine',
     },
     severidade: { grau: 'NORMAL', eventos: [] }, avisosInmet: [],
@@ -56,6 +56,20 @@ test('cabeçalho, oito cards e rodapé usam dados e fontes do relatório', () =>
   assert.ok(!html.includes('Rajada prevista/registrada'));
   assert.ok(!html.includes('QUALIDADE DO AR (PM2,5)') && !html.includes('14.5 µg/m³'));
   assert.ok(!html.includes('display:grid') && !html.includes('display:flex'));
+});
+
+test('card de rajada usa a edição, mostra a fonte e não duplica a frase no cabeçalho', () => {
+  for (const [horarioAgendado, frase] of [['05:00', 'Previsão até as 15hrs'], ['15:00', 'Previsão até as 00h']]) {
+    const html = semImagem(renderEmailHtml(relatorio({ horarioAgendado, previsaoAte: horarioAgendado === '05:00' ? '15h' : '00h' })));
+    const $ = cheerio.load(html);
+    const card = $('div').filter((_, elemento) => $(elemento).text().trim() === 'RAJADA PREVISTA').first().closest('td');
+    const textoCard = card.text().replace(/\s+/g, ' ').trim();
+    assert.ok(textoCard.indexOf(frase) < textoCard.indexOf('RAJADA PREVISTA'));
+    assert.match(textoCard, /36 km\/h/);
+    assert.match(textoCard, /Fonte: Open-Meteo/);
+    assert.equal((html.match(new RegExp(frase, 'g')) || []).length, 1);
+    assert.doesNotMatch(html, /\| Previsão até/);
+  }
 });
 
 test('card de qualidade do ar exibe somente a classificação dinâmica', () => {

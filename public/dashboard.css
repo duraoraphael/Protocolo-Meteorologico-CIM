@@ -419,6 +419,8 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .bloco-cabecalho { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; margin-bottom:10px; }
 .bloco-cabecalho .text-link { margin-left:auto; }
 .indicadores > .bloco-titulo { margin-bottom:10px; }
+.previsao-referencia { margin:0 0 12px; color:var(--texto, #26332d); font-size:.94rem; line-height:1.45; }
+.previsao-referencia span { color:var(--verde, #00843d); font-weight:800; white-space:nowrap; }
 
 .oc-contagem { display:flex; flex-wrap:wrap; gap:6px; margin:0; }
 .oc-contagem span { font-size:11px; font-weight:650; padding:2px 9px; border-radius:999px; border:1px solid currentColor; }

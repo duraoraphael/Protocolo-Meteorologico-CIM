@@ -7,10 +7,12 @@
 
 const {
   GRAUS,
-  classificarCondicoesMeteorologicas,
+  maiorGrau,
+  recomendacoes,
 } = require("./inmetAlertRules");
 const { formatarTitulo } = require("../../public/alert-title");
-const { grauAvisoInmet } = require("../sources/inmet");
+const { grauAvisoInmet, fenomenoAvisoInmet, normalizarComparacao } = require("../sources/inmet");
+const { recomendacoesProtecao } = require("./healthProtection");
 
 const LIMIARES = {
   // Contrato legado do relatório semanal. O informativo diário não usa estes
@@ -38,15 +40,6 @@ function textoAvisos(avisos, regex) {
   return avisos.some((a) => regex.test(a.descricao || ""));
 }
 
-// Período com a janela horária, quando conhecida: "Tarde (12h–18h)".
-function primeiraJanela(periodos, testeFn) {
-  for (const chave of ["manha", "tarde", "noite"]) {
-    const p = periodos[chave];
-    if (p && testeFn(p)) return p.janela ? `${p.periodo} (${p.janela})` : p.periodo;
-  }
-  return null;
-}
-
 const NIVEL_POR_GRAU = Object.freeze({
   NORMAL: 0,
   "ATENÇÃO": 2,
@@ -58,6 +51,14 @@ function grauPorNivel(nivel) {
   if (nivel >= 5) return "EMERGÊNCIA";
   if (nivel >= 3) return "ALERTA";
   return nivel >= 1 ? "ATENÇÃO" : "NORMAL";
+}
+
+function grauUvConfigurado(categoria) {
+  const padrao = categoria === "extremo" ? "ALERTA" : "ATENÇÃO";
+  const chave = categoria === "extremo" ? "UV_GRAU_EXTREMO" : "UV_GRAU_MUITO_ALTO";
+  const valor = String(process.env[chave] || padrao)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  return ({ ATENCAO: "ATENÇÃO", ALERTA: "ALERTA", EMERGENCIA: "EMERGÊNCIA" })[valor] || padrao;
 }
 
 function rotuloFenomeno(tipo) {
@@ -77,55 +78,62 @@ function avaliarRiscos(consolidado) {
   const {
     tempMax,
     umidadeMin,
-    rajadaMaxKmh,
-    precipitacaoHorariaMaxMm,
-    precipitacaoTotalMm,
-    temTempestadeHoje,
-    periodos,
-    avisosInmet,
+    avisosInmet = [],
     mar,
     qualidadeAr,
   } = consolidado;
 
   const candidatos = [];
 
-  const classificacaoProtocolo = classificarCondicoesMeteorologicas({
-    rajadaKmh: rajadaMaxKmh,
-    chuvaHorariaMmH: precipitacaoHorariaMaxMm,
-    chuvaDiariaMm: precipitacaoTotalMm,
-  });
-
-  const avisoEletrico = (avisosInmet || []).find((aviso) => /raio|trovoada/i.test(aviso.descricao || ""));
-  const periodoEletrico = primeiraJanela(periodos, (p) => p.tempestade === true);
-  if (periodoEletrico || avisoEletrico) {
+  // Chuva intensa, vento/rajada e atividade elétrica só viram alertas a
+  // partir de aviso oficial do INMET. As previsões numéricas de terceiros
+  // permanecem informativas e nunca determinam existência ou severidade.
+  const avisosCobertos = new Set();
+  const avisoEletrico = avisosInmet.find((aviso) => /raio|trovoada/i.test(aviso.descricao || ""));
+  if (avisoEletrico) {
+    const grau = grauAvisoInmet(avisoEletrico.severidade) || "ATENÇÃO";
     candidatos.push({
       tipo: "raios",
-      nivel: 5,
-      janela: periodoEletrico || (avisoEletrico ? `${avisoEletrico.inicio} até ${avisoEletrico.fim}` : "ao longo do dia"),
-      fonteDados: periodoEletrico ? "Previsão horária (código de trovoada)" : "INMET — aviso oficial",
-      descricao: periodoEletrico
-        ? "Trovoada identificada por código meteorológico na previsão do período."
-        : "Atividade elétrica indicada em aviso oficial do INMET; consulte o aviso completo abaixo.",
-      ...(avisoEletrico ? { avisoInmet: avisoEletrico } : {}),
+      grau,
+      nivel: NIVEL_POR_GRAU[grau],
+      janela: `${avisoEletrico.inicio} até ${avisoEletrico.fim}`,
+      fonteDados: "INMET — aviso oficial",
+      descricao: "Atividade elétrica indicada em aviso oficial do INMET; consulte o aviso completo abaixo.",
+      avisoInmet: avisoEletrico,
     });
+    avisosCobertos.add(avisoEletrico);
   }
 
-  for (const evento of classificacaoProtocolo.eventos) {
-    const chuva = evento.assinatura === "chuva";
-    const tipo = chuva
-      ? evento.grau === "ATENÇÃO" ? "chuvaModerada" : "chuvaIntensa"
-      : evento.grau === "ATENÇÃO" ? "ventoModerado" : "ventoForte";
-    const janela = chuva
-      ? primeiraJanela(periodos, (p) => p.precipitacaoHorariaMaxMm === precipitacaoHorariaMaxMm)
-      : primeiraJanela(periodos, (p) => p.rajadaMaxKmh === rajadaMaxKmh);
-
-    candidatos.push({
-      ...evento,
-      tipo,
-      tipoEvento: evento.tipo,
-      nivel: NIVEL_POR_GRAU[evento.grau],
-      janela: janela || "ao longo do dia",
+  for (const aviso of avisosInmet) {
+    const fenomeno = fenomenoAvisoInmet(aviso.descricao);
+    const texto = normalizarComparacao([aviso.descricao, aviso.riscos].flat().filter(Boolean).join(" "));
+    const chuva = fenomeno === "chuva" || (fenomeno === "tempestade" && /chuva|alagamento/.test(texto));
+    const vento = fenomeno === "vento" || (fenomeno === "tempestade" && /vento|rajada/.test(texto));
+    const grau = grauAvisoInmet(aviso.severidade);
+    if (!grau || (!chuva && !vento)) continue;
+    if (chuva) candidatos.push({
+      assinatura: "chuva",
+      tipo: grau === "ATENÇÃO" ? "chuvaModerada" : "chuvaIntensa",
+      grau,
+      nivel: NIVEL_POR_GRAU[grau],
+      janela: `${aviso.inicio} até ${aviso.fim}`,
+      descricao: aviso.riscos?.join(" ") || `${aviso.descricao} — ${aviso.severidade}.`,
+      recomendacoes: recomendacoes("chuva", grau),
+      fonteDados: "INMET — aviso oficial",
+      avisoInmet: aviso,
     });
+    if (vento) candidatos.push({
+      assinatura: "vento",
+      tipo: grau === "ATENÇÃO" ? "ventoModerado" : "ventoForte",
+      grau,
+      nivel: NIVEL_POR_GRAU[grau],
+      janela: `${aviso.inicio} até ${aviso.fim}`,
+      descricao: aviso.riscos?.join(" ") || `${aviso.descricao} — ${aviso.severidade}.`,
+      recomendacoes: recomendacoes("vento", grau),
+      fonteDados: "INMET — aviso oficial",
+      avisoInmet: aviso,
+    });
+    avisosCobertos.add(aviso);
   }
 
   if (tempMax >= LIMIARES.calorExtremoC || textoAvisos(avisosInmet, /calor/i)) {
@@ -172,11 +180,14 @@ function avaliarRiscos(consolidado) {
   // Índice UV — risco de queimadura solar para equipes em trabalho externo.
   if (qualidadeAr?.uvMax != null && qualidadeAr.uvMax >= LIMIARES.uvMuitoAlto) {
     const extremo = qualidadeAr.uvMax >= LIMIARES.uvExtremo;
+    const grauUv = grauUvConfigurado(extremo ? "extremo" : "muito_alto");
     candidatos.push({
       tipo: "uvAlto",
-      nivel: extremo ? 3 : 2,
+      grau: grauUv,
+      nivel: NIVEL_POR_GRAU[grauUv],
       janela: qualidadeAr.horaPicoUv ? `pico por volta das ${qualidadeAr.horaPicoUv}` : "meio do dia",
       descricao: `Índice UV ${qualidadeAr.uvClassificacao.nivel.toLowerCase()} previsto (máx. ${qualidadeAr.uvMax}), com risco de queimadura solar em exposição curta sem proteção.`,
+      recomendacoes: recomendacoesProtecao(grauUv),
     });
   }
 
@@ -193,7 +204,7 @@ function avaliarRiscos(consolidado) {
   // aviso oficial do INMET não capturado pelas regras numéricas acima
   // (ex.: nevoeiro denso, ressaca marítima) entra como candidato genérico
   for (const aviso of avisosInmet) {
-    if (aviso === avisoEletrico) continue;
+    if (avisosCobertos.has(aviso)) continue;
     const jaCoberto = candidatos.some((c) =>
       new RegExp(c.tipo, "i").test(aviso.descricao || "")
     );
@@ -226,8 +237,8 @@ function avaliarRiscos(consolidado) {
   const categoriasAtivas = new Set(candidatos.map((c) => c.tipo));
   const severidade = {
     grau: eventoMaisRelevante?.grau || "NORMAL",
-    vento: classificacaoProtocolo.vento,
-    chuva: classificacaoProtocolo.chuva,
+    vento: { grau: candidatos.filter((c) => c.assinatura === "vento").reduce((g, c) => maiorGrau(g, c.grau), "NORMAL"), rajadaKmh: null, fonte: "INMET" },
+    chuva: { grau: candidatos.filter((c) => c.assinatura === "chuva").reduce((g, c) => maiorGrau(g, c.grau), "NORMAL"), intensidadeHorariaMmH: null, acumuladoDiarioMm: null, fonte: "INMET" },
     eventos: candidatos,
   };
 
@@ -431,4 +442,4 @@ function recomendacoesEdificacao(categorias) {
   return secoes;
 }
 
-module.exports = { avaliarRiscos, recomendacoesDeslocamento, recomendacoesEdificacao, LIMIARES };
+module.exports = { avaliarRiscos, recomendacoesDeslocamento, recomendacoesEdificacao, LIMIARES, grauUvConfigurado };

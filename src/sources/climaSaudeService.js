@@ -6,6 +6,7 @@ const tls = require('node:tls');
 const { Agent } = require('undici');
 const cheerio = require('cheerio');
 const { formatarDataBrasilia, registrarFalha } = require('./sourceHealth');
+const { recomendacoesPorProtocolo } = require('../logic/healthProtection');
 
 const ARQUIVO = path.join(__dirname, '..', '..', 'data', 'clima-saude.json');
 const FONTE = 'Clima e Saúde — Ministério da Saúde';
@@ -25,28 +26,6 @@ const NIVEIS = Object.freeze({
   severo: { grau: 'ALERTA', protocolo: 'P2', gravidade: 'alto' },
   extremo: { grau: 'EMERGÊNCIA', protocolo: 'P3', gravidade: 'severo' },
 });
-const RECOMENDACOES = Object.freeze({
-  P1: [
-    'Reforçar hidratação.',
-    'Realizar pausas em sombra ou ambiente climatizado.',
-    'Realizar ajuste de horário das atividades com exposição, preferindo períodos mais cedo ou mais tarde.',
-  ],
-  P2: [
-    'Impor pausas adicionais e rodízio em atividades essenciais.',
-    'Paralisar atividades não essenciais.',
-    'Limitar tarefas pesadas.',
-    'Ampliar vigilância.',
-    'Disponibilizar água e local de recuperação.',
-    'Disponibilizar protetor solar e intensificar o uso.',
-    'Preparar equipe de saúde para aumento de demanda de atendimento.',
-  ],
-  P3: [
-    'Cessar trabalho externo.',
-    'Remover pessoas para ambiente climatizado.',
-    'Assistência médica imediata e remoção conforme PRE, se necessário.',
-  ],
-});
-
 function normalizar(texto) {
   return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 }
@@ -58,8 +37,7 @@ function nivelEhf(classificacao) {
   return NIVEIS[normalizar(classificacao)] || null;
 }
 function recomendacoesCalor(nivel) {
-  if (!nivel?.protocolo) return [];
-  return [...RECOMENDACOES.P1, ...(nivel.protocolo === 'P2' || nivel.protocolo === 'P3' ? RECOMENDACOES.P2 : []), ...(nivel.protocolo === 'P3' ? RECOMENDACOES.P3 : [])];
+  return recomendacoesPorProtocolo(nivel?.protocolo);
 }
 
 function interpretarHtml(html, { url, consultadoEm = new Date().toISOString() } = {}) {

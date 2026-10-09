@@ -55,6 +55,16 @@ async function buscarPrevisaoInmet(codigoIbge, {
     throw new Error("INMET retornou payload sem períodos de previsão");
   }
 
+  const numeroOficial = (...valores) => {
+    for (const valor of valores) {
+      if (Number.isFinite(valor)) return valor;
+      if (typeof valor === "string" && /^\s*-?\d+(?:[.,]\d+)?\s*(?:km\/h|mm)?\s*$/i.test(valor)) {
+        const numero = Number(valor.replace(/\s*(?:km\/h|mm)\s*$/i, "").replace(",", "."));
+        if (Number.isFinite(numero)) return numero;
+      }
+    }
+    return null;
+  };
   const limpar = (p) =>
     p && {
       resumo: p.resumo || null,
@@ -64,6 +74,10 @@ async function buscarPrevisaoInmet(codigoIbge, {
       umidadeMin: p.umidade_min ?? null,
       direcaoVento: p.dir_vento || null,
       intensidadeVento: p.int_vento || null,
+      // O endpoint municipal não publica estes campos atualmente, mas a
+      // leitura aceita nomes oficiais explícitos caso passem a ser incluídos.
+      rajadaMaxKmh: numeroOficial(p.rajada_max, p.rajada_vento, p.vento_rajada, p.rajada),
+      precipitacaoMm: numeroOficial(p.precipitacao_mm, p.chuva_mm, p.acumulado_chuva_mm),
     };
 
   return {
@@ -309,6 +323,10 @@ function normalizarAviso(aviso) {
   // CAP. Os equivalentes em português preservam compatibilidade com o JSON
   // historicamente servido por /avisos/ativos. Nenhum texto é sintetizado.
   const municipios = textoOficial(origem.municipios);
+  const geocodesMunicipios = municipios
+    ? [...municipios.matchAll(/\((\d{7})\)/g)].map((partes) => partes[1])
+    : [];
+  const geocodesEstruturados = [...geocodesDoAviso(origem)];
   return {
     id: textoOficial(origem.codigo, origem.identifier),
     idAviso: textoOficial(origem.id_aviso),
@@ -324,7 +342,7 @@ function normalizarAviso(aviso) {
     fim: textoOficial(origem.expires, origem.fim),
     riscos: listaOficial(origem.description, origem.riscos),
     instrucoes: listaOficial(origem.instruction, origem.instrucoes),
-    geocodes: [...geocodesDoAviso(origem)],
+    geocodes: [...new Set(geocodesEstruturados.length ? geocodesEstruturados : geocodesMunicipios)],
   };
 }
 
@@ -346,6 +364,8 @@ function extrairAvisos(payload) {
 
 async function buscarAvisosInmet(codigoIbge, {
   agora = new Date(),
+  inicioPeriodo = agora,
+  fimPeriodo = null,
   fetchImpl = fetch,
   timeoutMs = INMET_AVISOS_TIMEOUT_MS,
   esperarFn,
@@ -378,8 +398,20 @@ async function buscarAvisosInmet(codigoIbge, {
   // Repetições do mesmo aviso são removidas; avisos distintos do mesmo
   // fenômeno são mantidos (a consolidação por fenômeno, se desejada, é feita
   // na renderização do PDF/e-mail).
+  const inicioMs = inicioPeriodo instanceof Date ? inicioPeriodo.getTime() : Date.parse(inicioPeriodo);
+  const fimMs = fimPeriodo == null
+    ? null
+    : fimPeriodo instanceof Date ? fimPeriodo.getTime() : Date.parse(fimPeriodo);
+  const intersecaPeriodo = (aviso) => {
+    if (aviso.encerrado === true) return false;
+    const inicioAviso = dataAvisoEmMs(aviso.inicio);
+    const fimAviso = dataAvisoEmMs(aviso.fim);
+    if (Number.isFinite(fimMs) && inicioAviso !== null && inicioAviso > fimMs) return false;
+    if (Number.isFinite(inicioMs) && fimAviso !== null && fimAviso < inicioMs) return false;
+    return true;
+  };
   const relevantes = deduplicarAvisosInmet(
-    normalizados.filter((aviso) => aviso.geocodes.includes(codigo) && avisoAplicavel(aviso, agora))
+    normalizados.filter((aviso) => aviso.geocodes.includes(codigo) && intersecaPeriodo(aviso))
   );
 
   return {

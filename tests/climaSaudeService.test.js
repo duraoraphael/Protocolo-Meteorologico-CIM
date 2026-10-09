@@ -120,7 +120,7 @@ test('05h→15h informa mudança e alerta de calor só em transição', () => {
   assert.equal(detectarAlertasGraves({ ...base, climaSaude: { status: 'indisponivel', dados: null } }).some((a) => a.assinatura === 'calor-ehf'), false);
 });
 
-test('PDF, e-mail e painel exibem bloco próprio sem alterar severidade meteorológica', () => {
+test('PDF técnico, e-mail e painel exibem calor sem alterar severidade meteorológica', () => {
   const dados = interpretarHtml(pagina(), parametros);
   const report = {
     cidade: { chave: 'petropolis', nome: 'Petrópolis', uf: 'RJ' },
@@ -132,13 +132,15 @@ test('PDF, e-mail e painel exibem bloco próprio sem alterar severidade meteorol
     fontesAutomatizadas: [], fontesManuais: [], fontesPorCampo: {}, monitoramentoApis: [],
     climaSaude: { status: 'operacional', dados },
   };
-  for (const html of [renderPdfHtml(report), renderEmailHtml(report)]) {
-    assert.match(html, /CALOR \/ RISCO À SAÚDE|Calor \/ risco à saúde/);
-    assert.match(html, /ALERTA/);
-    assert.match(html, /RISCO COMBINADO À SAÚDE/);
-    assert.match(html, /RECOMENDAÇÕES/);
-    assert.match(html, /Protocolo Meteorológico do COMPARTILHADO/);
-  }
+  const pdf = renderPdfHtml(report);
+  assert.match(pdf, /Condições de Calor — Indicadores e Previsões/);
+  assert.match(pdf, /EHF 7\.76/);
+  assert.doesNotMatch(pdf, /RECOMENDAÇÕES|class="card-alerta"/);
+  const email = renderEmailHtml(report);
+  assert.match(email, /CALOR \/ RISCO À SAÚDE|Calor \/ risco à saúde/);
+  assert.match(email, /ALERTA/);
+  assert.match(email, /RISCO COMBINADO À SAÚDE/);
+  assert.match(email, /RECOMENDAÇÕES/);
   // Painel: calor em ALERTA vira card na área de destaque e no card compacto;
   // risco combinado e recomendações ficam em "Ver detalhes".
   report.ocorrencias = montarOcorrencias(report);

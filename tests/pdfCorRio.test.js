@@ -106,11 +106,11 @@ test("conteúdo: título, conteúdo/orientações, abrangência, publicação, f
   assert.match($(".cor-outros").text(), /Comunicado 2/);
 });
 
-test("card vem logo depois dos cards de alerta, incluindo os avisos INMET", async () => {
+test("card vem depois da tabela técnica de avisos INMET", async () => {
   const { html: h } = await html(estado());
-  const ultimoCardAlerta = h.lastIndexOf('class="card-alerta"');
-  assert.ok(h.indexOf("Aviso oficial INMET") > 0);
-  assert.ok(ultimoCardAlerta > 0 && ultimoCardAlerta < h.indexOf("Comunicado oficial COR-Rio"));
+  assert.ok(h.indexOf("Avisos oficiais do INMET") > 0);
+  assert.ok(h.indexOf("Avisos oficiais do INMET") < h.indexOf("Comunicado oficial COR-Rio"));
+  assert.doesNotMatch(h, /class="card-alerta"/);
 });
 
 test("comunicado anterior ao início do estágio é sinalizado; estágio não é atribuído a ele", async () => {
@@ -190,5 +190,5 @@ test("falha inesperada do serviço não impede o PDF: card indisponível", async
   await anexarCorRioAoRelatorio(r, { integracaoCorRio: true }, { servico: { obter: async () => { throw new Error("boom"); } }, logger: { error() {} } });
   const h = renderPdfHtml(r);
   assert.match(h, /ESTÁGIO INDISPONÍVEL/);
-  assert.match(h, /Aviso oficial INMET/);
+  assert.match(h, /Avisos oficiais do INMET/);
 });

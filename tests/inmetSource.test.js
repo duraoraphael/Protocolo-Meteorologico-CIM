@@ -61,6 +61,14 @@ test("aviso INMET legado continua aceito e ausências não viram texto inventado
   assert.deepEqual(aviso.geocodes, ["3303906", "3304557"]);
 });
 
+test("geocode municipal é recuperado do campo municípios quando a lista dedicada não vem", () => {
+  const aviso = normalizarAviso({
+    descricao: "Chuvas Intensas",
+    municipios: "Macaé - RJ (3302403),Manaus - AM (1302603)",
+  });
+  assert.deepEqual(aviso.geocodes, ["3302403", "1302603"]);
+});
+
 test("resposta nova organizada por dia é achatada sem usar metadados", () => {
   const primeiro = { event: "Chuva Intensa" };
   const segundo = { event: "Vento Forte" };
@@ -182,6 +190,24 @@ test("avisos INMET repetem falha temporária e filtram o município", async () =
   assert.equal(resultado.totalAvisosPais, 2);
   assert.equal(resultado.avisos.length, 1);
   assert.equal(resultado.avisos[0].descricao, "Tempestade");
+});
+
+test("avisos são isolados por base e precisam intersectar a janela da edição", async () => {
+  const payload = { hoje: [
+    { descricao: "Chuva em Macaé", severidade: "Perigo", geocodes: "3302403", inicio: "2026-10-09 06:00", fim: "2026-10-09 14:00" },
+    { descricao: "Vento em Manaus", severidade: "Perigo", geocodes: "1302603", inicio: "2026-10-09 06:00", fim: "2026-10-09 14:00" },
+    { descricao: "Aviso futuro", severidade: "Perigo", geocodes: "3302403", inicio: "2026-10-09 16:00", fim: "2026-10-09 20:00" },
+  ] };
+  const opcoes = {
+    agora: new Date("2026-10-09T08:00:00-03:00"),
+    inicioPeriodo: new Date("2026-10-09T05:00:00-03:00"),
+    fimPeriodo: new Date("2026-10-09T15:00:00-03:00"),
+    fetchImpl: async () => ({ ok: true, json: async () => payload }),
+  };
+  const macae = await buscarAvisosInmet("3302403", opcoes);
+  const manaus = await buscarAvisosInmet("1302603", opcoes);
+  assert.deepEqual(macae.avisos.map((aviso) => aviso.descricao), ["Chuva em Macaé"]);
+  assert.deepEqual(manaus.avisos.map((aviso) => aviso.descricao), ["Vento em Manaus"]);
 });
 
 test("INMET não repete erro HTTP permanente", async () => {

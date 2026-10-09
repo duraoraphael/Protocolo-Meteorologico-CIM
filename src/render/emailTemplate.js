@@ -47,10 +47,12 @@ function rajadaMaxima(r) {
 }
 
 
-function celulaMetrica(rotulo, valor, ultimaColuna = false) {
+function celulaMetrica(rotulo, valor, ultimaColuna = false, { antesRotulo = "", fonte = "" } = {}) {
   return `<td width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:${ultimaColuna ? "0" : `1px solid ${COR.borda}`};border-bottom:1px solid ${COR.borda};padding:13px 8px 12px;text-align:center;">
+    ${antesRotulo ? `<div style="color:${COR.verde};font:bold 11px/1.3 Arial,sans-serif;margin-bottom:4px;text-align:center;">${esc(antesRotulo)}</div>` : ""}
     <div style="color:${COR.secundario};font:13px/1.3 Arial,sans-serif;text-transform:uppercase;">${rotulo}</div>
     <div style="color:${COR.texto};font:bold 25px/1.2 Arial,sans-serif;margin-top:3px;">${valor}</div>
+    ${fonte ? `<div style="color:${COR.secundario};font:11px/1.3 Arial,sans-serif;margin-top:4px;text-align:center;">Fonte: ${esc(fonte)}</div>` : ""}
   </td>`;
 }
 
@@ -65,16 +67,24 @@ function valorCalor(r) {
 
 function resumoMeteorologico(r) {
   const rajada = rajadaMaxima(r);
+  const rajadaValor = Number.isFinite(rajada.valor) ? numeroUnidade(rajada.valor, "km/h") : "Dado indisponível";
+  const fraseRajada = r.horarioAgendado === "05:00"
+    ? "Previsão até as 15hrs"
+    : r.horarioAgendado === "15:00" ? "Previsão até as 00h" : "";
+  const fonteRajada = r.fontesPorCampo?.rajadaMaxKmh
+    || (rajada.periodo
+      ? r.fontesPorCampo?.[`periodos.${String(rajada.periodo).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}.rajadaMaxKmh`]
+      : "");
   const ar = texto(r.qualidadeAr?.pm25Classificacao?.nivel);
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-bottom:0;border-collapse:separate;">
     <tr>
       ${celulaMetrica("TEMP. MÍN/MÁX", parOuTraco(r.tempMin, r.tempMax, "°", "°C"))}
       ${celulaMetrica("UMIDADE MÍN/MÁX", parOuTraco(r.umidadeMin, r.umidadeMax, "%", "%"))}
-      ${celulaMetrica("RAJADA PREVISTA", numeroUnidade(rajada.valor, "km/h"), true)}
+      ${celulaMetrica("RAJADA PREVISTA", rajadaValor, true, { antesRotulo: fraseRajada, fonte: fonteRajada })}
     </tr>
     <tr>
       ${celulaMetrica("QUALIDADE DO AR", ar)}
-      ${celulaMetrica("CHUVA ACUMULADA", numeroUnidade(r.precipitacaoTotalMm, "mm"))}
+      ${celulaMetrica("CHUVA ACUMULADA/DIA", numeroUnidade(r.precipitacaoDiariaMm, "mm"))}
       ${celulaMetrica("CALOR", valorCalor(r), true)}
     </tr>
   </table>`;
@@ -202,7 +212,7 @@ function renderEmailHtml(r) {
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${cartoesAlerta}${mudancas}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:10px 25px 6px;color:${COR.texto};font:14px/1.4 Arial,sans-serif;"><strong>Fontes de dados:</strong><br>${fontesDeDados(r, eventos)}</td></tr>
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-left:4px solid ${COR.verde};"><tr><td bgcolor="${COR.celula}" style="padding:11px 17px;background:${COR.celula};color:#333333;font:14px/1.4 Arial,sans-serif;">Relatório completo com todas as tabelas, avisos oficiais, fontes consultadas e recomendações detalhadas em anexo (PDF).</td></tr></table></td></tr>
+        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-left:4px solid ${COR.verde};"><tr><td bgcolor="${COR.celula}" style="padding:11px 17px;background:${COR.celula};color:#333333;font:14px/1.4 Arial,sans-serif;">Relatório técnico completo com tabelas, avisos oficiais e fontes consultadas em anexo (PDF).</td></tr></table></td></tr>
         <tr><td bgcolor="${COR.amarelo}" style="height:3px;background:${COR.amarelo};font-size:0;line-height:3px;">&nbsp;</td></tr>
         <tr><td align="center" bgcolor="${COR.painel}" style="padding:8px 20px 10px;background:${COR.painel};color:${COR.texto};text-align:center;font:12px/1.25 Arial,sans-serif;"><strong style="font-size:16px;color:${COR.verde};">CIM</strong><br>Centro Integrado de Monitoramento<br>COMPARTILHADO<br><span style="color:${COR.secundario};">Informativo gerado automaticamente pelo Protocolo Meteorológico do COMPARTILHADO.</span></td></tr>
       </table>

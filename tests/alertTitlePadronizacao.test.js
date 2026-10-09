@@ -65,7 +65,7 @@ test("painel, informativo, PDF extraordinário e Alerta CIM padronizam títulos 
   for (const titulo of TITULOS.slice(0, 3)) assert.ok(painel.includes(titulo), `painel: ${titulo}`);
   assert.ok(!painel.includes(`aria-label="${TITULOS[3]}"`), "painel: omite ocorrência NORMAL");
   conferirInformativo(renderEmailHtml(r), "informativo");
-  conferirInformativo(renderPdfHtml(r), "PDF");
+  assert.doesNotMatch(renderPdfHtml(r), /class="card-alerta"|TEMPESTADE COM RAIOS — EMERGÊNCIA|VENTO — ALERTA/);
   const alertaHtml = renderAlertEmailHtml({ cidade: r.cidade, report: r, alertas: [
     { tipo: "Tempestade com raios", grau: "EMERGÊNCIA" },
     { tipo: "Vento", grau: "ALERTA" },

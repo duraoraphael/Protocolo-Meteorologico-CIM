@@ -38,7 +38,7 @@ function dadosOpenMeteo() {
   };
 }
 
-test("agendados (05h e 15h) cobrem hoje 05h–00h; painel usa as mesmas janelas", { concurrency: false }, async () => {
+test("edições usam janelas efetivas 05h–15h e 15h–00h", { concurrency: false }, async () => {
   const anterior = global.fetch;
   const urls = [];
   global.fetch = async (url) => {
@@ -46,21 +46,23 @@ test("agendados (05h e 15h) cobrem hoje 05h–00h; painel usa as mesmas janelas"
     return { ok: true, json: async () => dadosOpenMeteo() };
   };
   try {
-    const agendado = await buscarOpenMeteo(-22.9, -43.2, { agregarJanela: true });
+    const manha = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 5, fimHora: 15, agregarJanela: true });
+    const tarde = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 15, fimHora: 24, agregarJanela: true });
     const painel = await buscarOpenMeteo(-22.9, -43.2);
-    assert.equal(agendado.precipitacaoTotalMm, 17);
-    assert.equal(agendado.periodos.manha.precipitacaoMm, 8);
-    assert.equal(agendado.tempMin, 20);
-    assert.equal(agendado.previsaoDias.length, 4, "a fixture traz 4 dias; o relatório usa só o primeiro");
-    assert.equal(agendado.janelaHoje.rotulo, "05h–00h");
+    assert.equal(manha.precipitacaoTotalMm, 12);
+    assert.equal(tarde.precipitacaoTotalMm, 5);
+    assert.equal(manha.periodos.manha.precipitacaoMm, 8);
+    assert.equal(manha.periodos.noite.disponivel, false);
+    assert.equal(tarde.periodos.manha.disponivel, false);
+    assert.equal(manha.periodosDiaCompleto.noite.disponivel, true);
+    assert.equal(tarde.periodosDiaCompleto.manha.precipitacaoMm, 8);
+    assert.equal(manha.tempMin, 20);
+    assert.equal(manha.previsaoDias.length, 4, "a fixture traz 4 dias; o relatório usa só o primeiro");
+    assert.equal(manha.janelaHoje.rotulo, "05h–15h");
+    assert.equal(tarde.janelaHoje.rotulo, "15h–00h");
     assert.match(urls[0], /forecast_days=1/);
     assert.match(urls[0], /timezone=America%2FSao_Paulo/);
-    // Mesmo período, mesma janela e mesmo cálculo no painel e no PDF.
-    for (const k of ["manha", "tarde", "noite"]) assert.deepEqual(painel.periodos[k], agendado.periodos[k]);
-    assert.deepEqual(
-      ["manha", "tarde", "noite"].map((k) => agendado.periodos[k].janela),
-      ["05h–12h", "12h–18h", "18h–00h"]
-    );
+    assert.equal(painel.precipitacaoTotalMm, 17);
   } finally {
     global.fetch = anterior;
   }
@@ -159,13 +161,13 @@ test("Open-Meteo informa esgotamento depois de três timeouts", async () => {
   assert.equal(chamadas, OPEN_METEO_TENTATIVAS);
 });
 
-test("PDF mantém a previsão futura e e-mail a omite sem perder a comparação", () => {
+test("PDF e e-mail exibem a referência da edição sem perder a comparação", () => {
   const report = {
     cidade: { nome: "Rio de Janeiro", uf: "RJ" },
     dataFormatadaCurta: "28/09/2026", dataFormatadaLonga: "segunda-feira, 28 de setembro de 2026", horaConsulta: "15:00",
-    periodoCoberto: "hoje, das 05h até 00h",
+    horarioAgendado: "15:00", previsaoAte: "00h", periodoCoberto: "hoje, das 15h até 00h do dia seguinte",
     previsaoDias: [
-      { periodo: "Hoje (05h–00h)", data: "2026-09-28", condicao: "Chuva", tempMin: 20, tempMax: 28, chuvaMm: 12, rajadaKmh: 48 },
+      { periodo: "Hoje (15h–00h)", data: "2026-09-28", condicao: "Chuva", tempMin: 20, tempMax: 28, chuvaMm: 12, rajadaKmh: null },
     ],
     mudancasDia: ["Grau geral: ATENÇÃO → ALERTA.", "Rajada máxima prevista: 35 km/h → 48 km/h."],
     condicaoGeral: "Chuva", tabelaTemperaturaUmidade: [], ventoPorPeriodo: [], chuvaPorPeriodo: [],
@@ -175,15 +177,18 @@ test("PDF mantém a previsão futura e e-mail a omite sem perder a comparação"
   const pdf = renderPdfHtml(report);
   const email = renderEmailHtml(report);
   assert.doesNotMatch(pdf, /Previsão por dia/);
-  assert.match(pdf, /<strong>Período coberto:<\/strong> hoje, das 05h até 00h\.<\/p>/);
-  assert.match(pdf, /<th>Chuva\/dia<\/th>/);
+  assert.match(pdf, /Hora da consulta:<\/strong> 15:00 \(Horário de Brasília\).*Previsão até 00h/);
+  assert.match(pdf, /<th>Chuva na janela<\/th>/);
   assert.match(pdf, /12,0 mm/);
   assert.match(pdf, /<th>Calor<\/th>/);
-  assert.match(pdf, /<p class="fonte-tabela">Fonte de dados: Open-Meteo \(condição, temperatura, chuva e rajada\)\. Para hoje, chuva e rajada consideram a janela indicada\. Calor: Clima e Saúde — Ministério da Saúde: indisponível nesta emissão — classificação EHF/);
+  assert.match(pdf, /Fontes por campo: condição e estimativa de chuva — Open-Meteo/);
   assert.match(pdf, /class="calor-nd">Indisponível</);
   assert.doesNotMatch(pdf, /Amanhã|Dia \+\d|dias seguintes usam/);
   assert.doesNotMatch(email, /Previsão para os próximos dias/);
-  assert.doesNotMatch(email, /hoje, das 05h até 00h|Amanhã|Nublado/);
+  assert.match(email, /Previsão até as 00h/);
+  assert.ok(email.indexOf("Previsão até as 00h") < email.indexOf("RAJADA PREVISTA"));
+  assert.doesNotMatch(email, /\| Previsão até/);
+  assert.doesNotMatch(email, /Amanhã|Nublado/);
   for (const saida of [pdf, email]) {
     assert.match(saida, /ATENÇÃO → ALERTA/);
     assert.match(saida, /35 km\/h → 48 km\/h/);

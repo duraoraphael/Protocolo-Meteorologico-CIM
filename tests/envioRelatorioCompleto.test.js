@@ -18,6 +18,7 @@ function relatorioBase(sobrescritas = {}) {
     umidadeMin: 50,
     umidadeMax: 90,
     precipitacaoTotalMm: 12.4,
+    precipitacaoDiariaMm: 12.4,
     ventoPorPeriodo: [],
     qualidadeAr: null,
     mar: { alturaMaxDiaM: 1.1 },
@@ -40,8 +41,8 @@ test("informativo do e-mail mostra chuva acumulada e onda em cards distintos", (
   assert.match(html, />1\.1 m</);
 });
 
-test("zero milímetro é exibido como dado válido", () => {
-  const html = renderEmailHtml(relatorioBase({ precipitacaoTotalMm: 0 }));
+test("zero milímetro diário é exibido como dado válido", () => {
+  const html = renderEmailHtml(relatorioBase({ precipitacaoDiariaMm: 0 }));
   assert.match(html, /0 mm/);
 });
 
@@ -88,7 +89,7 @@ test("envio reutiliza o PDF completo em memória como anexo SMTP", { concurrency
     assert.equal(logos[0].contentDisposition, "inline");
     assert.ok(fs.existsSync(logos[0].path));
     assert.match(mensagem.html, /src="cid:logo-petrobras-header@cim"/);
-    assert.match(mensagem.html, /Relatório completo com todas as tabelas/);
+    assert.match(mensagem.html, /Relatório técnico completo com tabelas/);
     assert.equal(resultado.respostaSmtp, "250 2.0.0 OK");
     assert.equal(resultado.aceitos, 1);
     assert.equal(resultado.rejeitados, 0);
