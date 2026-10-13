@@ -1,21 +1,11 @@
 const brand = require("./brand");
 const { HEADER_AMARELO, HEADER_VERDE, LOGOS_HEADER, logoHeaderDataUri } = require("../config/headerAssets");
-const { ordenarEventosParaExibicao } = require("./eventOrdering");
-const { consolidarAvisosInmet, grauAvisoInmet } = require("../sources/inmet");
+const { montarCardsAlerta, visualNivel } = require("./alertCards");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const monitorSecas = require("../sources/monitorSecas");
 const CorRio = require("../../public/cor-rio-compartilhado");
 const { comunicadoDoDia } = require("./corRioEmail");
-const AlertTitle = require("../../public/alert-title");
-const { recomendacoesChuvaAvisoInmet } = require("../logic/inmetAlertRules");
-const {
-  alertaExibivel,
-  avisosExibiveis,
-  deveExibirNoDocumento,
-  informativoProgramado,
-  resolverRecomendacoesAlerta,
-  tipoDocumentoDoRelatorio,
-} = require("../logic/alertPresentation");
+const { informativoProgramado, tipoDocumentoDoRelatorio } = require("../logic/alertPresentation");
 const { calorPorData, fonteCalor, DESCRICAO_CALOR } = require("../logic/calorPorData");
 
 function esc(valor) {
@@ -34,50 +24,9 @@ function listaHtml(itens) {
   return `<ul>${itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
 }
 
-// Mesmo mapeamento de severidade usado nas recomendações (grauAvisoInmet):
-// "Perigo Potencial" é ATENÇÃO — antes caía na regra de "perigo" (vermelho).
-function corSeveridade(severidade = "") {
-  const grau = grauAvisoInmet(severidade);
-  if (grau === "EMERGÊNCIA") return "#B71C1C";
-  if (grau === "ALERTA") return "#D32F2F";
-  if (grau === "ATENÇÃO" || /aten[çc][ãa]o/i.test(String(severidade))) return "#F57C00";
-  return "#2E7D32";
-}
-
-function visualCard(grau) {
-  return grau === "NORMAL" ? { cor: "#2E7D32", fundo: "#E8F5E9" } : brand.statusVisual(grau);
-}
-
-function eventosLocais(r) {
-  const eventos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
-  const tipoDocumento = tipoDocumentoDoRelatorio(r);
-  return ordenarEventosParaExibicao(
-    (Array.isArray(eventos) ? eventos : []).filter((evento) =>
-      evento && evento.tipo !== "avisoInmet"
-      && deveExibirNoDocumento({
-        nivel: evento.grau || AlertTitle.normalizarGrau(evento.titulo),
-        tipoDocumento,
-      })
-    )
-  );
-}
-
 function textoOficialHtml(valor) {
   const texto = Array.isArray(valor) ? valor.filter(Boolean).join(" ") : valor;
   return esc(texto).replace(/\r?\n/g, "<br>");
-}
-
-function cardEvento({ titulo, grau, descricao, janela, fonteDados, detalhes = "", semFonte = false }) {
-  const visual = visualCard(grau);
-  const tituloFormatado = AlertTitle.formatarTitulo(titulo, grau);
-  const classeTitulo = tituloFormatado.length > 34 ? " evento-titulo-longo" : "";
-  return `<div class="evento-card" style="border-color:${visual.cor};background:${visual.fundo};">
-    <div class="evento-titulo${classeTitulo}" style="color:${visual.cor};"><span class="evento-icone">●</span> ${esc(tituloFormatado)}</div>
-    ${descricao ? `<p class="evento-descricao">${esc(descricao)}</p>` : ""}
-    ${detalhes}
-    ${janela ? `<p class="evento-linha"><em>Janela prevista:</em> ${esc(janela)}</p>` : ""}
-    ${semFonte ? "" : `<p class="evento-linha">Fonte de dados: ${esc(fonteDados || "Indisponível")}</p>`}
-  </div>`;
 }
 
 // Tabela com título e fonte de dados num bloco só: se o conjunto couber numa
@@ -93,56 +42,48 @@ function blocoTabela({ titulo = "", tabela, fonte = "", antes = "" }) {
   </section>`;
 }
 
-const TITULO_RECOMENDACOES = "Recomendações - Protocolo Meteorológico do COMPARTILHADO";
-
-function tituloFenomenoRecomendacao(valor) {
-  return `${AlertTitle.nomeParametro(valor).toUpperCase()}:`;
+function linhaCardHtml(item) {
+  if (item.lista) {
+    return `<div class="evento-linha"><strong>${esc(item.rotulo)}:</strong>${listaHtml(item.lista)}</div>`;
+  }
+  const valor = item.multilinha ? textoOficialHtml(item.texto) : esc(item.texto);
+  return `<p class="${item.rotulo ? "evento-linha" : "evento-descricao"}">${item.rotulo ? `<strong>${esc(item.rotulo)}:</strong> ` : ""}${valor}</p>`;
 }
 
-// Alerta à esquerda (tipo, nível e descrição) e as recomendações cadastradas
-// à direita, no mesmo bloco indivisível.
-function blocoAlerta(cardHtml, { grau, itens = [], subtitulo = "", nota = "", tituloRecomendacoes = TITULO_RECOMENDACOES }) {
-  const cor = visualCard(grau).cor;
-  return `<table class="alerta-bloco" role="presentation"><tr>
-    <td class="alerta-col-card">${cardHtml}</td>
-    <td class="alerta-col-rec"><div class="alerta-rec" style="border-top-color:${cor};">
-      <div class="alerta-rec-titulo">${esc(tituloRecomendacoes)}</div>
-      ${subtitulo ? `<div class="alerta-rec-sub" style="color:${cor};">${subtitulo}</div>` : ""}
-      ${itens.length ? listaHtml(itens) : ""}
-      ${nota ? `<p class="alerta-rec-nota">${nota}</p>` : ""}
-    </div></td>
-  </tr></table>`;
+// Alerta e recomendações num card único (modelo em ./alertCards, o mesmo do
+// e-mail): card inteiro no tom claro do nível, com a seção
+// RECOMENDAÇÕES dentro da mesma borda. Paginação: o card inteiro vai para a
+// próxima página quando cabe nela; maior que uma página, continua na seguinte
+// com a borda repetida, sem cortar linha e sem deixar o título sozinho.
+function cardAlertaHtml(card) {
+  const v = card.visual;
+  const rec = card.recomendacoes;
+  const classeTitulo = card.titulo.length > 34 ? " card-alerta-titulo-longo" : "";
+  return `<section class="card-alerta" data-nivel="${escAtributo(card.nivel)}" style="border-color:${v.cor};background:${v.fundo};">
+    <div class="card-alerta-topo">
+      <div class="card-alerta-cab" style="background:${v.fundo};border-bottom-color:${v.cor};">
+        <div class="card-alerta-meta"><span class="card-alerta-selo" style="background:${v.selo};color:${v.textoSelo};">${esc(v.rotulo)}</span> ${esc(card.rotuloOrigem)}</div>
+        <div class="card-alerta-titulo${classeTitulo}" style="color:${v.texto};"><span class="evento-icone" style="color:${v.cor};">●</span> ${esc(card.titulo)}</div>
+      </div>
+      ${card.linhas.slice(0, 1).map(linhaCardHtml).join("")}
+    </div>
+    <div class="card-alerta-corpo">${card.linhas.slice(1).map(linhaCardHtml).join("")}</div>
+    ${rec && rec.itens.length ? `<div class="card-alerta-rec">
+      <div class="card-alerta-rec-cab">
+        <div class="card-alerta-rec-titulo" style="color:${v.texto};">RECOMENDAÇÕES</div>
+        <div class="card-alerta-rec-origem">${esc(rec.titulo)}</div>
+      </div>
+      ${listaHtml(rec.itens)}
+    </div>` : ""}
+  </section>`;
 }
 
-// recomendacoesExibidas: itens já listados — os avisos do INMET,
-// renderizados depois, não os repetem.
-function blocoEventoExtremo(r, recomendacoesExibidas = new Set()) {
-  const eventos = eventosLocais(r);
-  if (eventos.length) {
-    return eventos.map((evento) => {
-      const grau = evento.grau || AlertTitle.normalizarGrau(evento.titulo) || "NORMAL";
-      const card = cardEvento({ ...evento, grau });
-      if (!alertaExibivel(grau)) return card;
-      const resolucao = resolverRecomendacoesAlerta({ evento, avisosInmet: r.avisosInmet });
-      const itens = resolucao.itens;
-      itens.forEach((item) => recomendacoesExibidas.add(item));
-      return blocoAlerta(card, {
-        grau,
-        itens,
-        tituloRecomendacoes: resolucao.origem === "inmet" ? "Orientações oficiais do INMET" : TITULO_RECOMENDACOES,
-        subtitulo: tituloFenomenoRecomendacao(evento.fenomeno || evento.titulo || evento.tipo),
-      });
-    }).join("");
-  }
-  if (informativoProgramado(tipoDocumentoDoRelatorio(r)) && (r.severidade?.grau || "NORMAL") === "NORMAL") {
-    return cardEvento({
-      titulo: "CONDIÇÕES METEOROLÓGICAS",
-      grau: "NORMAL",
-      descricao: "Não foram identificadas condições meteorológicas que atinjam os níveis de Atenção, Alerta ou Emergência no período analisado.",
-      semFonte: true,
-    });
-  }
-  return "";
+function blocoCardsAlerta(r) {
+  return montarCardsAlerta(r, {
+    tipoDocumento: tipoDocumentoDoRelatorio(r),
+    detalhado: true,
+    cardCondicoesNormais: true,
+  }).map(cardAlertaHtml).join("");
 }
 
 function blocoDivergencias(divergencias) {
@@ -347,68 +288,23 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
   }).join("") + outrosHtml;
 }
 
-// Aviso oficial do INMET (texto preservado, origem identificada). Aviso de
-// chuva aplicável à base traz ao lado as recomendações de chuva cadastradas
-// para o nível correspondente à severidade oficial — mesmo sem alerta
-// equivalente da previsão. Itens já listados em outro alerta de chuva deste
-// documento não são repetidos.
-function blocoAvisosInmet(r, recomendacoesExibidas = new Set()) {
-  const tipoDocumento = tipoDocumentoDoRelatorio(r);
-  const consolidados = avisosExibiveis(consolidarAvisosInmet(r.avisosInmet), tipoDocumento);
-  const eventos = eventosLocais(r);
-  if (!consolidados.length) return "";
-  return consolidados
-    .map(
-      (a) => {
-        const evento = a.event || a.evento || a.descricao || a.headline;
-        const severidade = a.severity || a.severidade;
-        const inicio = a.onset || a.inicio;
-        const fim = a.expires || a.fim;
-        const motivo = a.description || a.riscos;
-        const instrucoes = a.instruction || a.instrucoes;
-        const grau = grauAvisoInmet(severidade) || "NORMAL";
-        const cor = corSeveridade(severidade);
-        const card = `<div class="aviso-inmet evento-card" style="border-color:${cor};background:#FFF8F0;">
-        <div class="evento-titulo" style="color:${cor};"><span class="evento-icone">●</span> Aviso oficial INMET</div>
-        <p class="evento-descricao"><strong>${esc(evento)}</strong> — <strong style="color:${cor};">${esc(severidade)}</strong></p>
-        ${(inicio || fim) ? `<p class="evento-linha"><strong>Vigência:</strong> ${esc(inicio)} até ${esc(fim)}</p>` : ""}
-        <p class="evento-linha"><strong>Fonte de dados:</strong> INMET</p>
-        ${motivo?.length ? `<p class="evento-linha"><strong>Motivo do aviso:</strong> ${textoOficialHtml(motivo)}</p>` : ""}
-        ${instrucoes?.length ? `<p class="evento-linha"><strong>Instruções oficiais:</strong> ${textoOficialHtml(instrucoes)}</p>` : ""}
-      </div>`;
-        // Informativos programados preservam o quadro completo, inclusive
-        // avisos em condição normal. Recomendações só acompanham níveis que
-        // configuram alerta operacional.
-        if (!alertaExibivel(grau)) return card;
-        const chuva = recomendacoesChuvaAvisoInmet(a);
-        const resolucao = resolverRecomendacoesAlerta({ aviso: a, eventosLocais: eventos });
-        const novas = resolucao.itens.filter((item) => !recomendacoesExibidas.has(item));
-        const repetidas = resolucao.itens.length - novas.length;
-        novas.forEach((item) => recomendacoesExibidas.add(item));
-        return blocoAlerta(card, {
-          grau,
-          itens: novas,
-          tituloRecomendacoes: resolucao.origem === "inmet" ? "Orientações oficiais do INMET" : TITULO_RECOMENDACOES,
-          subtitulo: tituloFenomenoRecomendacao(evento || "Aviso oficial INMET"),
-          nota: repetidas
-            ? `${novas.length ? "As demais recomendações" : "As recomendações"} deste aviso já constam no alerta correspondente acima e não foram repetidas.`
-            : "",
-        });
-      }
-    )
-    .join("");
+// Quatro colunas iguais, sem coluna "Fonte": a origem de cada valor fica só
+// na nota abaixo da tabela. Decimal com vírgula, sem casas fixas (38°C).
+function valorTemperaturaUmidade(valor, unidade) {
+  return Number.isFinite(valor) ? `${esc(String(valor).replace(".", ","))}${unidade}` : `<span class="nd">Não disponível</span>`;
 }
 
 function tabelaTemperatura(linhas) {
   if (!linhas?.length) return "";
-  return `<table>
-    <thead><tr><th>Fonte</th><th>Temp. Mínima</th><th>Temp. Máxima</th><th>Umidade Mínima</th><th>Umidade Máxima</th></tr></thead>
+  return `<table class="tabela-temp-umidade">
+    <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
+    <thead><tr><th>Temp. Mínima</th><th>Temp. Máxima</th><th>Umidade Mínima</th><th>Umidade Máxima</th></tr></thead>
     <tbody>
       ${linhas
         .map(
-          (l, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
-            <td>${esc(l.fonte)}</td><td>${esc(l.tempMin)}°C</td><td>${esc(l.tempMax)}°C</td>
-            <td>${esc(l.umidadeMin)}${l.umidadeMin !== "—" ? "%" : ""}</td><td>${esc(l.umidadeMax)}${l.umidadeMax !== "—" ? "%" : ""}</td>
+          (l) => `<tr>
+            <td>${valorTemperaturaUmidade(l.tempMin, "°C")}</td><td>${valorTemperaturaUmidade(l.tempMax, "°C")}</td>
+            <td>${valorTemperaturaUmidade(l.umidadeMin, "%")}</td><td>${valorTemperaturaUmidade(l.umidadeMax, "%")}</td>
           </tr>`
         )
         .join("")}
@@ -440,20 +336,51 @@ function tabelaVento(periodos) {
 function tabelaChuva(periodos) {
   if (!periodos?.length) return "";
   return `<table>
-    <thead><tr><th>Período</th><th>Probabilidade (Open-Meteo)</th><th>Acumulado estimado</th><th>Resumo INMET</th></tr></thead>
+    <thead><tr><th>Período</th><th>Probabilidade</th><th>Chuva acumulada/hora</th><th>Resumo INMET</th></tr></thead>
     <tbody>
       ${periodos
         .map(
           (p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
-            <td>${celulaPeriodo(p)}</td>
-            <td>${p.probabilidade == null ? "—" : p.probabilidade + "%"}</td>
-            <td>${p.precipitacaoMm == null ? "—" : p.precipitacaoMm + " mm"}</td>
+            <td><strong>${esc(String(p.periodo || "").toUpperCase())}</strong>${p.janela ? `<br/><small>${esc(p.janela)}</small>` : ""}</td>
+            <td>${p.probabilidade == null ? "Não disponível" : p.probabilidade + "%"}</td>
+            <td>${p.precipitacaoMm == null ? "Não disponível" : numeroBr(p.precipitacaoMm, 1) + " mm"}</td>
             <td>${esc(p.resumoInmet)}</td>
           </tr>`
         )
         .join("")}
     </tbody>
   </table>`;
+}
+
+function tabelaCalor(r) {
+  const dadosBrutos = r.climaSaude?.dados || null;
+  const diaDado = dadosBrutos?.consultadoEm ? formatarDataBrasilia(dadosBrutos.consultadoEm)?.slice(0, 10) : null;
+  const dados = dadosBrutos && diaDado === r.dataFormatadaCurta ? dadosBrutos : null;
+  const t = dados?.temperatura || {};
+  const temperatura = Number.isFinite(t.minima) || Number.isFinite(t.maxima)
+    ? `${Number.isFinite(t.minima) ? `${t.minima} °C` : "Não disponível"} / ${Number.isFinite(t.maxima) ? `${t.maxima} °C` : "Não disponível"}`
+    : "Não disponível";
+  return blocoTabela({
+    titulo: `<h4 class="subsecao">Condições de Calor — Indicadores e Previsões</h4>`,
+    tabela: `<table class="tabela-calor"><colgroup><col style="width:17%"><col style="width:35%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>Período</th><th>Temperatura prevista (mín./máx.)</th><th>Indicador de calor</th><th>Classificação</th></tr></thead><tbody><tr><td>Dia</td><td>${temperatura}</td><td>${Number.isFinite(dados?.ehf?.valor) ? `EHF ${esc(dados.ehf.valor)}` : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td></tr></tbody></table>`,
+    fonte: `Fonte: Clima e Saúde — Ministério da Saúde. A interface pública consultada fornece temperatura e EHF em base diária; não publicou previsão por período para esta localidade nesta emissão.`,
+  });
+}
+
+function tabelaAvisosInmet(r) {
+  const avisos = (r.avisosInmet || []).filter(Boolean);
+  const base = String(r.cidade?.nome || "base").replace(/\s*\([^)]*\)\s*/g, " ").trim().toUpperCase();
+  const titulo = `<h4 class="subsecao">Avisos oficiais do INMET — ${esc(base)}/${esc(r.cidade?.uf)}</h4>`;
+  if (!avisos.length) return blocoTabela({
+    titulo,
+    tabela: `<p class="nota">${r.avisosInmetStatus === "indisponivel" ? "Consulta aos avisos oficiais do INMET indisponível nesta emissão; não é possível confirmar a ausência de avisos." : "Nenhum aviso oficial do INMET aplicável à base no período consultado."}</p>`,
+    fonte: "Fonte: INMET — Avisos de Perigo.",
+  });
+  return blocoTabela({
+    titulo,
+    tabela: `<table><thead><tr><th>Fenômeno</th><th>Severidade</th><th>Vigência</th></tr></thead><tbody>${avisos.map((a, i) => `<tr class="${i % 2 ? "zebra" : ""}"><td>${esc(a.descricao)}</td><td>${esc(a.severidade)}</td><td>${esc(a.inicio)} — ${esc(a.fim)}</td></tr>`).join("")}</tbody></table>`,
+    fonte: `Fonte: INMET — avisos oficiais filtrados pelo código IBGE da base e pela janela desta edição; severidade preservada exatamente como publicada.`,
+  });
 }
 
 function tabelaMar(mar, fontesPorCampo = {}) {
@@ -692,8 +619,8 @@ function blocoPrevisaoAgendada(r, tituloSecao = "") {
   </tr>`).join("");
   return blocoTabela({
     titulo: tituloSecao,
-    tabela: `<table class="previsao-hoje"><thead><tr><th>Período</th><th>Condição</th><th>Temperatura mín./máx.</th><th>Chuva/dia</th><th>Rajada prevista</th><th>Calor</th></tr></thead><tbody>${linhas}</tbody></table>`,
-    fonte: `Fonte de dados: Open-Meteo (condição, temperatura, chuva e rajada). Para hoje, chuva e rajada consideram a janela indicada. Calor: ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))} — ${DESCRICAO_CALOR}.`,
+    tabela: `<table class="previsao-hoje"><thead><tr><th>Período</th><th>Condição</th><th>Temperatura mín./máx.</th><th>Chuva na janela</th><th>Rajada prevista</th><th>Calor</th></tr></thead><tbody>${linhas}</tbody></table>`,
+    fonte: `Fontes por campo: condição e estimativa de chuva — Open-Meteo; temperatura — ${esc([...new Set([r.fontesPorCampo?.tempMin, r.fontesPorCampo?.tempMax].filter(Boolean))].join(" / ") || "indisponível")}; calor — ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))}; rajada numérica — ${esc(r.fontesPorCampo?.rajadaMaxKmh || "indisponível")}. A chuva desta linha corresponde à janela da edição; o card principal usa o agregado diário 00h–24h.`,
   });
 }
 
@@ -703,7 +630,7 @@ const NAO_DISPONIVEL = `<span class="p3d-nd">Não disponível</span>`;
 function celulaCalor(climaSaude, dataIso) {
   const calor = calorPorData(climaSaude, dataIso);
   if (!calor) return `<span class="calor-nd">Indisponível</span>`;
-  return `<span class="calor-nivel" style="color:${visualCard(calor.grau).cor};">${esc(calor.rotulo)}</span>`;
+  return `<span class="calor-nivel" style="color:${visualNivel(calor.grau).texto};">${esc(calor.rotulo)}</span>`;
 }
 
 function numeroBr(valor, casas) {
@@ -767,16 +694,16 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
         <th>Data</th>
         <th class="p3d-num">Temperatura Máx./Mín. (°C)</th>
         <th class="p3d-num">Rajada prevista (km/h)</th>
-        <th class="p3d-num">Chuva acumulada (mm)</th>
+        <th class="p3d-num">Chuva acumulada/dia (mm)</th>
         <th class="p3d-num">Índice UV (máx.)</th>
         <th class="p3d-num">Calor</th>
         <th>Condição geral</th>
       </tr></thead>
       <tbody>${linhas}</tbody>
     </table>
-    <p class="fonte-tabela">Fonte de dados meteorológicos: ${esc(p.fonte)} — previsão diária (seleção automática de modelos), consultada para ${local}.${ponto}
+    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "Clima e Saúde")}; rajada — ${esc(p.fontesCampo?.rajada || "INMET")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
       ${p.status === "indisponivel" ? "Tentativa de consulta" : "Atualização (horário da consulta à fonte)"}: ${esc(consulta || "horário indisponível")}, horário local.
-      Valores diários calculados pela fonte no dia civil local (00h–24h, ${esc(p.fuso)}): rajada = maior rajada prevista a 10 m (não é a velocidade média do vento); chuva = volume total previsto no dia (não é probabilidade); índice UV = máximo previsto no dia.
+      Chuva = volume total estimado para o dia civil local (00h–24h, ${esc(p.fuso)}), não probabilidade nem aviso oficial; índice UV = máximo previsto no dia. Campos não publicados pela fonte obrigatória aparecem como “Não disponível”.
       Fonte de dados de calor: ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))} — ${DESCRICAO_CALOR}.</p>
   </div>`;
 }
@@ -791,7 +718,7 @@ function fontesPeriodos(r, campo) {
   const fontes = ["manha", "tarde", "noite"]
     .map((k) => r.fontesPorCampo?.[`periodos.${k}.${campo}`])
     .filter((f) => f && f !== "Indisponível");
-  return [...new Set(fontes)].join(" / ") || "Open-Meteo";
+  return [...new Set(fontes)].join(" / ") || "Indisponível";
 }
 
 function referenciaConsulta(r) {
@@ -802,59 +729,31 @@ function referenciaConsulta(r) {
 function blocosPrevisao(r) {
   const tituloSecao = `<h3 class="secao">1. Previsão</h3>`;
   const previsao = blocoPrevisaoAgendada(r, tituloSecao);
-  const fontesTemperatura = [...new Set((r.tabelaTemperaturaUmidade || []).map((l) => l.fonte).filter(Boolean))].join(", ");
+  const fontesTemperatura = [...new Set((r.tabelaTemperaturaUmidade || []).map((l) => l.fonte).filter((f) => f && f !== "Indisponível"))].join(" / ");
   const temperatura = blocoTabela({
-    titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao">Temperatura e umidade</h4>`,
+    titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao">Temperatura e umidade</h4><p class="subtitulo-tabela">Indicadores consolidados do período consultado.</p>`,
     tabela: tabelaTemperatura(r.tabelaTemperaturaUmidade),
-    fonte: `Fonte de dados: ${esc(fontesTemperatura || "indisponível")}, conforme a coluna "Fonte".${r.horarioAgendado ? " Open-Meteo: mínimas e máximas de hoje na janela 05h–00h." : ""} INMET: previsão oficial do município.`,
+    fonte: `Fonte de dados: ${esc(fontesTemperatura || "indisponível")}. Clima e Saúde é prioritário; campos indisponíveis utilizam Open-Meteo como alternativa.`,
   });
   const vento = blocoTabela({
     titulo: `<h4 class="subsecao">Vento por período</h4>`,
     tabela: tabelaVento(r.ventoPorPeriodo),
-    fonte: `Fonte de dados: ${esc(fontesPeriodos(r, "rajadaMaxKmh"))} — previsão horária a 10 m, em km/h; ${referenciaConsulta(r)}. Vento: maior velocidade média horária prevista na janela do período. Rajada: maior rajada prevista na mesma janela. Referência INMET: previsão oficial do município.`,
+    fonte: `Fonte de dados: INMET para direção e intensidade oficiais; ${esc(fontesPeriodos(r, "rajadaMaxKmh"))} para rajada numérica. Quando o INMET não publica rajada numérica, o valor máximo da janela vem do Open-Meteo. ${referenciaConsulta(r)}.`,
   });
   const chuva = blocoTabela({
     titulo: `<h4 class="subsecao">Chuva por período</h4>`,
     tabela: tabelaChuva(r.chuvaPorPeriodo),
-    fonte: `Fonte de dados: ${esc(fontesPeriodos(r, "precipitacaoMm"))} — probabilidade: máxima horária na janela; acumulado: soma prevista na janela; ${referenciaConsulta(r)}. Resumo: INMET, previsão oficial do município.`,
+    fonte: `Fonte de dados: ${esc(fontesPeriodos(r, "precipitacaoMm"))}. Organização original por MANHÃ, TARDE e NOITE, com os respectivos intervalos. O Open-Meteo é usado quando o INMET não publica volume numérico compatível; esta estimativa não cria nem altera avisos oficiais de chuva intensa. ${referenciaConsulta(r)}.`,
   });
   return `${previsao}${temperatura || (previsao ? "" : tituloSecao)}${vento}${chuva}`;
 }
 
-function blocoClimaSaude(r) {
+// Compatibilidade com relatórios antigos; a tabela de calor agora sempre
+// explicita a indisponibilidade no próprio campo.
+function blocoClimaSaudeIndisponivel(r) {
   const integracao = r.climaSaude;
-  if (!integracao) return '';
-  const dados = integracao.dados;
-  if (!dados) return `<p class="clima-indisponivel">${esc(integracao.mensagem || "Dados do Clima e Saúde indisponíveis nesta atualização.")}</p>`;
-  const nivel = dados.nivel || { grau: "NORMAL" };
-  if (!deveExibirNoDocumento({ nivel: nivel.grau, tipoDocumento: tipoDocumentoDoRelatorio(r) })) return "";
-  const temperatura = dados.temperatura || {};
-  const previsao = (dados.previsaoDias || []).map((dia) => `<li>${esc(dia.data)}: EHF ${esc(dia.classificacao)}; máxima ${dia.tempMax == null ? 'indisponível' : `${esc(dia.tempMax)} °C`}</li>`).join('');
-  const detalhes = `<p class="evento-linha">Temperatura média: ${temperatura.media == null ? 'indisponível' : `${esc(temperatura.media)} °C`}</p>
-    <p class="evento-linha">Temperatura máxima prevista: ${temperatura.maxima == null ? 'indisponível' : `${esc(temperatura.maxima)} °C`}</p>
-    <p class="evento-linha">Temperatura mínima: ${temperatura.minima == null ? 'indisponível' : `${esc(temperatura.minima)} °C`}</p>
-    <p class="evento-linha">RISCO COMBINADO À SAÚDE: ${esc(dados.riscoCombinado)}</p>
-    <p class="evento-linha">GeoSES / vulnerabilidade social: ${dados.geoses?.valor == null ? 'indisponível' : esc(dados.geoses.valor)}${dados.geoses?.classificacao ? ` (${esc(dados.geoses.classificacao)})` : ''}</p>
-    <p class="evento-linha">Consulta: ${esc(dados.consultadoEm)}${integracao.status === 'armazenado' ? ' — última coleta válida armazenada' : ''}</p>
-    ${previsao ? `<div class="evento-linha"><strong>Previsão Clima e Saúde</strong><ul>${previsao}</ul></div>` : ''}`;
-  const card = cardEvento({
-    titulo: "CALOR / RISCO À SAÚDE",
-    grau: nivel.grau,
-    descricao: `EHF: ${dados.ehf?.classificacao || "Indisponível"}${dados.ehf?.valor == null ? '' : ` (${dados.ehf.valor})`}`,
-    fonteDados: dados.source,
-    detalhes,
-  });
-  if (!alertaExibivel(nivel.grau)) return card;
-  const resolucao = resolverRecomendacoesAlerta({
-    evento: { fenomeno: "calor", grau: nivel.grau, recomendacoes: dados.recomendacoes },
-    avisosInmet: r.avisosInmet,
-  });
-  return blocoAlerta(card, {
-    grau: nivel.grau,
-    itens: resolucao.itens,
-    tituloRecomendacoes: resolucao.origem === "inmet" ? "Orientações oficiais do INMET" : TITULO_RECOMENDACOES,
-    subtitulo: tituloFenomenoRecomendacao("Calor / risco à saúde"),
-  });
+  if (!integracao || integracao.dados) return "";
+  return `<p class="clima-indisponivel">${esc(integracao.mensagem || "Dados do Clima e Saúde indisponíveis nesta atualização.")}</p>`;
 }
 
 // Cabeçalho institucional dos PDFs (diário e semanal): CIM à esquerda,
@@ -937,9 +836,6 @@ function cabecalhoPdfHtml({ titulo, linhaLocal }) {
  *   comunicado do dia (PDF anexado ao e-mail).
  */
 function renderPdfHtml(r, opcoes = {}) {
-  // Itens de recomendação de chuva já exibidos (evita repetição entre o
-  // alerta da previsão e os avisos do INMET).
-  const recomendacoesExibidas = new Set();
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -956,6 +852,8 @@ function renderPdfHtml(r, opcoes = {}) {
     margin: 0;
     padding: 0 36px 20px 36px;
   }
+  .referencia-edicao { break-inside: avoid; page-break-inside: avoid; }
+  .previsao-ate { color: ${brand.verde}; white-space: nowrap; }
   ${cabecalhoPdfCss(36)}
   h3.secao {
     break-after: avoid;
@@ -1004,19 +902,50 @@ function renderPdfHtml(r, opcoes = {}) {
   .bloco-tabela td small { color: #666; font-size: 8.5pt; }
   .fonte-tabela { font-family: ${brand.fontePrincipal}; font-size: 8.5pt; line-height: 1.45; color: #555; text-align: left; margin: 5px 0 14px 0; }
   .rotulo-tabela { font-size: 10pt; margin: 10px 0 4px 0; }
-  /* Alerta à esquerda, recomendações à direita, no mesmo bloco. */
-  table.alerta-bloco { table-layout: fixed; border-collapse: collapse; margin: 10px 0; font-size: inherit; break-before: auto; break-after: auto; break-inside: avoid; page-break-before: auto; page-break-after: auto; page-break-inside: avoid; }
-  table.alerta-bloco > tbody > tr > td { padding: 0; border: 0; vertical-align: top; }
-  td.alerta-col-card { width: 55%; padding-right: 9px !important; }
-  td.alerta-col-card .evento-card { margin: 0; padding: 11px 14px; }
-  td.alerta-col-card .evento-titulo { white-space: normal; font-size: 12.5pt; }
-  td.alerta-col-card .evento-titulo-longo { font-size: 11pt; }
-  .alerta-rec { border: 1px solid ${brand.cinzaBorda}; border-top: 4px solid; border-radius: 5px; padding: 10px 12px; font-size: 9.5pt; line-height: 1.38; background: #ffffff; }
-  .alerta-rec-titulo { font-weight: 700; font-size: 9.5pt; color: ${brand.verdeEscuro}; }
-  .alerta-rec-sub { font-weight: 700; font-size: 9.5pt; margin: 3px 0 0 0; text-transform: uppercase; }
-  .alerta-rec ul { margin: 4px 0 0 0; padding-left: 16px; }
-  .alerta-rec li { margin-bottom: 3px; }
-  .alerta-rec-nota { font-size: 9pt; color: #555; margin: 6px 0 0 0; }
+  /* Calor: cabeçalho numa linha só, na mesma altura das demais tabelas. */
+  .tabela-calor th { white-space: nowrap; }
+  /* Temperatura e umidade: subtítulo discreto e quatro colunas iguais,
+     centralizadas, com valores em destaque. */
+  h4.subsecao + .subtitulo-tabela { margin: -3px 0 0 0; font-size: 9pt; color: #666; }
+  .tabela-temp-umidade { table-layout: fixed; }
+  .tabela-temp-umidade th { text-align: center; }
+  .tabela-temp-umidade td { text-align: center; font-weight: bold; font-size: 11.5pt; background: #ffffff; border: 1px solid ${brand.cinzaBorda}; }
+  .tabela-temp-umidade td .nd { font-weight: normal; font-size: 9.5pt; color: #666; }
+  /* Card de alerta único (alerta + recomendações na mesma borda). Inteiro
+     na próxima página quando cabe nela; maior que uma página, continua com
+     a borda repetida, sem cortar linhas e sem título isolado. */
+  .card-alerta {
+    border: 1.5px solid;
+    border-left-width: 6px;
+    border-radius: 5px;
+    margin: 12px 0;
+    background: #ffffff;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .card-alerta-topo { break-inside: avoid; page-break-inside: avoid; }
+  .card-alerta-cab { padding: 9px 15px 10px; border-bottom: 1px solid; border-radius: 3px 3px 0 0; }
+  .card-alerta-meta { font-size: 9pt; color: #555; line-height: 1.3; }
+  .card-alerta-selo { display: inline-block; padding: 2px 9px; margin-right: 6px; border-radius: 3px; font-size: 8.5pt; font-weight: 800; letter-spacing: 0.6px; }
+  .card-alerta-titulo { font-size: 14.5pt; font-weight: 700; line-height: 1.3; margin-top: 5px; }
+  .card-alerta-titulo-longo { font-size: 12pt; }
+  .card-alerta-topo > p, .card-alerta-topo > div.evento-linha { margin: 10px 15px 0; }
+  .card-alerta-corpo { padding: 0 15px 10px; }
+  .card-alerta-corpo:empty { padding-bottom: 4px; }
+  .card-alerta-corpo .evento-linha, .card-alerta-corpo .evento-descricao { break-inside: avoid; page-break-inside: avoid; }
+  .card-alerta-corpo ul { margin: 4px 0 0 0; }
+  .card-alerta-rec { margin: 0 15px; padding: 9px 0 10px; border-top: 1px solid ${brand.cinzaBorda}; }
+  .card-alerta-rec-cab { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+  .card-alerta-rec-titulo { font-size: 10.5pt; font-weight: 800; letter-spacing: 0.5px; }
+  .card-alerta-rec-origem { font-size: 8.5pt; color: #555; }
+  .card-alerta-rec ul { margin: 5px 0 0 0; padding-left: 18px; font-size: 10pt; }
+  .card-alerta-rec li { margin-bottom: 4px; break-inside: avoid; page-break-inside: avoid; }
   .evento-card {
     width: 100%;
     border: 1.5px solid;
@@ -1030,23 +959,10 @@ function renderPdfHtml(r, opcoes = {}) {
     page-break-inside: avoid;
     -webkit-column-break-inside: avoid;
   }
-  .evento-titulo {
-    font-size: 15pt;
-    font-weight: 700;
-    line-height: 1.4;
-    margin: 0 0 8px 0;
-    white-space: nowrap;
-    word-break: keep-all;
-    overflow-wrap: normal;
-    break-after: avoid;
-    page-break-after: avoid;
-  }
-  .evento-titulo-longo { font-size: 11.5pt; letter-spacing: -0.1px; }
   .evento-icone { font-size: 11pt; vertical-align: 1px; }
   .evento-descricao { margin: 0 0 7px 0; line-height: 1.48; }
   .evento-linha { margin: 6px 0 0 0; line-height: 1.48; }
   .evento-linha ul { margin-bottom: 0; }
-  .recomendacao-grupo ul { margin: 5px 0 0 0; }
   .clima-indisponivel { color: #666; font-size: 10pt; margin: 12px 0; }
   .warning-box {
     border-left: 4px solid ${brand.vermelhoAlerta};
@@ -1055,7 +971,6 @@ function renderPdfHtml(r, opcoes = {}) {
     margin: 14px 0;
     font-size: 10pt;
   }
-  .aviso-inmet { break-inside: avoid; page-break-inside: avoid; }
   .cor-card { border-width: 1.5px; border-left-width: 7px; border-radius: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #1F2A26; }
   .cor-card-continuacao { margin-top: 10px; }
   .cor-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
@@ -1130,39 +1045,21 @@ function renderPdfHtml(r, opcoes = {}) {
     linhaLocal: `${esc(r.cidade.nome)} — ${esc(r.cidade.uf)} — ${esc(r.dataFormatadaLonga)}`,
   })}
 
-  <p><strong>Data da previsão:</strong> ${esc(r.dataFormatadaCurta)} &nbsp;|&nbsp; <strong>Hora da consulta:</strong> ${esc(r.horaConsulta)} (Horário de Brasília)</p>
-  ${r.periodoCoberto ? `<p><strong>Período coberto:</strong> ${esc(r.periodoCoberto)}.</p>` : ""}
+  <p class="referencia-edicao"><strong>Data da previsão:</strong> ${esc(r.dataFormatadaCurta)} &nbsp;|&nbsp; <strong>Hora da consulta:</strong> ${esc(r.horaConsulta)} (Horário de Brasília)${r.previsaoAte ? ` <strong class="previsao-ate">| Previsão até ${esc(r.previsaoAte)}</strong>` : ""}</p>
   ${blocoMudancasDia(r)}
 
   ${blocosPrevisao(r)}
 
   ${tabelaMar(r.mar, r.fontesPorCampo)}
+  ${tabelaCalor(r)}
   ${tabelaQualidadeAr(r.qualidadeAr, r.fontesPorCampo)}
-  ${blocoEventoExtremo(r, recomendacoesExibidas)}
-  ${blocoClimaSaude(r)}
+  ${tabelaAvisosInmet(r)}
   ${blocoCorRio(r, { somenteDoDia: opcoes.corRioSomenteDoDia })}
-  ${blocoAvisosInmet(r, recomendacoesExibidas)}
   ${blocoMonitorSecas(r)}
-  ${blocoAvisosColeta(r)}
+  ${blocoPrevisaoProximosDias(r, 2)}
 
   ${blocoFontes(r)}
-
-  <section class="bloco-lista">
-    <h3 class="secao">2. Recomendações de Segurança — Deslocamento</h3>
-    <p>Considerando o horário da consulta (${esc(r.horaConsulta)}), as recomendações abaixo projetam os riscos meteorológicos para o restante do dia.</p>
-    <h4 class="subsecao">a) Pedestres</h4>
-    ${listaHtml(r.deslocamento.pedestres)}
-  </section>
-  <section class="bloco-lista"><h4 class="subsecao">b) Transporte Público</h4>${listaHtml(r.deslocamento.transporte)}</section>
-  <section class="bloco-lista"><h4 class="subsecao">c) Condutores de Veículo Próprio</h4>${listaHtml(r.deslocamento.condutores)}</section>
-
-  ${r.edificacao
-    .map(
-      (secao, i) => `<section class="bloco-lista">${i === 0 ? `<h3 class="secao">3. Recomendações de Segurança — Edificação e Ocupantes</h3>` : ""}<h4 class="subsecao">${esc(secao.titulo)}</h4>${listaHtml(secao.itens)}</section>`
-    )
-    .join("") || `<h3 class="secao">3. Recomendações de Segurança — Edificação e Ocupantes</h3>`}
-
-  ${blocoPrevisaoProximosDias(r, 4)}
+  ${blocoAvisosColeta(r)}
 
 </body>
 </html>`;

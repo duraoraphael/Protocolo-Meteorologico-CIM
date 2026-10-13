@@ -141,16 +141,16 @@ function reportMinimo(previsaoProximosDias) {
   };
 }
 
-test("PDF: seção ao final, com unidades nos títulos e 'Não disponível' em vez de zero", async (t) => {
+test("PDF: seção técnica com unidades nos títulos e 'Não disponível' em vez de zero", async (t) => {
   silenciar(t);
   const corpo = respostaOpenMeteo({ time: DATAS_MACAE, sobrescrever: { uv_index_max: [4.6, null, 8.55] } });
   const previsao = await p3d.obterPrevisaoProximosDias(CIDADES.macae, { agora: AGORA, fetchImpl: fetchFalso(corpo) });
   const html = renderPdfHtml(reportMinimo(previsao));
 
-  const titulo = html.indexOf("4. Previsão para os próximos 3 dias");
-  assert.ok(titulo > html.indexOf("Seção final existente"), "seção depois das existentes");
+  const titulo = html.indexOf("2. Previsão para os próximos 3 dias");
+  assert.ok(titulo > 0);
   const secao = html.slice(titulo);
-  const cabecalhos = ["Data", "Temperatura Máx./Mín. (°C)", "Rajada prevista (km/h)", "Chuva acumulada (mm)", "Índice UV (máx.)", "Calor", "Condição geral"];
+  const cabecalhos = ["Data", "Temperatura Máx./Mín. (°C)", "Rajada prevista (km/h)", "Chuva acumulada/dia (mm)", "Índice UV (máx.)", "Calor", "Condição geral"];
   const posicoes = cabecalhos.map((cabecalho) => secao.indexOf(`${cabecalho}</th>`));
   assert.ok(posicoes.every((p) => p >= 0), "todas as colunas presentes");
   assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes, "ordem: Data, Temperatura, Rajada, Chuva, UV, Calor, Condição");
@@ -163,7 +163,7 @@ test("PDF: seção ao final, com unidades nos títulos e 'Não disponível' em v
   assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 1, "só o UV ausente");
   assert.ok(secao.includes("índice UV = máximo previsto no dia"));
   assert.equal((secao.match(/class="calor-nd">Indisponível</g) || []).length, 3, "sem fonte de calor: indisponível, não Normal");
-  assert.ok(secao.includes('<p class="fonte-tabela">Fonte de dados meteorológicos: Open-Meteo'));
+  assert.ok(secao.includes('<p class="fonte-tabela">Fontes por campo:'));
   assert.ok(secao.includes("Fonte de dados de calor:"));
   assert.ok(secao.includes("Macaé — RJ"));
 });
@@ -179,7 +179,7 @@ test("PDF: calor por data segue a fonte Clima e Saúde, sem repetir o nível de 
       { data: "2026-10-03", classificacao: "Sem excesso" },
     ],
   } } });
-  const secao = html.slice(html.indexOf("4. Previsão para os próximos 3 dias"));
+  const secao = html.slice(html.indexOf("2. Previsão para os próximos 3 dias"));
   const linhas = secao.split("<tr").slice(2);
   assert.match(linhas[0], /color:#[0-9A-F]{6};">Atenção</i, "02/10: Baixo → Atenção");
   assert.match(linhas[1], /color:#2E7D32;">Normal</, "03/10: Sem excesso → Normal");
@@ -193,7 +193,7 @@ test("PDF: fonte indisponível mantém a seção com as datas", async (t) => {
     agora: AGORA, fetchImpl: async () => { throw new TypeError("fetch failed"); }, esperarFn: async () => {},
   });
   const html = renderPdfHtml(reportMinimo(previsao));
-  const secao = html.slice(html.indexOf("4. Previsão para os próximos 3 dias"));
+  const secao = html.slice(html.indexOf("2. Previsão para os próximos 3 dias"));
   assert.ok(secao.includes("Fonte indisponível nesta emissão"));
   assert.equal((secao.match(/<strong>0[234]\/10\/2026<\/strong>/g) || []).length, 3);
   assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 15);

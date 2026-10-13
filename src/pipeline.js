@@ -131,6 +131,35 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   report.previsaoProximosDias = await obterPrevisaoProximosDias(cidade, {
     agora: new Date(report.geradoEmISO || Date.now()),
   });
+  // Fallback individual na previsão estendida: máxima do Clima Saúde quando
+  // publicada; os demais campos permanecem na previsão diária Open-Meteo.
+  const diaBrasilia = (valor) => Number.isFinite(Date.parse(valor || ""))
+    ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(valor))
+    : null;
+  const climaSaudeAtual = report.climaSaude?.dados
+    && diaBrasilia(report.climaSaude.dados.consultadoEm) === diaBrasilia(report.geradoEmISO);
+  const climaDias = new Map((climaSaudeAtual ? report.climaSaude.dados?.previsaoDias : [])?.map((dia) => [dia.data, dia]) || []);
+  for (const dia of report.previsaoProximosDias.dias || []) {
+    const maximaClimaSaude = climaDias.get(dia.data)?.tempMax;
+    if (Number.isFinite(maximaClimaSaude)) dia.tempMaxC = maximaClimaSaude;
+  }
+  report.previsaoProximosDias.fontesCampo = {
+    temperatura: "Clima e Saúde — Ministério da Saúde (máxima, quando publicada); Open-Meteo nos campos sem cobertura",
+    rajada: "Open-Meteo — fallback porque a previsão municipal do INMET não publica rajada numérica para os dias seguintes",
+    chuva: "Open-Meteo — estimativa diária; não constitui aviso oficial de chuva intensa",
+    uv: "Open-Meteo Air Quality",
+    condicao: "Open-Meteo",
+  };
+  if ((report.previsaoProximosDias.dias || []).some((dia) => Number.isFinite(dia.rajadaMaxKmh))) {
+    report.diagnosticosFallback = report.diagnosticosFallback || [];
+    report.diagnosticosFallback.push({
+      indicador: "rajada prevista — próximos 3 dias",
+      fontePrioritaria: "INMET — previsão oficial",
+      fonteUtilizada: "Open-Meteo",
+      motivo: "INMET não disponibilizou previsão numérica de rajada para os dias seguintes.",
+    });
+    console.log("[FALLBACK] rajada prevista — próximos 3 dias: INMET não disponibilizou previsão numérica; fonte utilizada: Open-Meteo.");
+  }
   if (report.previsaoProximosDias.status === "indisponivel") {
     report.avisosColeta.push("Open-Meteo (previsão dos próximos 3 dias): não foi possível atualizar esta fonte.");
   }

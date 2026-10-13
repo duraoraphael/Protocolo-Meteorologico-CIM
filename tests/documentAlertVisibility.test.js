@@ -82,18 +82,16 @@ test("PDF extraordinário com tudo NORMAL não cria cards nem placeholders de al
     avisosInmet: [{ descricao: "Sem perigo", severidade: "Normal", instrucoes: [] }],
   }));
   const $ = cheerio.load(html);
-  assert.equal($(".evento-card, table.alerta-bloco").length, 0);
+  assert.equal($(".card-alerta").length, 0);
   assert.doesNotMatch(html, /Não há recomendações cadastradas|CONDIÇÕES METEOROLÓGICAS — NORMAL/);
 });
 
-test("PDF extraordinário misto remove NORMAL e preserva ATENÇÃO ou superior", () => {
+test("PDF extraordinário remove todos os cards, inclusive ATENÇÃO ou superior", () => {
   const html = renderPdfHtml(report({
     tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO,
     severidade: { grau: "ALERTA", eventos: [evento("NORMAL", "Calor"), evento("ATENÇÃO"), evento("ALERTA", "Chuva intensa")] },
   }));
-  assert.doesNotMatch(html, /CALOR — NORMAL/);
-  assert.match(html, /VENTO — ATENÇÃO/);
-  assert.match(html, /CHUVA INTENSA — ALERTA/);
+  assert.doesNotMatch(html, /CALOR — NORMAL|VENTO — ATENÇÃO|CHUVA INTENSA — ALERTA|class="card-alerta"/);
 });
 
 test("Alerta CIM misto filtra NORMAL antes de montar os cards", () => {
@@ -105,31 +103,24 @@ test("Alerta CIM misto filtra NORMAL antes de montar os cards", () => {
   assert.match(html, /CHUVA INTENSA — EMERGÊNCIA/);
 });
 
-test("PDF e Alerta CIM ordenam ATENÇÃO, ALERTA e EMERGÊNCIA preservando empates", () => {
+test("Alerta CIM ordena EMERGÊNCIA, ALERTA e ATENÇÃO; PDF omite os cards", () => {
   const alertas = [
     evento("ALERTA", "Vento"),
     evento("ATENCAO", "Tempestade"),
     evento("ATENÇÃO", "Chuva"),
     evento("EMERGENCIA", "Calor"),
   ];
-  const esperado = ["Tempestade", "Chuva", "Vento", "Calor"];
+  const esperado = ["Calor", "Vento", "Tempestade", "Chuva"];
   assert.deepEqual(alertasCimExibiveis(alertas).map((a) => a.tipo), esperado);
 
   const html = renderPdfHtml(report({
     tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO,
     severidade: { grau: "EMERGÊNCIA", eventos: alertas },
   }));
-  const posicoes = [
-    "TEMPESTADE COM RAIOS — ATENÇÃO",
-    "CHUVA INTENSA — ATENÇÃO",
-    "VENTO — ALERTA",
-    "CALOR / RISCO À SAÚDE — EMERGÊNCIA",
-  ].map((titulo) => html.indexOf(titulo));
-  assert.ok(posicoes.every((posicao) => posicao >= 0));
-  assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes);
+  assert.doesNotMatch(html, /class="card-alerta"|CALOR \/ RISCO À SAÚDE — EMERGÊNCIA|VENTO — ALERTA/);
 });
 
-test("PDF programado ordena NORMAL antes de ATENÇÃO, ALERTA e EMERGÊNCIA", () => {
+test("PDF programado também omite todos os cards de alerta", () => {
   const alertas = [
     evento("EMERGÊNCIA", "Calor"),
     evento("NORMAL", "Umidade"),
@@ -141,10 +132,7 @@ test("PDF programado ordena NORMAL antes de ATENÇÃO, ALERTA e EMERGÊNCIA", ()
     horarioAgendado: "05:00",
     severidade: { grau: "EMERGÊNCIA", eventos: alertas },
   }));
-  const posicoes = ["UMIDADE — NORMAL", "CHUVA INTENSA — ATENÇÃO", "VENTO — ALERTA", "CALOR / RISCO À SAÚDE — EMERGÊNCIA"]
-    .map((titulo) => html.indexOf(titulo));
-  assert.ok(posicoes.every((posicao) => posicao >= 0));
-  assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes);
+  assert.doesNotMatch(html, /class="card-alerta"|CALOR \/ RISCO À SAÚDE — EMERGÊNCIA|VENTO — ALERTA|CHUVA INTENSA — ATENÇÃO|UMIDADE — NORMAL/);
 });
 
 test("Alerta CIM apenas NORMAL é suprimido antes de destinatários e SMTP", async () => {

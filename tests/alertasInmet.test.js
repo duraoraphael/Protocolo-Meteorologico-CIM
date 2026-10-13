@@ -90,22 +90,9 @@ function relatorioBase() {
   };
 }
 
-test("monitor emite chuva e vento com grau, unidade, fonte e recomendações", () => {
+test("monitor não transforma chuva ou vento numéricos de terceiros em alertas", () => {
   const alertas = detectarAlertasGraves(relatorioBase());
-  const chuva = alertas.find((a) => a.assinatura === "chuva");
-  const vento = alertas.find((a) => a.assinatura === "vento");
-
-  assert.equal(chuva.grau, "ALERTA");
-  assert.equal(chuva.origem, "INMET");
-  assert.equal(chuva.fonteDados, "Open-Meteo");
-  assert.equal(chuva.valores.intensidadeHorariaMmH, 25);
-  assert.equal(chuva.valores.acumuladoDiarioMm, 75);
-  assert.ok(chuva.recomendacoes.length > 0);
-
-  assert.equal(vento.grau, "ATENÇÃO");
-  assert.equal(vento.valores.rajadaKmh, 30);
-  assert.equal(vento.unidade, "km/h");
-  assert.ok(vento.recomendacoes.length > 0);
+  assert.equal(alertas.some((a) => a.assinatura === "chuva" || a.assinatura === "vento"), false);
 });
 
 test("deduplicação ignora variação no mesmo grau e reavisa quando agrava", () => {
@@ -213,7 +200,12 @@ test("avisos oficiais usam assinatura própria e acompanham todo o ciclo de seve
 });
 
 test("e-mail apresenta fenômeno, grau, fontes, valores e recomendações", () => {
-  const alerta = detectarAlertasGraves(relatorioBase()).find((a) => a.assinatura === "chuva");
+  const report = relatorioBase();
+  report.avisosInmet = [{
+    descricao: "Chuva Intensa", severidade: "Perigo", inicio: "14:00", fim: "18:00",
+    riscos: ["Chuva entre 30 e 60 mm/h."], instrucoes: ["Evite áreas alagadas."],
+  }];
+  const alerta = detectarAlertasGraves(report).find((a) => a.assinatura === "inmet:chuva");
   const base = {
     cidade: { nome: "Rio de Janeiro", uf: "RJ" },
     report: {
@@ -230,8 +222,8 @@ test("e-mail apresenta fenômeno, grau, fontes, valores e recomendações", () =
 
   assert.match(html, /CHUVA INTENSA — ALERTA/);
   assert.doesNotMatch(html, /Fonte do critério/);
-  assert.match(html, /Fonte de dados: Open-Meteo/);
-  assert.match(html, /Intensidade horária máxima prevista: 25 mm\/h/);
+  assert.match(html, /Fonte de dados: INMET/);
+  assert.match(html, /Chuva entre 30 e 60 mm\/h/);
   assert.match(html, /Recomendações – Protocolo Meteorológico do COMPARTILHADO/);
   assert.match(assuntoAlerta(base), /CHUVA INTENSA — ALERTA — Rio de Janeiro\/RJ/);
 });

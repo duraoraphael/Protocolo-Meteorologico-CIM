@@ -4,6 +4,7 @@ const { buscarOpenMeteo, INICIO_JANELA_HOJE, PERIODOS: PERIODOS_HOJE } = require
 const { buscarPrevisaoInmet, buscarAvisosInmet, deduplicarAvisosInmet } = require("../sources/inmet");
 const { montarOcorrencias } = require("./ocorrenciasPainel");
 const { tipoDocumentoPorHorario } = require("./alertPresentation");
+const { aplicarPoliticaFontes } = require("./weatherSourcePolicy");
 const { buscarMarComFallback } = require("../sources/marine");
 const { buscarQualidadeAr } = require("../sources/airQuality");
 const { buscarOceanop } = require("../sources/oceanop");
@@ -26,10 +27,23 @@ const {
 
 function agora() { return new Date(); }
 
-// Relatórios agendados (05h e 15h): a seção "1. Previsão" cobre só hoje, das
-// 05h até 00h. Os três dias seguintes ficam na seção própria do PDF
-// ("Previsão para os próximos 3 dias", src/sources/previsaoProximosDias.js).
-const PERIODO_COBERTO_AGENDADO = "hoje, das 05h até 00h";
+const JANELAS_EDICAO = Object.freeze({
+  "05:00": Object.freeze({ inicioHora: 5, fimHora: 15, previsaoAte: "15h", periodo: "hoje, das 05h até 15h" }),
+  "15:00": Object.freeze({ inicioHora: 15, fimHora: 24, previsaoAte: "00h", periodo: "hoje, das 15h até 00h do dia seguinte" }),
+});
+const PERIODO_COBERTO_AGENDADO = "definido pela edição do informativo";
+function intervaloAvisos(horarioAgendado, instante) {
+  const janela = JANELAS_EDICAO[horarioAgendado];
+  if (!janela) return { inicioPeriodo: instante, fimPeriodo: null };
+  const data = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(instante);
+  const inicioPeriodo = new Date(`${data}T${String(janela.inicioHora).padStart(2, "0")}:00:00-03:00`);
+  const fimPeriodo = janela.fimHora === 24
+    ? new Date(new Date(`${data}T00:00:00-03:00`).getTime() + 24 * 60 * 60 * 1000)
+    : new Date(`${data}T${String(janela.fimHora).padStart(2, "0")}:00:00-03:00`);
+  return { inicioPeriodo, fimPeriodo };
+}
 const janelaPeriodo = (chave) => {
   const { horaInicio, horaFim } = PERIODOS_HOJE[chave];
   return `${String(horaInicio).padStart(2, "0")}h–${String(horaFim % 24).padStart(2, "0")}h`;
@@ -43,44 +57,13 @@ function slugCidade(nome) {
     .replace(/[^A-Z0-9]+/g, "");
 }
 
-function detectarDivergencias(openMeteo, inmet) {
-  const divergencias = [];
-  const diffMax = Math.abs(openMeteo.tempMax - (inmet.periodos.tarde?.tempMax ?? openMeteo.tempMax));
-  const diffMin = Math.abs(openMeteo.tempMin - (inmet.periodos.manha?.tempMin ?? openMeteo.tempMin));
-
-  if (diffMax >= 3) {
-    divergencias.push(
-      `Divergência de temperatura máxima entre Open-Meteo (${openMeteo.tempMax}°C) e INMET (${inmet.periodos.tarde?.tempMax ?? "—"}°C).`
-    );
-  }
-  if (diffMin >= 3) {
-    divergencias.push(
-      `Divergência de temperatura mínima entre Open-Meteo (${openMeteo.tempMin}°C) e INMET (${inmet.periodos.manha?.tempMin ?? "—"}°C).`
-    );
-  }
-
-  const resumoInmet = [inmet.periodos.manha, inmet.periodos.tarde, inmet.periodos.noite]
-    .map((p) => p?.resumo || "")
-    .join(" ")
-    .toLowerCase();
-  const mencionaChuvaInmet = /chuva|pancada|tempestade|garoa/.test(resumoInmet);
-  const mencionaChuvaOpenMeteo = openMeteo.probabilidadeChuvaMax >= 30;
-
-  if (mencionaChuvaInmet !== mencionaChuvaOpenMeteo) {
-    divergencias.push(
-      "As fontes divergem quanto à indicação de chuva relevante para o dia — considerado o cenário mais conservador (maior risco) para fins de planejamento de segurança."
-    );
-  }
-
-  return divergencias;
-}
-
 /**
  * Monta o objeto de dados completo do informativo para uma cidade cadastrada
  * em src/config/cities.js. Não lança em caso de falha parcial de uma fonte —
  * cada fonte que falhar é sinalizada em `avisosColeta` e o restante segue.
  */
 async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaSaude = false } = {}) {
+  const dataNow = agora();
   const avisosColeta = [];
   const falhasApi = {};
   const windyPromise = buscarPacoteWindy(cidade);
@@ -89,11 +72,11 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     : Promise.resolve(climaSaudeService.lerArmazenado(cidade));
   let openMeteo, inmetPrevisao, inmetAvisos;
 
+  const janelaEdicao = JANELAS_EDICAO[horarioAgendado] || null;
   try {
-    // Painel e PDFs (05h e 15h) usam a mesma janela de hoje (05h–00h), no
-    // fuso da base. Os agendados trazem também os 3 dias seguintes.
     openMeteo = await buscarOpenMeteo(cidade.latitude, cidade.longitude, {
-      inicioHora: INICIO_JANELA_HOJE,
+      inicioHora: janelaEdicao?.inicioHora ?? INICIO_JANELA_HOJE,
+      fimHora: janelaEdicao?.fimHora ?? 24,
       fuso: cidade.fusoHorario || "America/Sao_Paulo",
       ...(horarioAgendado ? { agregarJanela: true } : {}),
     });
@@ -112,7 +95,10 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   }
 
   try {
-    inmetAvisos = await buscarAvisosInmet(cidade.codigoIbge);
+    inmetAvisos = await buscarAvisosInmet(cidade.codigoIbge, {
+      agora: dataNow,
+      ...intervaloAvisos(horarioAgendado, dataNow),
+    });
   } catch (erro) {
     falhasApi.inmetAvisos = erro;
     registrarFalha("INMET-AVISOS", erro);
@@ -201,17 +187,34 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       : "Indisponível";
   }
   if (horarioAgendado) {
-    // O Windy resume o dia inteiro; nesta versão só a série horária filtrada
-    // da Open-Meteo representa corretamente 05/15h até a meia-noite.
-    for (const campo of ["condicaoGeral", "tempMin", "tempMax", "umidadeMin", "umidadeMax", "rajadaMaxKmh", "precipitacaoTotalMm", "precipitacaoHorariaMaxMm", "probabilidadeChuvaMax", "temTempestadeHoje"]) {
+    for (const campo of ["condicaoGeral", "precipitacaoTotalMm", "precipitacaoHorariaMaxMm", "probabilidadeChuvaMax", "temTempestadeHoje"]) {
       base[campo] = openMeteo[campo];
       integrado.fontesPorCampo[campo] = "Open-Meteo";
     }
     base.periodos = openMeteo.periodos;
     for (const chave of ["manha", "tarde", "noite"]) {
-      for (const campo of ["rajadaMaxKmh", "precipitacaoMm", "probabilidadeChuva", "precipitacaoHorariaMaxMm"]) {
+      for (const campo of ["precipitacaoMm", "probabilidadeChuva", "precipitacaoHorariaMaxMm"]) {
         integrado.fontesPorCampo[`periodos.${chave}.${campo}`] = "Open-Meteo";
       }
+    }
+  }
+
+  // Matriz campo a campo: Clima Saúde e INMET mantêm prioridade; somente o
+  // indicador ausente usa Open-Meteo, com motivo registrado no diagnóstico.
+  const { climaAtual, diagnosticos: diagnosticosFallback } = aplicarPoliticaFontes({
+    base,
+    openMeteo,
+    inmetPrevisao,
+    climaSaude,
+    fontesPorCampo: integrado.fontesPorCampo,
+    agora: dataNow,
+  });
+  for (const chave of ["manha", "tarde", "noite"]) {
+    const p = base.periodos[chave];
+    const oficial = inmetPrevisao?.periodos?.[chave];
+    if (oficial) {
+      p.direcao = oficial.direcaoVento || "—";
+      p.intensidadeVento = oficial.intensidadeVento || "—";
     }
   }
   if (mar && cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
@@ -240,33 +243,27 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   const deslocamento = recomendacoesDeslocamento(categoriasAtivas, janelaChuva);
   const edificacao = recomendacoesEdificacao(categoriasAtivas);
 
-  const divergencias =
-    openMeteo && inmetPrevisao ? detectarDivergencias(openMeteo, inmetPrevisao) : [];
+  // A antiga comparação Open-Meteo × INMET para temperatura/chuva induzia
+  // uma falsa equivalência de fontes. Com a matriz atual, cada indicador tem
+  // sua origem explícita e não há fusão conservadora entre fornecedores.
+  const divergencias = [];
 
-  const dataNow = agora();
-  const tabelaTemperaturaUmidade = [];
-  if (windy.weather && !horarioAgendado) tabelaTemperaturaUmidade.push({ fonte: windy.weather.fonte, tempMin: windy.weather.tempMin, tempMax: windy.weather.tempMax, umidadeMin: windy.weather.umidadeMin, umidadeMax: windy.weather.umidadeMax });
-  if (openMeteo) {
-    tabelaTemperaturaUmidade.push({
-      fonte: "Open-Meteo",
-      tempMin: openMeteo.tempMin,
-      tempMax: openMeteo.tempMax,
-      umidadeMin: openMeteo.umidadeMin,
-      umidadeMax: openMeteo.umidadeMax,
-    });
-  }
-  if (inmetPrevisao) {
-    tabelaTemperaturaUmidade.push({
-      fonte: "INMET",
-      tempMin: inmetPrevisao?.periodos?.manha?.tempMin ?? "—",
-      tempMax: inmetPrevisao?.periodos?.tarde?.tempMax ?? "—",
-      umidadeMin: inmetPrevisao?.periodos?.tarde?.umidadeMin ?? "—",
-      umidadeMax: inmetPrevisao?.periodos?.manha?.umidadeMax ?? "—",
-    });
-  }
+  const fontesTabelaTemperatura = [...new Set([
+    integrado.fontesPorCampo.tempMin,
+    integrado.fontesPorCampo.tempMax,
+    integrado.fontesPorCampo.umidadeMin,
+    integrado.fontesPorCampo.umidadeMax,
+  ].filter((fonte) => fonte && fonte !== "Indisponível"))];
+  const tabelaTemperaturaUmidade = [{
+    fonte: fontesTabelaTemperatura.join(" / ") || "Indisponível",
+    tempMin: base.tempMin,
+    tempMax: base.tempMax,
+    umidadeMin: base.umidadeMin,
+    umidadeMax: base.umidadeMax,
+  }];
 
   // Mesmos três períodos (e janelas) no painel e nos PDFs das 05h e 15h.
-  const chavesPeriodo = ["manha", "tarde", "noite"];
+  const chavesPeriodo = ["manha", "tarde", "noite"].filter((k) => base.periodos[k]?.disponivel !== false);
   const ventoPorPeriodo = chavesPeriodo.map((k) => {
     const p = base.periodos[k];
     const i = inmetPrevisao?.periodos[k];
@@ -282,18 +279,24 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     };
   });
 
-  const chuvaPorPeriodo = chavesPeriodo.map((k) => {
-    const p = base.periodos[k];
+  const chuvaPorPeriodo = ["manha", "tarde", "noite"].map((k) => {
+    const p = openMeteo?.periodosDiaCompleto?.[k] || base.periodos[k];
     const i = inmetPrevisao?.periodos[k];
+    const precipitacaoOficial = Number.isFinite(i?.precipitacaoMm) ? i.precipitacaoMm : null;
+    const precipitacaoMm = precipitacaoOficial ?? p?.precipitacaoMm ?? null;
+    integrado.fontesPorCampo[`periodos.${k}.precipitacaoMm`] = precipitacaoOficial !== null
+      ? "INMET — previsão oficial"
+      : Number.isFinite(precipitacaoMm) ? "Open-Meteo" : "Indisponível";
     return {
-      periodo: p.periodo,
-      janela: p.janela || janelaPeriodo(k),
-      probabilidade: p.probabilidadeChuva,
-      precipitacaoMm: p.precipitacaoMm,
-      precipitacaoHorariaMaxMm: p.precipitacaoHorariaMaxMm,
+      periodo: p?.periodo || PERIODOS_HOJE[k].label,
+      janela: p?.janela || janelaPeriodo(k),
+      probabilidade: p?.probabilidadeChuva ?? null,
+      precipitacaoMm,
+      precipitacaoHorariaMaxMm: p?.precipitacaoHorariaMaxMm ?? null,
       resumoInmet: i?.resumo || null,
     };
   });
+  const chuvaPorHora = openMeteo?.chuvaHoraria || [];
 
   // Fontes listadas por NOME, sem URL: as chamadas de API carregam a query
   // completa (dezenas de parâmetros) e poluíam o documento sem agregar nada
@@ -307,12 +310,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   if (openMeteo)
     fontesAutomatizadas.push({
       nome: "Open-Meteo",
-      uso: "Previsão numérica: temperatura, umidade, vento e chuva por período",
+      uso: "Alternativa numérica por indicador para temperatura, umidade, rajada e precipitação quando a fonte prioritária não publica o campo; não determina alertas oficiais",
     });
   if (inmetPrevisao)
     fontesAutomatizadas.push({
       nome: "INMET — Previsão",
-      uso: "Previsão oficial do município (validação cruzada)",
+      uso: "Previsão oficial municipal; direção e intensidade do vento em faixas textuais e demais campos efetivamente publicados",
     });
   if (inmetAvisos)
     fontesAutomatizadas.push({
@@ -488,10 +491,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     umidadeMax: base.umidadeMax,
     precipitacaoHorariaMaxMm: base.precipitacaoHorariaMaxMm,
     precipitacaoTotalMm: base.precipitacaoTotalMm,
+    precipitacaoDiariaMm: base.precipitacaoDiariaMm ?? null,
     rajadaMaxKmh: base.rajadaMaxKmh,
     tabelaTemperaturaUmidade,
     ventoPorPeriodo,
     chuvaPorPeriodo,
+    chuvaPorHora,
     mar,
     qualidadeAr,
     eventoMaisRelevante,
@@ -503,6 +508,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     linkInmet: cidade.links?.inmet || null,
     divergencias,
     avisosColeta,
+    diagnosticosFallback,
     deslocamento,
     edificacao,
     fontes,
@@ -513,16 +519,20 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     geradoEmISO: dataNow.toISOString(),
     horarioAgendado,
     tipoDocumento: tipoDocumentoPorHorario(horarioAgendado),
-    periodoCoberto: horarioAgendado ? PERIODO_COBERTO_AGENDADO : null,
+    previsaoAte: janelaEdicao?.previsaoAte || null,
+    periodoCoberto: janelaEdicao?.periodo || null,
     // Só hoje: chuva e rajada na janela 05h–00h (as mesmas dos períodos acima).
     previsaoDias: horarioAgendado ? openMeteo.previsaoDias.slice(0, 1).map((dia) => ({
       ...dia,
       janela: openMeteo.janelaHoje.rotulo,
+      tempMin: base.tempMin,
+      tempMax: base.tempMax,
       chuvaMm: base.precipitacaoTotalMm,
       rajadaKmh: base.rajadaMaxKmh,
       periodo: `Hoje (${openMeteo.janelaHoje.rotulo})`,
     })) : null,
   };
+  if (horarioAgendado) relatorio.horaConsulta = horarioAgendado;
   relatorio.ocorrencias = montarOcorrencias(relatorio);
   return relatorio;
 }

@@ -1,5 +1,6 @@
-// Prioridade única para toda saída visual. NORMAL só chega à renderização nos
-// informativos programados; quando chega, deve anteceder os alertas ativos.
+// Peso de severidade único para toda saída visual (maior = mais grave). NORMAL
+// só chega à renderização nos informativos programados; quando chega, fica
+// depois de todos os alertas ativos.
 const PRIORIDADE_NIVEL = Object.freeze({
   NORMAL: 0,
   "ATENÇÃO": 1,
@@ -43,16 +44,22 @@ function prioridadeNivel(valor) {
   return nivel === null ? Number.POSITIVE_INFINITY : PRIORIDADE_NIVEL[nivel];
 }
 
+// Posição na exibição: 0 = EMERGÊNCIA … 3 = NORMAL; sem nível reconhecido, ao final.
+function posicaoExibicao(evento) {
+  const nivel = nivelDoEvento(evento);
+  return nivel === null ? PRIORIDADE_NIVEL["EMERGÊNCIA"] + 1 : PRIORIDADE_NIVEL["EMERGÊNCIA"] - PRIORIDADE_NIVEL[nivel];
+}
+
 /**
- * Ordenação visual estável e crescente: NORMAL, ATENÇÃO, ALERTA, EMERGÊNCIA.
- * O índice original desempata fenômenos do mesmo nível explicitamente.
+ * Ordenação visual estável por severidade decrescente: EMERGÊNCIA, ALERTA,
+ * ATENÇÃO, NORMAL. O índice original desempata fenômenos do mesmo nível.
  */
 function ordenarEventosParaExibicao(eventos) {
   return (Array.isArray(eventos) ? eventos : [])
     .filter(Boolean)
     .map((evento, indiceOriginal) => ({ evento, indiceOriginal }))
     .sort((a, b) => {
-      const diferenca = prioridadeNivel(nivelDoEvento(a.evento)) - prioridadeNivel(nivelDoEvento(b.evento));
+      const diferenca = posicaoExibicao(a.evento) - posicaoExibicao(b.evento);
       return diferenca || a.indiceOriginal - b.indiceOriginal;
     })
     .map(({ evento }) => evento);

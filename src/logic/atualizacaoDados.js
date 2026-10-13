@@ -69,9 +69,11 @@ function criarAtualizadorDados({
   /** Consulta as APIs para uma base. Rejeita em falha, mantendo os dados anteriores. */
   function atualizar(cidade, origem = "painel") {
     if (emAndamento.has(cidade.chave)) return emAndamento.get(cidade.chave);
+    const itemAtual = entrada(cidade.chave);
+    const horarioAgendado = itemAtual.report?.horarioAgendado || null;
     const inicio = agora();
     logger.log(`[ATUALIZACAO] ${cidade.nome}: consulta iniciada (${origem}).`);
-    const tarefa = comLimiteDeTempo(Promise.resolve().then(() => montar(cidade)), limitePorBaseMs, cidade.nome)
+    const tarefa = comLimiteDeTempo(Promise.resolve().then(() => montar(cidade, { horarioAgendado })), limitePorBaseMs, cidade.nome)
       .then((report) => {
         registrar(report);
         const falhas = report.avisosColeta?.length ? ` com ${report.avisosColeta.length} aviso(s) de coleta` : "";

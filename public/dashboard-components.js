@@ -92,15 +92,16 @@ const Dashboard = (() => {
     const cards = [
       metric('Temperatura', pair(r.tempMin, r.tempMax, '°'), 'Mínima / máxima · °C', 'thermometer', '', sources('tempMin','tempMax')),
       metric('Umidade relativa', pair(r.umidadeMin, r.umidadeMax, '%'), 'Mínima / máxima prevista', 'drop', '', sources('umidadeMin','umidadeMax')),
-      metric('Rajada prevista', unit(gusts.length ? Math.max(...gusts) : null, ' <small>km/h</small>'), 'Pico previsto hoje, 05h–00h', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
-      metric('Chuva acumulada', unit(r.precipitacaoTotalMm, ' <small>mm</small>'), 'Acumulado previsto hoje, 05h–00h', 'rain', '', sources('precipitacaoTotalMm')),
+      metric('Rajada prevista', gusts.length ? unit(Math.max(...gusts), ' <small>km/h</small>') : 'Dado indisponível', 'Máxima prevista na janela da edição', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
+      metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), 'Estimativa diária · 00h–24h', 'rain', '', sources('precipitacaoDiariaMm')),
       metric('Índice UV máx.', escape(aq?.uvMax), aq?.uvClassificacao?.nivel || 'Dado indisponível', 'sun', `uv-${['baixo','moderado','alto','muito_alto','extremo'].includes(aq?.uvClassificacao?.categoria) ? aq.uvClassificacao.categoria : 'ausente'}`, sources('ar.uvMax')),
       metric('Condição geral', escape(r.condicaoGeral), fields.condicaoGeral?.startsWith('Windy') ? 'Previsão no horário de referência' : 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
       metric('Qualidade do ar', escape(aq?.pm25Classificacao?.nivel), '', 'leaf', 'air', sources('ar.pm25Medio')),
       comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.desatualizado ? `Dado armazenado · última atualização válida: ${dateTimeBrasilia(r.mar?.ultimaAtualizacao) || 'horário indisponível'}` : r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sources('mar.alturaMaxDiaM')) : '',
       heatCard(r),
     ];
-    return `<section class="indicadores" aria-labelledby="titulo-indicadores"><h2 id="titulo-indicadores" class="bloco-titulo">Indicadores meteorológicos</h2><div class="grid-cards">${cards.join('')}</div></section>`;
+    const referencia = r.previsaoAte ? `<p class="previsao-referencia"><strong>Hora da consulta:</strong> ${escape(r.horaConsulta)} (Horário de Brasília) <span>| Previsão até ${escape(r.previsaoAte)}</span></p>` : '';
+    return `<section class="indicadores" aria-labelledby="titulo-indicadores"><h2 id="titulo-indicadores" class="bloco-titulo">Indicadores meteorológicos</h2>${referencia}<div class="grid-cards">${cards.join('')}</div></section>`;
   }
 
   function table(title, name, headers, rows, detail) {
