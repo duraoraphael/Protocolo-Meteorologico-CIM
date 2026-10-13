@@ -113,7 +113,7 @@ test('CALOR é a última célula e alertas ficam em severidade decrescente com e
   assert.match(html, /Índice UV extremo/, 'o evento de UV continua no e-mail');
 });
 
-test('card CALOR mostra a classificação EHF de hoje na cor do nível, sem usar UV', () => {
+test('card CALOR mostra o maior nível entre EHF e alerta de calor, sem usar UV', () => {
   const climaSaude = (previsaoDias, extra = {}) => ({ status: 'operacional', dados: {
     source: 'Clima e Saúde — Ministério da Saúde', dataConsulta: '2026-09-28',
     ehf: { classificacao: 'Sem excesso' }, previsaoDias, nivel: { grau: 'NORMAL' }, recomendacoes: [], ...extra,
@@ -133,6 +133,21 @@ test('card CALOR mostra a classificação EHF de hoje na cor do nível, sem usar
   const normal = celula(renderEmailHtml(relatorio({ ...base, climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Sem excesso' }]) })));
   assert.match(normal.text(), /Normal/);
   assert.ok(normal.html().includes(`color:${VISUAL_NIVEL.NORMAL.texto}`));
+  for (const [grau, rotulo] of [['ATENÇÃO', 'Atenção'], ['ALERTA', 'Alerta'], ['EMERGÊNCIA', 'Emergência']]) {
+    const divergente = renderEmailHtml(relatorio({
+      ...base,
+      tempMax: 37.3,
+      climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Sem excesso' }]),
+      severidade: { grau, eventos: [{
+        tipo: 'calorExtremo', grau, descricao: 'Temperatura máxima elevada prevista (37.3°C).',
+        janela: 'tarde', fonteDados: 'Clima e Saúde — Ministério da Saúde',
+      }] },
+    }));
+    const cardDivergente = celula(divergente);
+    assert.match(cardDivergente.text(), new RegExp(rotulo));
+    assert.ok(cardDivergente.html().includes(`color:${VISUAL_NIVEL[grau].texto}`));
+    assert.match(divergente, new RegExp(`CALOR / RISCO À SAÚDE — ${grau}`));
+  }
   // Coleta de outro dia sem previsão para hoje: indisponível, nunca "Normal".
   const semHoje = celula(renderEmailHtml(relatorio({ ...base, climaSaude: { status: 'degradado', dados: { source: 'Clima e Saúde — Ministério da Saúde', dataConsulta: '2026-09-25', ehf: { classificacao: 'Sem excesso' }, previsaoDias: [{ data: '2026-09-25', classificacao: 'Sem excesso' }] } } })));
   assert.match(semHoje.text(), /Indisponível/);

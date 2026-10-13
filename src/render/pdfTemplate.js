@@ -362,8 +362,8 @@ function tabelaCalor(r) {
     : "Não disponível";
   return blocoTabela({
     titulo: `<h4 class="subsecao">Condições de Calor — Indicadores e Previsões</h4>`,
-    tabela: `<table class="tabela-calor"><colgroup><col style="width:15%"><col style="width:31%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>Período</th><th>Temperatura prevista (mín./máx.)</th><th>Umidade relativa</th><th>Indicador de calor</th><th>Classificação</th></tr></thead><tbody><tr><td>Dia</td><td>${temperatura}</td><td>Não disponível</td><td>${Number.isFinite(dados?.ehf?.valor) ? `EHF ${esc(dados.ehf.valor)}` : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td></tr></tbody></table>`,
-    fonte: `Fonte: Clima e Saúde — Ministério da Saúde. A interface pública consultada fornece temperatura e EHF em base diária; não publicou umidade relativa nem previsão por período para esta localidade nesta emissão.`,
+    tabela: `<table class="tabela-calor"><colgroup><col style="width:17%"><col style="width:35%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>Período</th><th>Temperatura prevista (mín./máx.)</th><th>Indicador de calor</th><th>Classificação</th></tr></thead><tbody><tr><td>Dia</td><td>${temperatura}</td><td>${Number.isFinite(dados?.ehf?.valor) ? `EHF ${esc(dados.ehf.valor)}` : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td></tr></tbody></table>`,
+    fonte: `Fonte: Clima e Saúde — Ministério da Saúde. A interface pública consultada fornece temperatura e EHF em base diária; não publicou previsão por período para esta localidade nesta emissão.`,
   });
 }
 

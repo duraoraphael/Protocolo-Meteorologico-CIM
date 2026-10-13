@@ -52,12 +52,19 @@ test("temperatura e umidade: quatro colunas sem coluna Fonte e fonte só na nota
   }
 });
 
-test("tabela de calor não fabrica umidade nem períodos", () => {
+test("tabela de calor exibe só temperatura e EHF, sem umidade nem períodos", () => {
   const html = renderPdfHtml(report());
-  assert.match(html, /<td>Dia<\/td>/);
-  assert.doesNotMatch(html, /sem detalhamento por período/);
-  assert.match(html, /EHF 4\.57/);
-  assert.match(html, /não publicou umidade relativa nem previsão por período/i);
+  const $ = cheerio.load(html);
+  const tabela = $("table.tabela-calor");
+  assert.deepEqual(tabela.find("th").map((_, th) => $(th).text()).get(), [
+    "Período", "Temperatura prevista (mín./máx.)", "Indicador de calor", "Classificação",
+  ]);
+  assert.deepEqual(tabela.find("tbody td").map((_, td) => $(td).text()).get(), [
+    "Dia", "23.2 °C / 38 °C", "EHF 4.57", "Sem excesso",
+  ]);
+  assert.doesNotMatch(tabela.text(), /umidade relativa/i);
+  assert.doesNotMatch(html, /não publicou umidade relativa/i);
+  assert.match(html, /não publicou previsão por período/i);
 });
 
 test("chuva restaura a organização por manhã, tarde e noite", () => {

@@ -4,7 +4,8 @@ const { montarCardsAlerta, visualNivel } = require("./alertCards");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
 const AlertTitle = require("../../public/alert-title");
-const { calorPorData, dataLocal } = require("../logic/calorPorData");
+const { maiorGrau } = require("../logic/inmetAlertRules");
+const { calorPorData, dataLocal, ROTULOS_CALOR } = require("../logic/calorPorData");
 const { TIPOS_DOCUMENTO, alertaExibivel } = require("../logic/alertPresentation");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
@@ -74,13 +75,21 @@ function linhaReferencia(r) {
   </table>`;
 }
 
-// Card "CALOR": classificação de hoje do Clima e Saúde (EHF), na cor do
-// nível. Sem classificação para a data → "Indisponível", nunca "Normal".
+// Card "CALOR": usa o maior nível entre o EHF do dia e os alertas de calor
+// exibidos no próprio informativo. Assim o resumo nunca contradiz o card de
+// alerta logo abaixo. Sem nenhuma classificação → "Indisponível".
 function valorCalor(r) {
   const hoje = dataLocal(r.geradoEmISO || Date.now(), r.cidade?.fuso);
   const calor = calorPorData(r.climaSaude, hoje);
-  if (!calor) return `<span style="color:${COR.secundario};font:bold 21px/1.2 Arial,sans-serif;">Indisponível</span>`;
-  return `<span style="color:${visualNivel(calor.grau).texto};">${esc(calor.rotulo)}</span>`;
+  const grausAlertas = (r.severidade?.eventos || [])
+    .filter((evento) => evento?.tipo === "calorExtremo" || evento?.assinatura === "calor")
+    .map((evento) => AlertTitle.normalizarGrau(evento.grau || evento.titulo))
+    .filter(Boolean);
+  if (!calor && grausAlertas.length === 0) {
+    return `<span style="color:${COR.secundario};font:bold 21px/1.2 Arial,sans-serif;">Indisponível</span>`;
+  }
+  const grau = maiorGrau(calor?.grau || "NORMAL", ...grausAlertas);
+  return `<span style="color:${visualNivel(grau).texto};">${esc(ROTULOS_CALOR[grau])}</span>`;
 }
 
 function resumoMeteorologico(r) {
