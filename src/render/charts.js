@@ -55,12 +55,13 @@ function svgTemperaturaEChuva(dias, largura = 720, altura = 200) {
   const faixaChuva = alturaUtil * 0.3;
   const baseChuva = margem.topo + alturaUtil;
 
-  const temps = dias.flatMap((d) => [d.tempMin, d.tempMax]).filter((v) => v != null);
-  const tMin = Math.floor(Math.min(...temps) - 1);
-  const tMax = Math.ceil(Math.max(...temps) + 1);
+  const temps = dias.flatMap((d) => [d.tempMin, d.tempMax]).filter(Number.isFinite);
+  const tMin = temps.length ? Math.floor(Math.min(...temps) - 1) : 0;
+  const tMax = temps.length ? Math.ceil(Math.max(...temps) + 1) : 1;
   const escalaT = (v) => margem.topo + faixaTemp - ((v - tMin) / (tMax - tMin || 1)) * faixaTemp;
 
-  const chuvaMax = Math.max(...dias.map((d) => d.precipitacaoMm || 0), 10);
+  const chuvas = dias.map((d) => d.precipitacaoMm).filter(Number.isFinite);
+  const chuvaMax = Math.max(...chuvas, 10);
   const escalaChuva = (v) => (v / chuvaMax) * faixaChuva;
 
   const centroX = (i) => margem.esquerda + passo * i + passo / 2;
@@ -68,7 +69,8 @@ function svgTemperaturaEChuva(dias, largura = 720, altura = 200) {
   // Barras de chuva (fundo)
   const barras = dias
     .map((d, i) => {
-      const h = escalaChuva(d.precipitacaoMm || 0);
+      if (!Number.isFinite(d.precipitacaoMm)) return "";
+      const h = escalaChuva(d.precipitacaoMm);
       if (h <= 0) return "";
       const larguraBarra = Math.min(passo * 0.5, 30);
       return `<rect x="${centroX(i) - larguraBarra / 2}" y="${baseChuva - h}"
@@ -81,7 +83,8 @@ function svgTemperaturaEChuva(dias, largura = 720, altura = 200) {
   // chuva forte — que são os que mais importam ler.
   const rotulosChuva = dias
     .map((d, i) => {
-      const mm = d.precipitacaoMm || 0;
+      const mm = d.precipitacaoMm;
+      if (!Number.isFinite(mm)) return "";
       if (mm < 1) return "";
       const h = escalaChuva(mm);
       const cabeDentro = h >= 18;

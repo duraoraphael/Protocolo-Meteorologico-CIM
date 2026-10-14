@@ -28,11 +28,46 @@ test("cabeçalho usa a edição e a previsão na mesma linha", () => {
   assert.match($(".referencia-edicao").text().replace(/\s+/g, " "), /Hora da consulta: 15:00 \(Horário de Brasília\) \| Previsão até 00h/);
 });
 
-test("ordem obrigatória: mar, calor, qualidade do ar", () => {
+test("condições de mar aparecem imediatamente após qualidade do ar e índice UV", () => {
   const html = renderPdfHtml(report({ qualidadeAr: { pm25Classificacao: {}, uvClassificacao: {} } }));
-  const pos = ["Condições de mar", "Condições de Calor", "Qualidade do Ar e Índice UV"].map((x) => html.indexOf(x));
-  assert.ok(pos.every((x) => x >= 0));
-  assert.deepEqual([...pos].sort((a, b) => a - b), pos);
+  const $ = cheerio.load(html);
+  const titulos = $("h4.subsecao").map((_, h4) => $(h4).text()).get();
+  const qualidade = titulos.indexOf("Qualidade do Ar e Índice UV");
+  assert.ok(qualidade >= 0);
+  assert.match(titulos[qualidade + 1], /^Condições de mar/);
+});
+
+test("primeiro indicador de qualidade do ar não exibe o rótulo European AQI", () => {
+  const $ = cheerio.load(renderPdfHtml(report({
+    qualidadeAr: {
+      aqiPm25: 42,
+      pm25Classificacao: { nivel: "Moderada" },
+      pm25Medio: 12,
+      pm10Medio: 17,
+      uvMax: 9,
+      uvClassificacao: { nivel: "Muito alto" },
+    },
+  })));
+  const primeiraLinha = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV")
+    .closest("section").find("tbody tr").first();
+  assert.deepEqual(primeiraLinha.find("td").map((_, td) => $(td).text().trim()).get(), [
+    "Qualidade do Ar",
+    "42",
+    "Moderada",
+    "Classificação informada pela Open-Meteo/CAMS",
+  ]);
+  assert.doesNotMatch(primeiraLinha.text(), /European AQI/i);
+});
+
+test("qualidade do ar sem AQI oficial não atribui classificação CAMS", () => {
+  const $ = cheerio.load(renderPdfHtml(report({
+    qualidadeAr: { pm25Medio: 12, pm25Classificacao: { nivel: "Moderada" } },
+  })));
+  const primeiraLinha = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV")
+    .closest("section").find("tbody tr").first();
+  assert.deepEqual(primeiraLinha.find("td").map((_, td) => $(td).text().trim()).get(), [
+    "Qualidade do Ar", "—", "—", "Classificação indisponível",
+  ]);
 });
 
 test("temperatura e umidade: quatro colunas sem coluna Fonte e fonte só na nota", () => {

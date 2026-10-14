@@ -1,17 +1,10 @@
 // Cabeçalhos de segurança HTTP (V-08), sem dependências externas.
 //
-// A CSP é restrita a 'self': o painel (dashboard.html, areas.html,
-// mapas.html) só usa scripts, estilos, imagens e fontes servidos pelo
+// A CSP é restrita a 'self': o painel (dashboard.html e areas.html)
+// só usa scripts, estilos, imagens e fontes servidos pelo
 // próprio servidor, sem <script>/<style> inline nem atributos style="".
 // Logos e ícones: arquivos em /logo e SVG inline (permitido); data: fica
 // liberado só para imagens.
-//
-// Observação: a página mapas.html carrega Leaflet (unpkg.com) e a biblioteca
-// do Windy (api.windy.com) apenas se o mapa Windy for reativado em
-// src/integrations/windyRoutes.js (hoje ele responde configurado:false). Se
-// for reativado, será preciso liberar esses domínios em script-src,
-// style-src, img-src e connect-src para essa página.
-//
 // FRAME_ANCESTORS (opcional): lista de origens https separadas por espaço ou
 // vírgula que podem embutir o painel em iframe (ex.: a página do Streamlit
 // descrita no README §9.2). Sem ela, nenhum site pode embutir o painel

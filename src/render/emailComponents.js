@@ -1,14 +1,10 @@
-const { HEADER_AMARELO, HEADER_VERDE, srcLogoEmail } = require("../config/headerAssets");
+const { HEADER_AMARELO, HEADER_VERDE } = require("../config/headerAssets");
 const AlertTitle = require("../../public/alert-title");
 
 const EMAIL_HEADER_VERDE = HEADER_VERDE;
 const EMAIL_HEADER_AMARELO = HEADER_AMARELO;
 // Amarelo do "I" na marca original (Logo/Logo_PDF.png).
 const EMAIL_CIM_AMARELO = "#FEBF0A";
-// petrobras-header.png tem 640x165 (logo colorida em cartão branco);
-// exibida a 150px de largura.
-const EMAIL_PETROBRAS_LARGURA = 150;
-const EMAIL_PETROBRAS_ALTURA = 39;
 
 const EMAIL_STATUS = Object.freeze({
   NORMAL: Object.freeze({ cor: "#2E7D32", fundo: "#E8F5E9", selo: "#2E7D32", textoSelo: "#FFFFFF" }),
@@ -50,21 +46,35 @@ function identidadeCimHtml() {
   // e próximas (o "I" em Arial Black é uma barra retangular, aqui amarela),
   // divisória branca e o texto institucional. Não depende de imagem, então
   // continua legível quando Gmail/Outlook bloqueiam imagens.
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+  return `<table class="cim-header-brand" role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
     <td valign="middle" style="padding:0 11px 0 0;color:#ffffff;font-family:'Arial Black','Arial Bold',Arial,sans-serif;font-size:42px;font-weight:900;line-height:42px;letter-spacing:-3px;white-space:nowrap;mso-line-height-rule:exactly;"><span style="color:#ffffff;">C</span><span style="color:${EMAIL_CIM_AMARELO};">I</span><span style="color:#ffffff;">M</span></td>
     <td valign="middle" style="border-left:2px solid #ffffff;padding:1px 0 1px 11px;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:15px;white-space:nowrap;mso-line-height-rule:exactly;">Centro Integrado<br>de Monitoramento<br><span style="color:#ffffff;font-weight:normal;font-size:12px;letter-spacing:1.2px;">COMPARTILHADO</span></td>
   </tr></table>`;
 }
 
 function petrobrasHtml() {
-  // Logo em cartão branco embutido na própria imagem (aparece igual em
-  // Gmail e Outlook), anexada inline por Content-ID — ver
-  // src/config/headerAssets.js e scripts/gerarLogosHeader.js.
-  const src = srcLogoEmail("petrobras");
-  if (src) {
-    return `<img src="${src}" width="${EMAIL_PETROBRAS_LARGURA}" height="${EMAIL_PETROBRAS_ALTURA}" alt="Petrobras" style="display:block;width:${EMAIL_PETROBRAS_LARGURA}px;height:auto;max-width:100%;border:0;outline:none;text-decoration:none;color:#ffffff;font:italic bold 20px/1.2 Arial,sans-serif;">`;
-  }
-  return `<span style="color:#ffffff;font:italic bold 20px/1.2 Arial,sans-serif;">PETROBRAS</span>`;
+  // Wordmark propositalmente em texto HTML: permanece visível quando o
+  // cliente bloqueia imagens e não cria dependência de anexo ou URL externa.
+  return `<table data-email-header-petrobras-box="true" class="cim-header-petrobras-box" role="presentation" width="150" cellpadding="0" cellspacing="0" bgcolor="#FFFFFF" style="width:150px;margin-left:auto;background:#FFFFFF;background-color:#FFFFFF;border-collapse:separate;border-radius:8px;">
+    <tr><td height="44" valign="middle" align="center" bgcolor="#FFFFFF" style="height:44px;padding:0 12px;background:#FFFFFF;background-color:#FFFFFF;border-radius:8px;color:${EMAIL_HEADER_VERDE};font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:bold;line-height:44px;letter-spacing:0.8px;text-align:center;white-space:nowrap;mso-line-height-rule:exactly;">PETROBRAS</td></tr>
+  </table>`;
+}
+
+// Os estilos essenciais permanecem inline. A media query é apenas a melhoria
+// progressiva que empilha as três áreas em telas estreitas; clientes antigos
+// continuam recebendo a composição horizontal de três colunas.
+function renderEmailHeaderStyles() {
+  return `<style type="text/css">
+    @media only screen and (max-width:640px) {
+      .cim-email-shell { width:100% !important; max-width:100% !important; table-layout:fixed !important; }
+      .cim-header-cell { display:block !important; width:100% !important; box-sizing:border-box !important; }
+      .cim-header-cim { padding:0 0 10px !important; text-align:center !important; }
+      .cim-header-title { padding:8px 0 10px !important; text-align:center !important; }
+      .cim-header-heading { font-size:18px !important; line-height:22px !important; }
+      .cim-header-petrobras { padding:6px 0 0 !important; text-align:center !important; }
+      .cim-header-brand, .cim-header-petrobras-box { margin-left:auto !important; margin-right:auto !important; }
+    }
+  </style>`;
 }
 
 function linhaLocal({ cidade, uf, data, contexto }) {
@@ -75,13 +85,13 @@ function linhaLocal({ cidade, uf, data, contexto }) {
 
 function renderEmailHeader({ titulo, cidade, uf, data, contexto }) {
   return `<tr data-email-header="true"><td bgcolor="${EMAIL_HEADER_VERDE}" style="background:${EMAIL_HEADER_VERDE};padding:16px 22px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;"><tr>
-      <td data-email-header-cim="true" width="31%" valign="middle" align="left" style="width:31%;color:#ffffff;">${identidadeCimHtml()}</td>
-      <td data-email-header-title="true" width="47%" valign="middle" align="center" style="width:47%;color:#ffffff;padding:0 10px;text-align:center;">
-        <div style="color:#ffffff;font-family:Arial,sans-serif;font-size:21px;font-weight:bold;line-height:25px;letter-spacing:0.3px;text-align:center;">${esc(titulo)}</div>
+    <table class="cim-header-layout" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;"><tr>
+      <td data-email-header-cim="true" class="cim-header-cell cim-header-cim" width="31%" valign="middle" align="left" style="width:31%;color:#ffffff;">${identidadeCimHtml()}</td>
+      <td data-email-header-title="true" class="cim-header-cell cim-header-title" width="47%" valign="middle" align="center" style="width:47%;color:#ffffff;padding:0 10px;text-align:center;">
+        <div class="cim-header-heading" style="color:#ffffff;font-family:Arial,sans-serif;font-size:21px;font-weight:bold;line-height:25px;letter-spacing:0.3px;text-align:center;">${esc(titulo)}</div>
         <div data-email-header-local="true" style="color:#ffffff;font-family:Arial,sans-serif;font-size:13px;line-height:18px;margin-top:6px;text-align:center;">${linhaLocal({ cidade, uf, data, contexto })}</div>
       </td>
-      <td data-email-header-petrobras="true" width="22%" valign="middle" align="right" style="width:22%;text-align:right;line-height:0;">${petrobrasHtml()}</td>
+      <td data-email-header-petrobras="true" class="cim-header-cell cim-header-petrobras" width="22%" valign="middle" align="right" style="width:22%;text-align:right;line-height:0;">${petrobrasHtml()}</td>
     </tr></table>
   </td></tr>
   <tr data-email-header-stripe="true"><td bgcolor="${EMAIL_HEADER_AMARELO}" style="height:4px;background:${EMAIL_HEADER_AMARELO};font-size:0;line-height:4px;mso-line-height-rule:exactly;">&nbsp;</td></tr>`;
@@ -98,11 +108,12 @@ function classificacaoMudanca(grauAnterior, grauAtual, motivo) {
   if (atual === "NORMAL" || motivoNormalizado === "normalizou") return "NORMALIZAÇÃO";
   if (motivoNormalizado === "agravou") return "AGRAVAMENTO";
   if (motivoNormalizado === "reduziu") return "REDUÇÃO";
-  if (motivoNormalizado === "novo") return "NOVO ALERTA";
-  if (!anterior) return "NOVO ALERTA";
+  if (motivoNormalizado === "novo") return "NOVO AVISO";
+  if (motivoNormalizado === "manteve" || motivoNormalizado === "manutenção") return "MANUTENÇÃO";
+  if (!anterior) return "NOVO AVISO";
   if ((ORDEM_STATUS[atual] ?? 0) > (ORDEM_STATUS[anterior] ?? 0)) return "AGRAVAMENTO";
   if ((ORDEM_STATUS[atual] ?? 0) < (ORDEM_STATUS[anterior] ?? 0)) return "REDUÇÃO";
-  return "ATUALIZAÇÃO";
+  return "MANUTENÇÃO";
 }
 
 function seloStatus(grau, atual = false) {
@@ -118,25 +129,41 @@ function recomendacoesHtml(itens) {
   return `<div data-alert-recommendations="true" style="border-top:1px solid #E5E7E6;margin-top:16px;padding-top:14px;color:#333333;font:13px/1.5 Arial,sans-serif;"><strong style="display:block;color:#333333;font-size:13px;line-height:1.4;text-transform:uppercase;">Recomendações – Protocolo Meteorológico do COMPARTILHADO</strong><ul style="margin:9px 0 0 20px;padding:0;">${itens.map((item) => `<li data-alert-recommendation="true" style="margin-bottom:7px;">${esc(item)}</li>`).join("")}</ul></div>`;
 }
 
-function renderStatusChangeCard({ tipo, grauAnterior, grau, motivo, detalhe, janela, fonteDados, protocolo, naturezaDado, severidadeTexto, instrucoesOficiais, recomendacoes }) {
+function renderStatusChangeCard({
+  tipo, grauAnterior, grau, motivo, detalhe, janela, fonteDados, protocolo,
+  naturezaDado, severidadeTexto, orgaoEmissor, instrucoesOficiais,
+  previsaoComplementar, periodoPrevisao, fontePrevisao, recomendacoes,
+  resumido = false,
+}) {
   const atual = normalizarGrau(grau) || "NORMAL";
-  const anterior = normalizarGrau(grauAnterior);
   const visual = statusEmail(atual);
-  const classificacao = classificacaoMudanca(anterior, atual, motivo);
   const fenomeno = nomeParametroAlerta(tipo);
+  const tituloAtual = AlertTitle.formatarTitulo(fenomeno, atual);
+
+  if (resumido) {
+    return `<table data-alert-card="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#FFFFFF;border:1.5px solid ${visual.cor};border-left:5px solid ${visual.cor};margin:0 0 14px;">
+      <tr><td style="padding:15px 18px;color:#333333;font-family:Arial,sans-serif;">
+        <div data-alert-title="true" style="color:${visual.cor};font:bold 18px/1.3 Arial,sans-serif;">${esc(tituloAtual)}</div>
+        ${detalhe ? `<div data-alert-notice="true" style="font:13px/1.55 Arial,sans-serif;margin-top:12px;"><strong>Informe do aviso:</strong> ${esc(detalhe)}</div>` : ""}
+        ${recomendacoesHtml(recomendacoes)}
+      </td></tr>
+    </table>`;
+  }
+
+  const anterior = normalizarGrau(grauAnterior);
+  const classificacao = classificacaoMudanca(anterior, atual, motivo);
   const nivelAtual = nivelExibicao(atual);
   const avisoOficial = naturezaDado === "Aviso oficial";
   const normalizacaoOficial = avisoOficial && atual === "NORMAL";
   const tituloMudanca = avisoOficial
-    ? `${normalizacaoOficial ? "NORMALIZAÇÃO" : "MUDANÇA"} DE AVISO OFICIAL INMET`
-    : "MUDANÇA DE STATUS";
+    ? (anterior ? `${normalizacaoOficial ? "NORMALIZAÇÃO" : "MUDANÇA"} DE AVISO OFICIAL INMET` : "AVISO OFICIAL INMET")
+    : (anterior ? "MUDANÇA DE STATUS" : "CLASSIFICAÇÃO INTERNA BASEADA NA PREVISÃO");
   const linhaStatus = anterior
     ? `${seloStatus(anterior)}<span style="display:inline-block;padding:0 12px;color:#333333;font:bold 22px/1 Arial,sans-serif;vertical-align:middle;">→</span>${seloStatus(atual, true)}`
     : `${seloStatus(atual, true)}`;
   const textoTransicao = anterior
     ? `<div style="color:#555555;font:12px/1.4 Arial,sans-serif;margin-top:10px;">Mudança de gatilho: <strong>${esc(nivelExibicao(anterior))} → ${esc(nivelAtual)}</strong></div>`
     : "";
-  const tituloAtual = AlertTitle.formatarTitulo(fenomeno, atual);
 
   return `<table data-alert-card="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#FFFFFF;border:1.5px solid ${visual.cor};border-left:5px solid ${visual.cor};margin:0 0 14px;">
     <tr><td style="padding:15px 18px;color:#333333;font-family:Arial,sans-serif;">
@@ -146,11 +173,12 @@ function renderStatusChangeCard({ tipo, grauAnterior, grau, motivo, detalhe, jan
       ${protocolo ? `<div style="color:#555555;font:12px/1.45 Arial,sans-serif;margin-top:4px;"><strong>Protocolo aplicável:</strong> ${esc(protocolo)}</div>` : ""}
       <div style="margin-top:12px;">${linhaStatus}</div>
       ${textoTransicao}
-      ${severidadeTexto ? `<div style="color:${visual.cor};font:bold 12px/1.4 Arial,sans-serif;margin-top:5px;">${esc(severidadeTexto)}</div>` : ""}
+      ${severidadeTexto ? `<div style="color:${visual.cor};font:bold 12px/1.4 Arial,sans-serif;margin-top:5px;"><strong>Nível oficial:</strong> ${esc(severidadeTexto)}</div>` : ""}
       ${detalhe ? `<div style="font:13px/1.55 Arial,sans-serif;margin-top:12px;"><strong>${avisoOficial && !normalizacaoOficial ? "Motivo do aviso" : "Informação meteorológica"}:</strong> ${esc(detalhe)}</div>` : ""}
       ${Array.isArray(instrucoesOficiais) && instrucoesOficiais.length ? `<div style="font:13px/1.55 Arial,sans-serif;margin-top:9px;"><strong>Instruções oficiais:</strong> ${instrucoesOficiais.map(esc).join(" ")}</div>` : ""}
       ${janela ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:9px;">${avisoOficial ? "Vigência" : "Período"}: ${esc(janela)}</div>` : ""}
       ${fonteDados ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:6px;">Fonte de dados: ${esc(fonteDados)}</div>` : ""}
+      ${previsaoComplementar ? `<div data-alert-forecast-complement="true" style="background:#F7F8F7;border-left:3px solid ${visual.cor};padding:9px 11px;margin-top:12px;font:12.5px/1.5 Arial,sans-serif;"><strong>Previsão complementar:</strong> ${esc(previsaoComplementar)}${periodoPrevisao ? `<div style="margin-top:4px;"><strong>Período da previsão:</strong> ${esc(periodoPrevisao)}</div>` : ""}${fontePrevisao ? `<div style="margin-top:4px;"><strong>Fonte da previsão:</strong> ${esc(fontePrevisao)}</div>` : ""}</div>` : ""}
       ${recomendacoesHtml(recomendacoes)}
     </td></tr>
   </table>`;
@@ -215,6 +243,7 @@ module.exports = {
   normalizarGrau,
   renderDailyChanges,
   renderEmailHeader,
+  renderEmailHeaderStyles,
   renderInstitutionalHeader,
   renderStatusChangeCard,
   statusEmail,

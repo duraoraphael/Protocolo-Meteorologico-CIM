@@ -52,7 +52,14 @@
   <div id="overlay-senha" class="overlay oculto">
     <div class="modal" role="dialog" aria-modal="true" aria-label="Gerar e enviar relatório">
       <h2>Gerar e Enviar Relatório</h2>
-      <p>Digite a senha operacional do CIM para disparar a coleta de dados, gerar o PDF e enviar o e-mail.</p>
+      <p>Escolha o envio e digite a senha operacional do CIM.</p>
+      <label class="modal-campo" for="tipo-envio">
+        <span>Tipo de envio</span>
+        <select id="tipo-envio">
+          <option value="informativo">Informativo meteorológico da base selecionada</option>
+          <option value="cor_rio">Aviso exclusivo COR-RIO — RJ</option>
+        </select>
+      </label>
       <input id="input-senha" aria-label="Senha operacional" type="password" placeholder="Senha" autocomplete="off" />
       <div id="modal-mensagem" class="modal-mensagem" role="status" aria-live="polite"></div>
       <div class="modal-botoes">

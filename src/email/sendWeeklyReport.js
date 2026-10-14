@@ -1,6 +1,7 @@
 const { criarTransportador, enderecoRemetente } = require("./transport");
 const { listarTodos } = require("../config/recipients");
 const { anexosLogosEmail } = require("../config/headerAssets");
+const { validarDocumentoOperacional } = require("../logic/documentProvenance");
 
 /**
  * Destinatários do relatório SEMANAL.
@@ -41,6 +42,7 @@ function listaDestinatariosSemanal() {
 }
 
 async function enviarRelatorioSemanalPorEmail(relatorio, pdfBuffer, emailHtml) {
+  validarDocumentoOperacional(relatorio, "envio do relatório semanal");
   const destinatarios = listaDestinatariosSemanal();
   if (destinatarios.length === 0) {
     throw new Error(

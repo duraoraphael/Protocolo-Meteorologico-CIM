@@ -52,10 +52,18 @@ function validarCabecalho(html, titulo) {
   assert.equal(centro.find('[data-email-header-local="true"]').length, 1);
   assert.doesNotMatch(centro.text(), /Horário de Brasília/);
   assert.match(html, /letter-spacing:-3px/);
-  // Petrobras em cartão branco embutido na imagem (não em CSS), por Content-ID.
-  assert.match(petrobras.html(), /<img src="cid:logo-petrobras-header@cim" width="150" height="39" alt="Petrobras"/);
-  assert.doesNotMatch(petrobras.html(), /background|border:\s*[1-9]/);
+  // Petrobras é texto HTML real dentro de um cartão branco, sem imagem.
+  assert.equal(petrobras.find("img").length, 0);
+  assert.equal(petrobras.find('[data-email-header-petrobras-box="true"]').length, 1);
+  assert.equal(petrobras.text().trim(), "PETROBRAS");
+  assert.match(petrobras.html(), /bgcolor="#FFFFFF"/);
+  assert.match(petrobras.html(), /color:#047C3E/);
+  assert.match(petrobras.html(), /font-family:Arial,Helvetica,sans-serif/);
+  assert.match(petrobras.html(), /border-radius:8px/);
   assert.doesNotMatch(cabecalho.html(), /src="data:|localhost|file:/);
+  assert.match(html, /@media only screen and \(max-width:640px\)/);
+  assert.match(html, /\.cim-email-shell \{ width:100% !important; max-width:100% !important; table-layout:fixed !important;/);
+  assert.match(html, /\.cim-header-cell \{ display:block !important; width:100% !important;/);
 }
 
 function relatorioDiario(sobrescritas = {}) {
@@ -119,7 +127,24 @@ test("todos os tipos de e-mail reutilizam o cabeçalho institucional completo", 
   validarCabecalho(alerta, "ALERTA METEOROLÓGICO");
   assert.equal(normalizacao, "", "Alerta CIM somente com NORMAL não gera HTML vazio de conteúdo");
   validarCabecalho(semanal, "RELATÓRIO METEOROLÓGICO SEMANAL");
-  assert.match(diario, /<img src="cid:logo-petrobras-header@cim"[^>]*alt="Petrobras"/);
+  assert.doesNotMatch(diario, /<img\b[^>]*Petrobras|cid:logo-petrobras-header@cim/i);
+  assert.match(diario, />PETROBRAS<\/td>/);
+});
+
+test("localidade e data do informativo são dinâmicas no cabeçalho", () => {
+  const salvador = renderEmailHtml(relatorioDiario({
+    cidade: { nome: "Salvador", uf: "BA" },
+    dataFormatadaLonga: "terça-feira, 13 de outubro de 2026",
+  }));
+  const manaus = renderEmailHtml(relatorioDiario({
+    cidade: { nome: "Manaus", uf: "AM" },
+    dataFormatadaLonga: "quarta-feira, 14 de outubro de 2026",
+  }));
+
+  assert.match(salvador, /Salvador — BA — terça-feira, 13 de outubro de 2026/);
+  assert.doesNotMatch(salvador, /Manaus — AM/);
+  assert.match(manaus, /Manaus — AM — quarta-feira, 14 de outubro de 2026/);
+  assert.doesNotMatch(manaus, /Salvador — BA/);
 });
 
 test("identidade CIM permanece completa quando todas as imagens são bloqueadas", () => {
@@ -205,7 +230,7 @@ test("novo alerta é classificado e campos estruturados continuam escapados", ()
     janela: "tarde --> noite",
     fonteDados: '<script>alert("x")</script>',
   });
-  assert.match(html, /NOVO ALERTA/);
+  assert.match(html, /NOVO AVISO/);
   assert.match(html, /#EF6C00/);
   assert.match(html, /&lt;IMG SRC=X ONERROR=&quot;ALERT\(1\)&quot;&gt;/);
   assert.match(html, /Rajada &lt; 48 &amp; risco &gt; 1/);

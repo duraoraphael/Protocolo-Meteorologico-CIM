@@ -4,10 +4,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { renderEmailHtml } = require("../src/render/emailTemplate");
+const { registrarOperacionalTeste } = require("./helpers/provenance");
 
 function relatorioBase(sobrescritas = {}) {
   return {
-    cidade: { chave: null, nome: "Rio de Janeiro", uf: "RJ" },
+    cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
     nomeArquivoBase: "Informativo_Meteorologico_TESTE",
     dataFormatadaLonga: "segunda-feira, 28 de setembro de 2026",
     dataFormatadaCurta: "28/09/2026",
@@ -76,19 +77,19 @@ test("envio reutiliza o PDF completo em memória como anexo SMTP", { concurrency
 
     const { enviarRelatorioPorEmail } = require(caminhoEnvio);
     const pdfCompleto = Buffer.from("PDF-COMPLETO-VALIDACAO");
-    const resultado = await enviarRelatorioPorEmail(relatorioBase(), pdfCompleto);
+    const resultado = await enviarRelatorioPorEmail(registrarOperacionalTeste(relatorioBase()), pdfCompleto);
 
     assert.equal(resultado.messageId, "teste-message-id");
     const pdfs = mensagem.attachments.filter((anexo) => anexo.contentType === "application/pdf");
     assert.equal(pdfs.length, 1);
     assert.equal(pdfs[0].filename, "Informativo_Meteorologico_TESTE.pdf");
     assert.strictEqual(pdfs[0].content, pdfCompleto);
-    // Logos do cabeçalho seguem inline por Content-ID, referenciadas no HTML.
+    // O cabeçalho é 100% HTML e não exige imagens inline por Content-ID.
     const logos = mensagem.attachments.filter((anexo) => anexo.cid);
-    assert.deepEqual(logos.map((anexo) => anexo.cid), ["logo-petrobras-header@cim"]);
-    assert.equal(logos[0].contentDisposition, "inline");
-    assert.ok(fs.existsSync(logos[0].path));
-    assert.match(mensagem.html, /src="cid:logo-petrobras-header@cim"/);
+    assert.deepEqual(logos, []);
+    assert.doesNotMatch(mensagem.html, /cid:logo-petrobras-header@cim|<img\b[^>]*Petrobras/i);
+    assert.match(mensagem.html, /data-email-header-petrobras-box="true"/);
+    assert.match(mensagem.html, />PETROBRAS<\/td>/);
     assert.match(mensagem.html, /Relatório técnico completo com tabelas/);
     assert.equal(resultado.respostaSmtp, "250 2.0.0 OK");
     assert.equal(resultado.aceitos, 1);

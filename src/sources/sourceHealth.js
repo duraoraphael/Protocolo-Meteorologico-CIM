@@ -17,6 +17,7 @@ function formatarDataBrasilia(valor) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   }).format(new Date(valor)).replace(",", "");
 }
 

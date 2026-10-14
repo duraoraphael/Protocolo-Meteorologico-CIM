@@ -3,7 +3,11 @@
 // sobreviver a reinícios do servidor, sem depender de banco de dados.
 const fs = require("fs");
 const path = require("path");
-const { CIDADES, baseExiste, erroBaseInvalida } = require("./cities");
+const {
+  BASES_DISTRIBUICAO,
+  baseDistribuicaoExiste,
+  getBaseDistribuicao,
+} = require("./distributionBases");
 
 const ARQUIVO = process.env.RESPONSAVEIS_ARQUIVO || path.join(__dirname, "..", "..", "data", "responsaveis.json");
 
@@ -57,7 +61,7 @@ function carregarTodos() {
           .map((r) => ({
             nome: r.nome,
             email: r.email,
-            bases: Array.isArray(r.bases) ? [...new Set(r.bases.filter(baseExiste))] : [],
+            bases: Array.isArray(r.bases) ? [...new Set(r.bases.filter(baseDistribuicaoExiste))] : [],
           })),
       };
     }
@@ -67,7 +71,7 @@ function carregarTodos() {
     // alteração em disco apenas por abrir o painel.
     const porEmail = new Map();
     if (dados && typeof dados === "object") {
-      for (const chave of Object.keys(CIDADES)) {
+      for (const chave of Object.keys(BASES_DISTRIBUICAO)) {
         for (const pessoa of Array.isArray(dados[chave]) ? dados[chave] : []) {
           const email = String(pessoa?.email || "").trim().toLowerCase();
           if (!email) continue;
@@ -91,7 +95,7 @@ function salvarTodos(dados) {
 
 // V-10: só string ^[a-z_]{2,40}$ que seja chave própria de CIDADES.
 function validarCidade(chave) {
-  if (!baseExiste(chave)) throw erroBaseInvalida();
+  getBaseDistribuicao(chave);
 }
 
 function listarPorCidade(chave) {
@@ -104,10 +108,10 @@ function listarPorCidade(chave) {
 
 function listarTodos() {
   const dados = carregarTodos();
-  return Object.keys(CIDADES).map((chave) => ({
+  return Object.keys(BASES_DISTRIBUICAO).map((chave) => ({
     chave,
-    nome: CIDADES[chave].nome,
-    uf: CIDADES[chave].uf,
+    nome: BASES_DISTRIBUICAO[chave].nome,
+    uf: BASES_DISTRIBUICAO[chave].uf,
     responsaveis: dados.responsaveis
       .filter((r) => r.bases.includes(chave))
       .map(({ nome, email }) => ({ nome, email })),

@@ -135,6 +135,7 @@ test("previsão INMET usa 15 segundos e recupera após falhas transitórias", as
   const esperas = [];
   let chamadas = 0;
   const resultado = await buscarPrevisaoInmet(codigo, {
+    agora: new Date("2099-01-01T12:00:00-03:00"),
     fetchImpl: async (_url, opcoes) => {
       chamadas += 1;
       assert.equal(opcoes.headers["User-Agent"].includes("ProtocoloMeteorologicoCIM"), true);
@@ -161,6 +162,20 @@ test("previsão INMET usa 15 segundos e recupera após falhas transitórias", as
   assert.equal(chamadas, 3);
   assert.deepEqual(esperas, [2000, 4000]);
   assert.equal(resultado.periodos.manha.resumo, "Nublado");
+  assert.equal(resultado.data, "01/01/2099");
+});
+
+test("previsão INMET não usa outro dia quando a data solicitada está ausente", async () => {
+  const codigo = "3304557";
+  await assert.rejects(
+    buscarPrevisaoInmet(codigo, {
+      agora: new Date("2099-01-02T12:00:00-03:00"),
+      fetchImpl: async () => ({ ok: true, json: async () => ({
+        [codigo]: { "01/01/2099": { manha: { resumo: "Dado antigo" } } },
+      }) }),
+    }),
+    /não retornou previsão para a data solicitada \(02\/01\/2099\)/
+  );
 });
 
 test("avisos INMET repetem falha temporária e filtram o município", async () => {

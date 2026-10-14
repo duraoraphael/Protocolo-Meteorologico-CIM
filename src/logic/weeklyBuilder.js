@@ -14,6 +14,7 @@ const { CIDADES, getCidade } = require("../config/cities");
 const { buscarSemanaEmLote, buscarSemanaMarEmLote } = require("../sources/openMeteoSemanal");
 const { buscarAvisosInmet } = require("../sources/inmet");
 const { LIMIARES } = require("./riskEngine");
+const { registrarDocumentoOperacional } = require("./documentProvenance");
 
 // Níveis de severidade usados no relatório semanal. O número permite ordenar
 // e escolher a cor; o rótulo aparece no documento.
@@ -21,6 +22,7 @@ const SEVERIDADE = {
   CRITICO: { nivel: 3, rotulo: "Crítico", cor: "#C0392B" },
   ATENCAO: { nivel: 2, rotulo: "Atenção", cor: "#E67E22" },
   NORMAL: { nivel: 1, rotulo: "Normal", cor: "#00843D" },
+  INDISPONIVEL: { nivel: 0, rotulo: "Indisponível", cor: "#6B7280" },
 };
 
 const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -29,11 +31,16 @@ function formatarDia(dataIso) {
   // dataIso vem como "2026-08-31" (já no fuso de São Paulo pela API).
   const [ano, mes, dia] = dataIso.split("-").map(Number);
   const d = new Date(ano, mes - 1, dia);
-  return {
+  const relatorio = {
     diaSemana: DIAS_SEMANA[d.getDay()],
     diaMes: `${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}`,
     ehFimDeSemana: d.getDay() === 0 || d.getDay() === 6,
   };
+  return registrarDocumentoOperacional(relatorio, {
+    tipo: "semanal",
+    localidade: "multiplas-bases",
+    fontes: ["Open-Meteo", "Open-Meteo Marine", "INMET — avisos oficiais"],
+  });
 }
 
 /**
@@ -43,6 +50,13 @@ function formatarDia(dataIso) {
  */
 function avaliarDia(dia, mar) {
   const riscos = [];
+  const dadosIncompletos = ![
+    dia.codigoTempo,
+    dia.precipitacaoMm,
+    dia.probabilidadeChuva,
+    dia.rajadaMaxKmh,
+    dia.uvMax,
+  ].every(Number.isFinite);
 
   if (dia.temMuitaChuva) {
     riscos.push({ tipo: "Tempestade", severidade: SEVERIDADE.CRITICO, detalhe: "Trovoada prevista" });
@@ -80,14 +94,6 @@ function avaliarDia(dia, mar) {
     });
   }
 
-  if (dia.tempMax >= LIMIARES.calorExtremoC) {
-    riscos.push({
-      tipo: "Calor extremo",
-      severidade: SEVERIDADE.CRITICO,
-      detalhe: `Máxima de ${dia.tempMax}°C`,
-    });
-  }
-
   if (dia.uvMax != null && dia.uvMax >= LIMIARES.uvExtremo) {
     riscos.push({
       tipo: "UV extremo",
@@ -120,17 +126,17 @@ function avaliarDia(dia, mar) {
 
   const severidadeMax = riscos.reduce(
     (max, r) => (r.severidade.nivel > max.nivel ? r.severidade : max),
-    SEVERIDADE.NORMAL
+    dadosIncompletos ? SEVERIDADE.INDISPONIVEL : SEVERIDADE.NORMAL
   );
 
-  return { riscos, severidade: severidadeMax };
+  return { riscos, severidade: severidadeMax, dadosIncompletos };
 }
 
 function montarBase(cidade, semana, semanaMar, avisosInmet, avisos) {
   const dias = semana.dias.map((dia, i) => {
     const mar = semanaMar?.dias?.[i] || null;
-    const { riscos, severidade } = avaliarDia(dia, mar);
-    return { ...dia, ...formatarDia(dia.data), mar, riscos, severidade };
+    const { riscos, severidade, dadosIncompletos } = avaliarDia(dia, mar);
+    return { ...dia, ...formatarDia(dia.data), mar, riscos, severidade, dadosIncompletos };
   });
 
   const diasCriticos = dias.filter((d) => d.severidade.nivel === 3);
@@ -140,8 +146,13 @@ function montarBase(cidade, semana, semanaMar, avisosInmet, avisos) {
   // que atenção, e dias mais próximos pesam mais que os do fim da semana.
   const pontuacaoRisco = dias.reduce((soma, d, i) => {
     const peso = 1 - i * 0.08;
-    return soma + (d.severidade.nivel - 1) * peso;
+    return soma + Math.max(0, d.severidade.nivel - 1) * peso;
   }, 0);
+
+  const validos = (campo) => dias.map((dia) => campo(dia)).filter(Number.isFinite);
+  const minimo = (valores) => valores.length ? Math.min(...valores) : null;
+  const maximo = (valores) => valores.length ? Math.max(...valores) : null;
+  const chuvas = validos((dia) => dia.precipitacaoMm);
 
   return {
     cidade,
@@ -153,17 +164,18 @@ function montarBase(cidade, semana, semanaMar, avisosInmet, avisos) {
     pontuacaoRisco: Math.round(pontuacaoRisco * 10) / 10,
     severidadeMax: dias.reduce(
       (max, d) => (d.severidade.nivel > max.nivel ? d.severidade : max),
-      SEVERIDADE.NORMAL
+      SEVERIDADE.INDISPONIVEL
     ),
     // Extremos da semana, para a linha-resumo de cada base.
-    tempMinSemana: Math.min(...dias.map((d) => d.tempMin).filter((v) => v != null)),
-    tempMaxSemana: Math.max(...dias.map((d) => d.tempMax).filter((v) => v != null)),
-    chuvaTotalSemana:
-      Math.round(dias.reduce((s, d) => s + (d.precipitacaoMm || 0), 0) * 10) / 10,
-    rajadaMaxSemana: Math.max(...dias.map((d) => d.rajadaMaxKmh).filter((v) => v != null)),
-    uvMaxSemana: Math.max(...dias.map((d) => d.uvMax ?? 0)),
+    tempMinSemana: minimo(validos((dia) => dia.tempMin)),
+    tempMaxSemana: maximo(validos((dia) => dia.tempMax)),
+    chuvaTotalSemana: chuvas.length === dias.length
+      ? Math.round(chuvas.reduce((soma, valor) => soma + valor, 0) * 10) / 10
+      : null,
+    rajadaMaxSemana: maximo(validos((dia) => dia.rajadaMaxKmh)),
+    uvMaxSemana: maximo(validos((dia) => dia.uvMax)),
     ondaMaxSemana: semanaMar
-      ? Math.max(...dias.map((d) => d.mar?.alturaMaxM ?? 0))
+      ? maximo(validos((dia) => dia.mar?.alturaMaxM))
       : null,
   };
 }
@@ -232,6 +244,9 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
 
   const basesOk = resultados.filter((b) => !b.erro);
   const basesComFalha = resultados.filter((b) => b.erro);
+  if (!basesOk.length) {
+    throw new Error("Relatório semanal bloqueado: nenhuma base possui previsão verificável.");
+  }
 
   // Ordena por risco: quem abre na segunda vê primeiro o que exige ação.
   const basesOrdenadas = [...basesOk].sort((a, b) => b.pontuacaoRisco - a.pontuacaoRisco);
@@ -247,14 +262,18 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
 
   const panoramaDias = rotulosDias.map((rotulo, i) => {
     const doDia = basesOk.map((b) => b.dias[i]).filter(Boolean);
+    const chuvas = doDia.map((dia) => dia.precipitacaoMm).filter(Number.isFinite);
+    const rajadas = doDia.map((dia) => dia.rajadaMaxKmh).filter(Number.isFinite);
     return {
       ...rotulo,
       basesCriticas: doDia.filter((d) => d.severidade.nivel === 3).length,
       basesAtencao: doDia.filter((d) => d.severidade.nivel === 2).length,
       basesNormais: doDia.filter((d) => d.severidade.nivel === 1).length,
-      chuvaMediaMm:
-        Math.round((doDia.reduce((s, d) => s + (d.precipitacaoMm || 0), 0) / (doDia.length || 1)) * 10) / 10,
-      rajadaMaxKmh: Math.max(...doDia.map((d) => d.rajadaMaxKmh ?? 0)),
+      basesIndisponiveis: doDia.filter((d) => d.severidade.nivel === 0).length,
+      chuvaMediaMm: chuvas.length === doDia.length && chuvas.length
+        ? Math.round((chuvas.reduce((soma, valor) => soma + valor, 0) / chuvas.length) * 10) / 10
+        : null,
+      rajadaMaxKmh: rajadas.length ? Math.max(...rajadas) : null,
     };
   });
 
@@ -301,6 +320,7 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
     horaGeracao: new Intl.DateTimeFormat("pt-BR", {
       hour: "2-digit",
       minute: "2-digit",
+      hourCycle: "h23",
       timeZone: "America/Sao_Paulo",
     }).format(agora),
     periodoLabel: primeiroDia && ultimoDia ? `${primeiroDia.diaMes} a ${ultimoDia.diaMes}` : "—",
@@ -316,7 +336,8 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
     totalBasesCriticas: basesOk.filter((b) => b.severidadeMax.nivel === 3).length,
     totalBasesAtencao: basesOk.filter((b) => b.severidadeMax.nivel === 2).length,
     totalBasesNormais: basesOk.filter((b) => b.severidadeMax.nivel === 1).length,
+    totalBasesIndisponiveis: basesOk.filter((b) => b.severidadeMax.nivel === 0).length,
   };
 }
 
-module.exports = { montarRelatorioSemanal, SEVERIDADE };
+module.exports = { montarRelatorioSemanal, avaliarDia, SEVERIDADE };

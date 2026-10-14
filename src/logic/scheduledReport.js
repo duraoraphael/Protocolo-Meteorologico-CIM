@@ -40,6 +40,15 @@ function resumo(report) {
   };
 }
 
+function registroHistorico(report, enviadoEmISO = new Date().toISOString()) {
+  return {
+    enviadoEmISO,
+    tipoDocumento: report.tipoDocumento || null,
+    edicao: report.validadeInformativo ? { ...report.validadeInformativo } : null,
+    resumo: resumo(report),
+  };
+}
+
 function compararComManha(anterior, atual) {
   if (!anterior) return ["Relatório das 05:00 indisponível para comparação nesta base."];
   const mudancas = [];
@@ -62,4 +71,4 @@ function compararComManha(anterior, atual) {
   return mudancas.length ? mudancas : ["Sem mudança relevante em relação ao relatório das 05:00."];
 }
 
-module.exports = { ARQUIVO, dataBrasilia, lerEstado, gravarEstado, resumo, compararComManha };
+module.exports = { ARQUIVO, dataBrasilia, lerEstado, gravarEstado, resumo, registroHistorico, compararComManha };

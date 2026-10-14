@@ -1,4 +1,5 @@
-const { GRAUS, recomendacoesChuvaAvisoInmet } = require("./inmetAlertRules");
+const { GRAUS, recomendacoes, recomendacoesChuvaAvisoInmet } = require("./inmetAlertRules");
+const { recomendacoesFenomeno } = require("./phenomenonRecommendations");
 const { fenomenoAvisoInmet, grauAvisoInmet, normalizarComparacao } = require("../sources/inmet");
 
 const RECOMENDACAO_NEUTRA =
@@ -7,12 +8,14 @@ const RECOMENDACAO_NEUTRA =
 const TIPOS_DOCUMENTO = Object.freeze({
   INFORMATIVO_05H: "INFORMATIVO_05H",
   INFORMATIVO_15H: "INFORMATIVO_15H",
+  AVISO_COR_RIO: "AVISO_COR_RIO",
   EXTRAORDINARIO: "ALERTA_EXTRAORDINARIO",
   ALERTA_CIM: "ALERTA_CIM",
 });
 
 const FENOMENO_POR_TIPO = Object.freeze({
   raios: "tempestade",
+  tempestadePrevista: "tempestade",
   chuvaIntensa: "chuva",
   chuvaModerada: "chuva",
   ventoForte: "vento",
@@ -115,6 +118,12 @@ function resolverRecomendacoesAlerta({ evento = null, aviso = null, avisosInmet 
   // locais cadastradas por nível para avisos oficiais desse fenômeno.
   if (!locais.length && aviso) {
     locais = textosUnicos(recomendacoesChuvaAvisoInmet(aviso)?.recomendacoes);
+  }
+  if (!locais.length && aviso) {
+    const fenomeno = fenomenoAvisoInmet(aviso.descricao || aviso.event || aviso.evento || aviso.headline);
+    const grau = grauAvisoInmet(aviso.severidade ?? aviso.severity);
+    if (fenomeno === "vento") locais = textosUnicos(recomendacoes("vento", grau));
+    if (fenomeno === "tempestade") locais = textosUnicos(recomendacoesFenomeno("tempestade", grau));
   }
   if (!locais.length && aviso) {
     locais = textosUnicos(eventoCorrespondente(aviso, eventosLocais)?.recomendacoes);

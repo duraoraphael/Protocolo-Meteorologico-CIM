@@ -17,7 +17,7 @@ function relatorio(sobrescritas = {}) {
       { periodo: 'Tarde', rajadaMaxKmh: 36 },
       { periodo: 'Noite', rajadaMaxKmh: 20 },
     ],
-    qualidadeAr: { fonte: 'Open-Meteo Air Quality', pm25Medio: 14.5, pm25Periodo: 'média diária', pm25Classificacao: { nivel: 'Boa' }, uvMax: 11.2, uvClassificacao: { nivel: 'Extremo' } },
+    qualidadeAr: { fonte: 'Open-Meteo Air Quality', aqiPm25: 18, pm25Medio: 14.5, pm25Periodo: 'média diária', pm25Classificacao: { nivel: 'Boa' }, uvMax: 11.2, uvClassificacao: { nivel: 'Extremo' } },
     mar: { fonte: 'Open-Meteo Marine', alturaMaxDiaM: 0.7, estadoMarDia: 'Leve' },
     fontesPorCampo: {
       condicaoGeral: 'INMET', tempMin: 'INMET', tempMax: 'INMET',
@@ -38,7 +38,9 @@ function semImagem(html) {
 test('cabeçalho, oito cards e rodapé usam dados e fontes do relatório', () => {
   const html = semImagem(renderEmailHtml(relatorio()));
   const $ = cheerio.load(html);
-  assert.equal($('script, style, svg').length, 0);
+  assert.equal($('script, svg').length, 0);
+  assert.equal($('style').length, 1);
+  assert.match($('style').text(), /@media only screen and \(max-width:640px\)/);
   assert.equal($('table').length >= 4, true);
   assert.equal($('img[alt="Petrobras"]').length <= 1, true);
   assert.ok(html.includes('Rio de Janeiro — RJ — segunda-feira, 28 de setembro de 2026'));
@@ -59,8 +61,9 @@ test('cabeçalho, oito cards e rodapé usam dados e fontes do relatório', () =>
 });
 
 test('previsão da edição fica fora do card de rajada, sobre a 3ª coluna, e o card não mostra a fonte', () => {
-  for (const [horarioAgendado, frase] of [['05:00', 'Previsão até as 15hrs'], ['15:00', 'Previsão até as 00h']]) {
-    const html = semImagem(renderEmailHtml(relatorio({ horarioAgendado, previsaoAte: horarioAgendado === '05:00' ? '15h' : '00h' })));
+  for (const horarioAgendado of ['05:00', '15:00']) {
+    const frase = 'Previsão até as 00h';
+    const html = semImagem(renderEmailHtml(relatorio({ horarioAgendado, previsaoAte: '00h' })));
     const $ = cheerio.load(html);
     const card = $('div').filter((_, elemento) => $(elemento).text().trim() === 'RAJADA PREVISTA').first().closest('td');
     const textoCard = card.text().replace(/\s+/g, ' ').trim();
@@ -81,7 +84,7 @@ test('card de qualidade do ar exibe somente a classificação dinâmica', () => 
   const html = semImagem(renderEmailHtml(relatorio({
     qualidadeAr: {
       fonte: 'Open-Meteo Air Quality', pm25Medio: 27.4, pm25Periodo: 'média diária',
-      pm25Classificacao: { nivel: 'Moderada' }, uvMax: 5,
+      aqiPm25: 42, pm25Classificacao: { nivel: 'Moderada' }, uvMax: 5,
       uvClassificacao: { nivel: 'Moderado' },
     },
   })));
@@ -89,6 +92,13 @@ test('card de qualidade do ar exibe somente a classificação dinâmica', () => 
   assert.ok(html.includes('Moderada'));
   assert.ok(!html.includes('QUALIDADE DO AR (PM2,5)'));
   assert.ok(!html.includes('27.4 µg/m³'));
+});
+
+test('card de qualidade do ar não classifica concentração sem AQI oficial', () => {
+  const html = semImagem(renderEmailHtml(relatorio({
+    qualidadeAr: { pm25Medio: 27.4, pm25Classificacao: { nivel: 'Moderada' } },
+  })));
+  assert.match(html, /QUALIDADE DO AR[\s\S]*Dado indisponível/);
 });
 
 test('CALOR é a última célula e alertas ficam em severidade decrescente com empate estável', () => {
@@ -113,7 +123,7 @@ test('CALOR é a última célula e alertas ficam em severidade decrescente com e
   assert.match(html, /Índice UV extremo/, 'o evento de UV continua no e-mail');
 });
 
-test('card CALOR mostra o maior nível entre EHF e alerta de calor, sem usar UV', () => {
+test('card CALOR usa somente o EHF oficial, sem ser elevado por temperatura ou UV', () => {
   const climaSaude = (previsaoDias, extra = {}) => ({ status: 'operacional', dados: {
     source: 'Clima e Saúde — Ministério da Saúde', dataConsulta: '2026-09-28',
     ehf: { classificacao: 'Sem excesso' }, previsaoDias, nivel: { grau: 'NORMAL' }, recomendacoes: [], ...extra,
@@ -133,21 +143,14 @@ test('card CALOR mostra o maior nível entre EHF e alerta de calor, sem usar UV'
   const normal = celula(renderEmailHtml(relatorio({ ...base, climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Sem excesso' }]) })));
   assert.match(normal.text(), /Normal/);
   assert.ok(normal.html().includes(`color:${VISUAL_NIVEL.NORMAL.texto}`));
-  for (const [grau, rotulo] of [['ATENÇÃO', 'Atenção'], ['ALERTA', 'Alerta'], ['EMERGÊNCIA', 'Emergência']]) {
-    const divergente = renderEmailHtml(relatorio({
-      ...base,
-      tempMax: 37.3,
-      climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Sem excesso' }]),
-      severidade: { grau, eventos: [{
-        tipo: 'calorExtremo', grau, descricao: 'Temperatura máxima elevada prevista (37.3°C).',
-        janela: 'tarde', fonteDados: 'Clima e Saúde — Ministério da Saúde',
-      }] },
-    }));
-    const cardDivergente = celula(divergente);
-    assert.match(cardDivergente.text(), new RegExp(rotulo));
-    assert.ok(cardDivergente.html().includes(`color:${VISUAL_NIVEL[grau].texto}`));
-    assert.match(divergente, new RegExp(`CALOR / RISCO À SAÚDE — ${grau}`));
-  }
+  const temperaturaAlta = celula(renderEmailHtml(relatorio({
+    ...base,
+    tempMax: 40,
+    qualidadeAr: { uvMax: 12, uvClassificacao: { nivel: 'Extremo' } },
+    climaSaude: climaSaude([{ data: '2026-09-28', classificacao: 'Sem excesso' }]),
+  })));
+  assert.match(temperaturaAlta.text(), /Normal/);
+  assert.ok(temperaturaAlta.html().includes(`color:${VISUAL_NIVEL.NORMAL.texto}`));
   // Coleta de outro dia sem previsão para hoje: indisponível, nunca "Normal".
   const semHoje = celula(renderEmailHtml(relatorio({ ...base, climaSaude: { status: 'degradado', dados: { source: 'Clima e Saúde — Ministério da Saúde', dataConsulta: '2026-09-25', ehf: { classificacao: 'Sem excesso' }, previsaoDias: [{ data: '2026-09-25', classificacao: 'Sem excesso' }] } } })));
   assert.match(semHoje.text(), /Indisponível/);

@@ -109,3 +109,37 @@ test("padroniza os demais nomes de parâmetro e exibe emergencial sem alterar o 
     assert.equal($('[data-alert-title="true"]').text().trim(), titulo);
   }
 });
+
+test("card não mostra origem, significado CIM nem atribuição de Instalações", () => {
+  const html = renderStatusChangeCard({ resumido: true, tipo: "Vento", grau: "ALERTA", detalhe: "Rajada de 45 km/h." });
+  assert.doesNotMatch(html, /Origem da classificação|Significado do nível CIM|Instalações \(Operações\)/);
+  assert.doesNotMatch(html, /Classificação:|Fonte de dados:|Protocolo aplicável:|Período:/);
+  assert.match(html, /Rajada de 45 km\/h/);
+
+  const semInforme = cheerio.load(renderStatusChangeCard({
+    resumido: true, tipo: "Índice UV", grau: "ALERTA", recomendacoes: ["Evitar exposição solar."],
+  }));
+  assert.equal(semInforme('[data-alert-notice="true"]').length, 0);
+  assert.equal(semInforme('[data-alert-recommendation="true"]').text(), "Evitar exposição solar.");
+});
+
+test("alerta da base Rio lista os sites oficiais de consulta solicitados", () => {
+  const html = renderAlertEmailHtml({
+    cidade: {
+      nome: "Rio de Janeiro", uf: "RJ", integracaoCorRio: true,
+      links: { inmet: "https://previsao.inmet.gov.br/3304557" },
+    },
+    report: { dataFormatadaCurta: "05/10/2026", horaConsulta: "15:00", ventoPorPeriodo: [] },
+    alertas: [{ tipo: "Vento", grau: "ATENÇÃO", recomendacoes: ["Monitorar."] }],
+  });
+  const $ = cheerio.load(html);
+  const bloco = $('[data-official-consultation-sites="true"]');
+  assert.equal(bloco.length, 1);
+  for (const url of [
+    "https://previsao.inmet.gov.br/3304557",
+    "https://monitordesecas.ana.gov.br/",
+    "https://monitordesecas.ana.gov.br/tabela-de-classificacao",
+    "https://clima.saude.gov.br/",
+    "https://cor.rio/",
+  ]) assert.equal(bloco.find(`a[href="${url}"]`).length, 1, url);
+});

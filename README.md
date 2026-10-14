@@ -43,9 +43,9 @@ O envio usa o Gmail via **Senha de App** (não a senha normal da conta):
    (ex.: "Protocolo CIM") e gere a senha de 16 caracteres.
 3. No `.env`, preencha:
    ```
-   GMAIL_USER=heitorfernandesmaciel@gmail.com
+   GMAIL_USER=usuario@empresa.com
    GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
-   REPORT_RECIPIENTS=heitorfernandesmaciel@gmail.com
+   REPORT_RECIPIENTS=destinatario@empresa.com
    ```
    `REPORT_RECIPIENTS` aceita múltiplos e-mails separados por vírgula.
 
@@ -69,8 +69,10 @@ node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))"
 ```
 CIDADE=rio_de_janeiro
 ENVIO_AUTOMATICO_DIARIO=true
-HORA_ENVIO_DIARIO=06:00
 ```
+
+Os horários permanentes são 05:00 e 15:00, ambos no fuso
+`America/Sao_Paulo` e com previsão até 00h.
 
 ## 3. Uso
 
@@ -104,16 +106,16 @@ O painel:
   Salvador) — a base escolhida fica salva na URL (`?cidade=chave`), então dá
   pra fixar uma TV numa base específica salvando esse link.
 - Atualiza os dados automaticamente a cada 10 minutos (sem enviar e-mail).
-- Tem um botão discreto (⚙, canto inferior direito) que abre um campo de
-  senha; ao confirmar, dispara a coleta completa, gera o PDF e envia o
-  e-mail **da base selecionada no momento** — o resultado aparece em um
-  toast na tela.
-- Tem um botão (👥, ao lado do ⚙) para cadastrar/remover responsáveis
-  (nome + e-mail) da base selecionada — protegido pela mesma senha.
-- Também envia automaticamente **todo dia às `HORA_ENVIO_DIARIO`**
-  (padrão 06:00, horário de Brasília) para **todas as bases cadastradas**
-  (cada uma para seus próprios responsáveis), enquanto o servidor estiver
-  rodando — restrinja com `BASES_ENVIO_DIARIO` no `.env` se necessário.
+- Tem um botão discreto (⚙, canto inferior direito) que permite escolher o
+  informativo meteorológico da base atual ou o aviso exclusivo COR-RIO;
+  ambos exigem a senha operacional.
+- Tem um botão (👥, ao lado do ⚙) para cadastrar/remover responsáveis e
+  vincular uma ou várias bases. `COR-RIO — RJ` é uma base somente de
+  distribuição e pode ser o único vínculo de uma pessoa.
+- Envia automaticamente os informativos às 05:00 e 15:00 (horário de
+  Brasília) para as bases meteorológicas e, em fluxo separado, o aviso
+  COR-RIO apenas para seus próprios destinatários. `REPORT_RECIPIENTS` nunca
+  é usado como fallback do aviso COR-RIO.
 
 ### Iniciar automaticamente com o Windows
 
@@ -131,18 +133,19 @@ kiosk também ao iniciar a sessão.
 
 | Fonte | Uso | Observação |
 |---|---|---|
-| **Open-Meteo** (`api.open-meteo.com`) | Base numérica: temperatura, umidade, vento, chuva por período | Gratuita, sem chave, sem cadastro |
+| **Open-Meteo** (`customer-api.open-meteo.com` em produção) | Base numérica: temperatura, umidade, vento, chuva por período | Exige licença comercial e `OPEN_METEO_API_KEY` em produção; a API gratuita fica restrita a desenvolvimento/auditoria não comercial |
 | **INMET** (`apiprevmet3.inmet.gov.br`) | Previsão oficial (validação cruzada) + avisos de perigo ativos (equivalente a alertas de Defesa Civil coordenados nacionalmente) | Gratuita, sem chave, API pública oficial |
-| **Open-Meteo Marine** (`marine-api.open-meteo.com`) | Altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Gratuita, sem chave. Atende ao item do protocolo original que pedia dados de mar (OCEANOP) |
-| **Open-Meteo Air Quality** (`air-quality-api.open-meteo.com`) | Índice UV (exposição de equipes externas) e material particulado PM2,5/PM10 | Gratuita, sem chave |
-| **Monitor de Secas — ANA** (`monitordesecas.ana.gov.br`) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
-| **COR-Rio** (`appcor.cor-rio.work/estagio_cidade` e `cor.rio/wp-json/wp/v2/posts`) | Painel "Comunicados COR-Rio" e card "Comunicado oficial COR-Rio" no PDF (download e anexo do e-mail) — **só na base Rio de Janeiro** (`integracaoCorRio`): estágio operacional da cidade (1–5) e comunicados das categorias Estágios e Prevenção e Operação publicados ou atualizados nas últimas 24 h | Públicas, sem chave. O endpoint de estágio é o mesmo que o widget da página cor.rio consulta (não é uma API documentada; se mudar, o painel mostra "Estágio indisponível"). Painel e PDF usam a mesma instância e o mesmo cache (consulta no máximo a cada 5 min); cores dos estágios em `public/cor-rio-compartilhado.js`; última coleta válida em `data/cor-rio.json`. Em "Fontes Consultadas" do PDF, cada parte só aparece como coleta automática se respondeu naquela geração |
+| **Open-Meteo Marine** (`customer-marine-api.open-meteo.com` em produção) | Altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Mesma licença/chave comercial; atende ao item do protocolo original que pedia dados de mar (OCEANOP) |
+| **Open-Meteo Air Quality / CAMS** (`customer-air-quality-api.open-meteo.com` em produção) | Índice UV, PM2,5/PM10 e European AQI de PM2,5 | Mesma licença/chave comercial; a classificação do ar vem do índice publicado pela fonte |
+| **Clima e Saúde — Ministério da Saúde** ([Excesso de Calor](https://clima.saude.gov.br/)) | EHF, risco combinado à saúde e GeoSES por município | Consulta server-side da página pública oficial, com validação de município, UF e data; não há contrato público de API direta documentado no portal |
+| **Monitor de Secas — ANA** ([portal](https://monitordesecas.ana.gov.br/) e [tabela S0–S4](https://monitordesecas.ana.gov.br/tabela-de-classificacao)) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
+| **COR-Rio** ([Centro de Operações e Resiliência](https://cor.rio/), `appcor.cor-rio.work/estagio_cidade` e `cor.rio/wp-json/wp/v2/posts`) | Painel "Comunicados COR-Rio", seção técnica no PDF disponível para consulta e aviso de e-mail exclusivo da base lógica `COR-RIO — RJ` — somente para o município do Rio de Janeiro (`integracaoCorRio`) | Públicas, sem chave. O aviso por e-mail usa apenas os destinatários vinculados a `cor_rio`; responsáveis da base meteorológica `rio_de_janeiro` não o recebem automaticamente. O endpoint de estágio é o mesmo que o widget da página cor.rio consulta; última coleta válida em `data/cor-rio.json` |
+| **Oceanop / Petrobras** | Diagnóstico da integração privada quando uma área é vinculada | Depende de rede/VPN e contrato interno; unidades não documentadas não são convertidas nem misturadas aos campos públicos |
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório
 inclui os links para checagem manual, com a mesma ressalva de transparência
 usada nos modelos de referência):
-- **Windy.com** — SPA sem API pública gratuita.
 - **Alerta Rio / CODESAL** — boletins em página web, sem endpoint
   JSON documentado e estável. (O COR-Rio é integrado só para a base Rio de
   Janeiro, veja a tabela acima.)
@@ -164,24 +167,41 @@ em `src/sources/` seguindo o mesmo padrão de `openMeteo.js`.
 
 ## 5. Como o "evento mais relevante" é decidido
 
-Motor de regras em `src/logic/riskEngine.js`, com limiares documentados no
-topo do arquivo, mais qualquer aviso oficial ativo do INMET para o
-município. As recomendações das seções 2 e 3 do PDF são montadas
-dinamicamente a partir das categorias de risco detectadas — nunca uma lista
-genérica fixa.
+Motor de regras em `src/logic/riskEngine.js`, com limiares numéricos de chuva
+e vento centralizados em `src/logic/inmetAlertRules.js`. Um aviso oficial
+válido do INMET sempre prevalece para o fenômeno e conserva a severidade
+publicada (Perigo Potencial = Atenção; Perigo = Alerta; Grande Perigo =
+Emergência). Sem aviso oficial correspondente, dados numéricos válidos das
+APIs podem produzir uma **classificação interna baseada na previsão**, sempre
+identificada dessa forma no corpo do e-mail. As recomendações são específicas
+por fenômeno e proporcionais ao nível detectado.
 
 | Categoria | Limiar | Base da referência |
 |---|---|---|
-| Chuva intensa | ≥ 20 mm ou ≥ 70% de probabilidade | calibração operacional |
-| Vento forte | ≥ 60 km/h de rajada | calibração operacional |
-| Calor extremo | ≥ 37 °C | calibração operacional |
+| Chuva — intensidade horária | Atenção de 20 a < 30 mm/h; Alerta de 30 a 60 mm/h; Emergência > 60 mm/h | critérios operacionais centralizados |
+| Chuva — acumulado diário | Atenção de 20 a < 50 mm; Alerta de 50 a 100 mm; Emergência > 100 mm | critérios operacionais centralizados |
+| Vento — rajada | Atenção de 30 a < 40 km/h; Alerta de 40 a 60 km/h; Emergência > 60 km/h | critérios operacionais centralizados |
+| Tempestade prevista sem aviso oficial | Atenção, sem afirmar descarga elétrica confirmada | código meteorológico da fonte numérica |
+| Calor / risco à saúde | EHF Baixo / Severo / Extremo | Clima e Saúde — Ministério da Saúde; temperatura alta isolada não altera o EHF |
 | Baixa umidade | ≤ 20% | calibração operacional |
-| Índice UV alto | ≥ 8 (extremo ≥ 11) | faixas da OMS |
-| Mar grosso | ≥ 2,5 m (moderado ≥ 1,5 m) | escala Douglas |
-| Qualidade do ar ruim | PM2,5 > 25 µg/m³ | diretriz OMS 2021 (limite 15) |
+| Índice UV alto | Atenção ≥ 8; Alerta ≥ 11 por padrão, com nível configurável | faixas da OMS |
+| Condição do mar | Atenção ≥ 1,5 m; Alerta ≥ 2,5 m | referência operacional marítima |
+| Qualidade do ar | Atenção > 60; Alerta > 80; Emergência > 100 no European AQI de PM2,5 | classificação European AQI publicada pela Open-Meteo/CAMS |
 
-Os limiares são um ponto de partida razoável; ajustem os valores em
-`LIMIARES` conforme a experiência operacional do CIM.
+Não altere esses limites de forma isolada: mantenha a implementação, a tabela
+acima e os testes de fronteira sincronizados.
+
+Os níveis declarados pelo CIM seguem internamente este significado:
+
+- **Atenção:** risco aumentado e preparação; ações preventivas e reforço de prontidão.
+- **Alerta:** condição perigosa provável ou em evolução; restrições operacionais e preparação para evacuação ou abrigo.
+- **Emergência:** condição perigosa instalada ou iminente; paralisações, evacuação ou abrigo, resposta de saúde e controle de acessos.
+
+As recomendações de chuva, vento e calor são cumulativas. Para manter leitura
+rápida, o e-mail de alerta mostra somente o título do fenômeno, o informe
+quando existir e as recomendações;
+origem da classificação, explicação do nível CIM e atribuição de Instalações
+não são exibidas no card.
 
 ## 6. Bases cadastradas e como adicionar outra
 

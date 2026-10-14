@@ -51,6 +51,7 @@ test("POST /api/responsaveis/consultar exige a senha", async (t) => {
 test("PDF: 401 sem credencial; 200 com senha (Basic) ou token válido", async (t) => {
   const srv = await subirApp({ pastaRelatorios: pastaComPdf() });
   t.after(srv.fechar);
+  srv.app.locals.arquivosOperacionais.add(PDF);
   const url = `${srv.base}/relatorios/${PDF}`;
 
   let r = await fetch(url);

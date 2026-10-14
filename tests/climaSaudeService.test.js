@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  interpretarHtml, nivelEhf, recomendacoesCalor, consultar, lerArmazenado, validarUrl,
+  interpretarHtml, nivelEhf, recomendacoesCalor, riscoCombinadoCanonico, consultar, lerArmazenado, validarUrl,
 } = require('../src/sources/climaSaudeService');
 const { CIDADES } = require('../src/config/cities');
 const { resumo, compararComManha } = require('../src/logic/scheduledReport');
@@ -33,9 +33,14 @@ test('EHF define apenas seu próprio nível, com recomendações acumulativas', 
     const nivel = nivelEhf(entrada);
     assert.equal(nivel.grau, grau);
     assert.equal(nivel.protocolo, protocolo);
+    assert.ok(nivel.significado);
     assert.equal(recomendacoesCalor(nivel).length, quantidade);
   }
   assert.equal(nivelEhf('desconhecido'), null);
+  assert.deepEqual(
+    ['Sem Risco', 'Normal', 'Baixo', 'Moderado', 'Alto', 'Muito Alto'].map(riscoCombinadoCanonico),
+    ['Normal', 'Normal', 'Baixo', 'Moderado', 'Alto', 'Muito Alto']
+  );
 });
 
 test('interpreta HTML SSR semanticamente e deixa ausências como null', () => {
@@ -57,6 +62,13 @@ test('interpreta HTML SSR semanticamente e deixa ausências como null', () => {
 test('HTML alterado ou EHF ausente não vira Sem excesso', () => {
   assert.throws(() => interpretarHtml('<html><h1>Petrópolis</h1></html>', parametros), /classificação EHF/);
   assert.throws(() => interpretarHtml(pagina({ ehf: null }), parametros), /classificação EHF/);
+});
+
+test('EHF com data diferente da solicitada é rejeitado como desatualizado', () => {
+  assert.throws(
+    () => interpretarHtml(pagina(), { ...parametros, dataReferencia: '2026-09-30' }),
+    /retornou EHF de 2026-09-29.*solicitada é 2026-09-30/
+  );
 });
 
 test('valida URL e não consulta base sem configuração', () => {
@@ -92,13 +104,17 @@ test('timeout real aborta a requisição dentro do limite', async () => {
 
 test('coleta válida persiste e risco combinado não altera grau EHF', async () => {
   let estado = {};
+  let urlConsultada;
   const saida = await consultar(cidade, {
-    fetchFn: async () => ({ status: 200, text: async () => pagina({ ehf: 'Baixo', risco: 'Muito Alto' }) }),
+    fetchFn: async (url) => { urlConsultada = url; return { status: 200, text: async () => pagina({ ehf: 'Baixo', risco: 'Muito Alto' }) }; },
     carregar: () => estado, salvar: (novo) => { estado = novo; }, tentativas: 1,
+    agora: () => new Date('2026-09-29T10:00:00.000Z'),
   });
   assert.equal(saida.status, 'operacional');
   assert.equal(saida.dados.nivel.protocolo, 'P1');
   assert.equal(estado.petropolis.riscoCombinado, 'Muito Alto');
+  assert.match(urlConsultada, /modo=ehf/);
+  assert.match(urlConsultada, /data=2026-09-29/);
 });
 
 test('05h→15h informa mudança e alerta de calor só em transição', () => {
@@ -116,7 +132,8 @@ test('05h→15h informa mudança e alerta de calor só em transição', () => {
   assert.equal(filtrarNovidades('petropolis', agravado, estado)[0].motivo, 'agravou');
   const htmlAlerta = renderAlertEmailHtml({ cidade, report: { dataFormatadaCurta: '29/09/2026', horaConsulta: '15:00' }, alertas: agravado });
   assert.match(htmlAlerta, /CALOR \/ RISCO À SAÚDE — ALERTA/);
-  assert.match(htmlAlerta, /Protocolo aplicável:<\/strong> P2/);
+  assert.match(htmlAlerta, /Informe do aviso:<\/strong> EHF Severo/);
+  assert.doesNotMatch(htmlAlerta, /Protocolo aplicável|Origem da classificação|Significado do nível CIM|Instalações/);
   assert.equal(detectarAlertasGraves({ ...base, climaSaude: { status: 'indisponivel', dados: null } }).some((a) => a.assinatura === 'calor-ehf'), false);
 });
 

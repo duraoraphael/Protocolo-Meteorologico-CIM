@@ -1,5 +1,5 @@
-// Fonte: Open-Meteo (https://open-meteo.com) — API pública, gratuita, sem
-// necessidade de chave/cadastro. Usada como base numérica (temperatura,
+// Fonte: Open-Meteo (https://open-meteo.com). Em produção, a licença
+// comercial e a chave do endpoint customer-* são obrigatórias. Usada como base numérica (temperatura,
 // umidade, vento, probabilidade e volume de chuva) por período do dia.
 
 const WMO_DESCRICOES = {
@@ -38,6 +38,7 @@ const {
   API_TENTATIVAS,
   buscarJsonComRetentativa,
 } = require("./httpJsonClient");
+const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
 
 const CODIGOS_TEMPESTADE = new Set([95, 96, 99]);
 const OPEN_METEO_TIMEOUT_MS = API_TIMEOUT_MS;
@@ -110,48 +111,84 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
     };
   }
 
-  const velocidades = idxs.map((i) => horas.wind_speed_10m[i]);
-  const rajadas = idxs.map((i) => horas.wind_gusts_10m[i]);
-  const direcoes = idxs.map((i) => horas.wind_direction_10m[i]);
-  const probs = idxs.map((i) => horas.precipitation_probability[i]);
-  const precs = idxs.map((i) => horas.precipitation[i]);
-  const codigos = idxs.map((i) => horas.weather_code[i]);
+  const serie = (campo) => idxs.map((i) => horas[campo]?.[i]);
+  const completa = (campo) => {
+    const valores = serie(campo);
+    return valores.length === idxs.length && valores.every(Number.isFinite) ? valores : null;
+  };
+  const velocidades = completa("wind_speed_10m");
+  const rajadas = completa("wind_gusts_10m");
+  const direcoes = completa("wind_direction_10m");
+  const probs = completa("precipitation_probability");
+  const precs = completa("precipitation");
+  const codigos = serie("weather_code").filter(Number.isFinite);
 
-  const velocidadeMediaKmh =
-    velocidades.reduce((a, b) => a + b, 0) / velocidades.length;
-  const velocidadeMaxKmh = Math.max(...velocidades);
-  const rajadaMaxKmh = Math.max(...rajadas);
+  const velocidadeMediaKmh = velocidades
+    ? velocidades.reduce((a, b) => a + b, 0) / velocidades.length
+    : null;
+  const velocidadeMaxKmh = velocidades ? Math.max(...velocidades) : null;
+  const rajadaMaxKmh = rajadas ? Math.max(...rajadas) : null;
   // Média vetorial: a aritmética dos graus erra perto do norte (350° e 10°
   // dariam 180°).
-  const direcaoMedia = (Math.atan2(
+  const direcaoMedia = direcoes ? (Math.atan2(
     direcoes.reduce((a, d) => a + Math.sin((d * Math.PI) / 180), 0),
     direcoes.reduce((a, d) => a + Math.cos((d * Math.PI) / 180), 0)
-  ) * 180 / Math.PI + 360) % 360;
-  const probabilidadeChuva = Math.max(...probs);
-  const precipitacaoMm = precs.reduce((a, b) => a + b, 0);
-  const precipitacoesValidas = precs.filter(Number.isFinite);
-  const precipitacaoHorariaMaxMm = precipitacoesValidas.length
-    ? Math.max(...precipitacoesValidas)
-    : null;
+  ) * 180 / Math.PI + 360) % 360 : null;
+  const probabilidadeChuva = probs ? Math.max(...probs) : null;
+  const precipitacaoMm = precs ? precs.reduce((a, b) => a + b, 0) : null;
+  const precipitacaoHorariaMaxMm = precs ? Math.max(...precs) : null;
   const tempestade = codigos.some((c) => CODIGOS_TEMPESTADE.has(c));
 
   return {
     periodo: PERIODOS[chave].label,
     ...janela,
     direcao: direcaoCardinal(direcaoMedia),
-    intensidadeVento: `${classificarIntensidadeVento(Math.round(velocidadeMaxKmh))} (até ${Math.round(velocidadeMaxKmh)} km/h)`,
-    velocidadeMediaKmh: Math.round(velocidadeMediaKmh),
-    velocidadeMaxKmh: Math.round(velocidadeMaxKmh),
-    rajadaMaxKmh: Math.round(rajadaMaxKmh),
-    probabilidadeChuva: Math.round(probabilidadeChuva),
-    precipitacaoMm: Math.round(precipitacaoMm * 10) / 10,
+    intensidadeVento: velocidadeMaxKmh == null ? "Sem dado" : `${classificarIntensidadeVento(Math.round(velocidadeMaxKmh))} (até ${Math.round(velocidadeMaxKmh)} km/h)`,
+    velocidadeMediaKmh: velocidadeMediaKmh == null ? null : Math.round(velocidadeMediaKmh),
+    velocidadeMaxKmh: velocidadeMaxKmh == null ? null : Math.round(velocidadeMaxKmh),
+    rajadaMaxKmh: rajadaMaxKmh == null ? null : Math.round(rajadaMaxKmh),
+    probabilidadeChuva: probabilidadeChuva == null ? null : Math.round(probabilidadeChuva),
+    precipitacaoMm: precipitacaoMm == null ? null : Math.round(precipitacaoMm * 10) / 10,
     precipitacaoHorariaMaxMm:
       precipitacaoHorariaMaxMm == null
         ? null
         : Math.round(precipitacaoHorariaMaxMm * 10) / 10,
     tempestade,
-    disponivel: true,
+    disponivel: [velocidadeMaxKmh, rajadaMaxKmh, probabilidadeChuva, precipitacaoMm].some(Number.isFinite) || codigos.length > 0,
   };
+}
+
+function validarResposta(json, fuso) {
+  if (!json || !Array.isArray(json.hourly?.time) || !json.hourly.time.length
+      || !Array.isArray(json.daily?.time) || !json.daily.time.length) {
+    const erro = new Error("Open-Meteo retornou payload sem séries horária e diária válidas.");
+    erro.name = "ParserError";
+    throw erro;
+  }
+  if (!json.hourly.time.every((valor) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(valor)))
+      || !json.daily.time.every((valor) => /^\d{4}-\d{2}-\d{2}$/.test(String(valor)))) {
+    const erro = new Error("Open-Meteo retornou timestamps inválidos.");
+    erro.name = "ParserError";
+    throw erro;
+  }
+  if (json.timezone && json.timezone !== fuso) {
+    const erro = new Error(`Open-Meteo retornou fuso divergente (${json.timezone}).`);
+    erro.name = "ParserError";
+    throw erro;
+  }
+  const unidadesEsperadas = {
+    temperature_2m: "°C", relative_humidity_2m: "%", precipitation_probability: "%",
+    precipitation: "mm", wind_speed_10m: "km/h", wind_gusts_10m: "km/h",
+    wind_direction_10m: "°",
+  };
+  for (const [campo, esperada] of Object.entries(unidadesEsperadas)) {
+    const recebida = json.hourly_units?.[campo];
+    if (recebida != null && recebida !== esperada) {
+      const erro = new Error(`Open-Meteo retornou unidade inesperada para ${campo}: ${recebida}.`);
+      erro.name = "ParserError";
+      throw erro;
+    }
+  }
 }
 
 /**
@@ -186,7 +223,7 @@ async function buscarOpenMeteo(latitude, longitude, {
     forecast_days: String(diasPrevisao),
   });
 
-  const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+  const url = aplicarConfiguracaoOpenMeteo(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
 
   const json = await buscarJsonComRetentativa(url, {
     nomeFonte: "Open-Meteo",
@@ -195,9 +232,13 @@ async function buscarOpenMeteo(latitude, longitude, {
     tentativas: OPEN_METEO_TENTATIVAS,
     esperarFn,
   });
+  validarResposta(json, fuso);
   const horas = json.hourly;
   const dia = json.daily;
   const dataReferencia = dia.time[0];
+  const indicesDia = horas.time.map((instante, i) => ({ instante, i }))
+    .filter(({ instante }) => String(instante).slice(0, 10) === dataReferencia)
+    .map(({ i }) => i);
   const indicesJanela = horas.time.map((instante, i) => ({ instante, i }))
     .filter(({ instante }) => {
       const hora = Number(instante.slice(11, 13));
@@ -214,16 +255,17 @@ async function buscarOpenMeteo(latitude, longitude, {
     tarde: resumirPeriodo(horas, "tarde", { dataReferencia, inicioHora, fimHora }),
     noite: resumirPeriodo(horas, "noite", { dataReferencia, inicioHora, fimHora }),
   };
-  // A tabela histórica de chuva do PDF cobre o dia operacional completo e
-  // mantém os três grupos originais, independentemente da janela do card da
-  // edição. É derivada da mesma resposta horária, sem nova consulta.
+  // As tabelas por período do PDF cobrem o dia operacional completo e mantêm
+  // os três grupos originais, independentemente da janela do card da edição.
+  // Esta visão é derivada da mesma resposta horária, sem nova consulta.
   const periodosDiaCompleto = {
     manha: resumirPeriodo(horas, "manha", { dataReferencia, inicioHora: INICIO_JANELA_HOJE, fimHora: 24 }),
     tarde: resumirPeriodo(horas, "tarde", { dataReferencia, inicioHora: INICIO_JANELA_HOJE, fimHora: 24 }),
     noite: resumirPeriodo(horas, "noite", { dataReferencia, inicioHora: INICIO_JANELA_HOJE, fimHora: 24 }),
   };
 
-  const umidades = horas.relative_humidity_2m;
+  const valoresDia = (campo) => indicesDia.map((i) => horas[campo]?.[i]).filter(Number.isFinite);
+  const umidades = valoresDia("relative_humidity_2m");
   const listaPeriodos = Object.values(periodos).filter((p) => p.disponivel);
   const temTempestadeHoje = listaPeriodos.some((p) => p.tempestade);
 
@@ -232,8 +274,10 @@ async function buscarOpenMeteo(latitude, longitude, {
   // "dia inteiro" bruto da Open-Meteo (que inclui a madrugada 00h-05h já
   // encerrada). Misturar as duas janelas gerava alarmes de "chuva intensa"
   // baseados em picos de madrugada que já haviam passado na hora da consulta.
-  const precipitacaoTotalMm =
-    Math.round(listaPeriodos.reduce((soma, p) => soma + (p.precipitacaoMm || 0), 0) * 10) / 10;
+  const precipitacoesPeriodo = listaPeriodos.map((p) => p.precipitacaoMm);
+  const precipitacaoTotalMm = listaPeriodos.length && precipitacoesPeriodo.every(Number.isFinite)
+    ? Math.round(precipitacoesPeriodo.reduce((soma, valor) => soma + valor, 0) * 10) / 10
+    : null;
   const maximoOuNulo = (valores) => valores.length ? Math.max(...valores) : null;
   const precipitacaoHorariaMaxMm = maximoOuNulo(listaPeriodos.map((p) => p.precipitacaoHorariaMaxMm).filter(Number.isFinite));
   const probabilidadeChuvaMax = maximoOuNulo(listaPeriodos.map((p) => p.probabilidadeChuva).filter(Number.isFinite));
@@ -248,24 +292,28 @@ async function buscarOpenMeteo(latitude, longitude, {
 
   return {
     fonte: "Open-Meteo",
-    url,
+    url: removerCredenciaisOpenMeteo(url),
     dataReferencia: dia.time[0],
     fuso,
     janelaHoje: { inicioHora, fimHora, rotulo: `${hh(inicioHora)}–${hh(fimHora)}` },
     condicaoGeral: !agregarJanela
-      ? descreverCodigo(dia.weather_code[0])
-      : descreverCodigo(horas.weather_code[indicesJanela[0]]),
+      ? descreverCodigo(dia.weather_code?.[0])
+      : descreverCodigo(horas.weather_code?.[indicesJanela[0]]),
     atual: json.current ? {
       temperaturaC: json.current.temperature_2m ?? null,
       codigo: json.current.weather_code ?? null,
       condicao: descreverCodigo(json.current.weather_code),
       dia: json.current.is_day === 1,
       horario: json.current.time,
+      fonte: "Open-Meteo",
+      // Apesar do nome "current", a fonte calcula este bloco com dados de
+      // modelos meteorológicos; não se trata de observação de estação.
+      previsao: true,
     } : null,
-    tempMin: !agregarJanela ? Math.round(dia.temperature_2m_min[0]) : minimoJanela("temperature_2m"),
-    tempMax: !agregarJanela ? Math.round(dia.temperature_2m_max[0]) : maximoJanela("temperature_2m"),
-    umidadeMin: !agregarJanela ? Math.round(Math.min(...umidades)) : minimoJanela("relative_humidity_2m"),
-    umidadeMax: !agregarJanela ? Math.round(Math.max(...umidades)) : maximoJanela("relative_humidity_2m"),
+    tempMin: !agregarJanela ? (Number.isFinite(dia.temperature_2m_min?.[0]) ? Math.round(dia.temperature_2m_min[0]) : null) : minimoJanela("temperature_2m"),
+    tempMax: !agregarJanela ? (Number.isFinite(dia.temperature_2m_max?.[0]) ? Math.round(dia.temperature_2m_max[0]) : null) : maximoJanela("temperature_2m"),
+    umidadeMin: !agregarJanela ? (umidades.length ? Math.round(Math.min(...umidades)) : null) : minimoJanela("relative_humidity_2m"),
+    umidadeMax: !agregarJanela ? (umidades.length ? Math.round(Math.max(...umidades)) : null) : maximoJanela("relative_humidity_2m"),
     precipitacaoTotalMm,
     precipitacaoDiariaMm: Number.isFinite(dia.precipitation_sum[0]) ? Math.round(dia.precipitation_sum[0] * 10) / 10 : null,
     precipitacaoHorariaMaxMm,
@@ -278,9 +326,9 @@ async function buscarOpenMeteo(latitude, longitude, {
     chuvaHoraria,
     previsaoDias: dia.time.map((data, i) => ({
       data,
-      condicao: descreverCodigo(dia.weather_code[i]),
-      tempMin: dia.temperature_2m_min[i],
-      tempMax: dia.temperature_2m_max[i],
+      condicao: descreverCodigo(dia.weather_code?.[i]),
+      tempMin: Number.isFinite(dia.temperature_2m_min?.[i]) ? dia.temperature_2m_min[i] : null,
+      tempMax: Number.isFinite(dia.temperature_2m_max?.[i]) ? dia.temperature_2m_max[i] : null,
       // Agregado diário da fonte no dia civil local (00h–24h).
       janela: "00h–24h",
       chuvaMm: Number.isFinite(dia.precipitation_sum[i]) ? Math.round(dia.precipitation_sum[i] * 10) / 10 : null,
@@ -297,4 +345,5 @@ module.exports = {
   PERIODOS,
   OPEN_METEO_TIMEOUT_MS,
   OPEN_METEO_TENTATIVAS,
+  validarResposta,
 };

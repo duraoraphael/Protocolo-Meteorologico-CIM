@@ -173,6 +173,13 @@ test("outras cidades: sem consulta, sem card e fontes intactas", async () => {
   assert.doesNotMatch(renderPdfHtml(r), /COR-Rio/);
 });
 
+test("anexo do informativo geral omite o aviso de distribuição exclusiva COR-RIO", async () => {
+  const preparado = await html(estado());
+  const anexoGeral = renderPdfHtml(preparado.r, { incluirCorRio: false });
+  assert.doesNotMatch(anexoGeral, /Comunicado oficial COR-Rio|ESTÁGIO DE CALOR/);
+  assert.match(anexoGeral, /Avisos oficiais do INMET/);
+});
+
 test("extraordinário omite estágios 1 do COR-Rio, mas o programado os preserva", async () => {
   const normal = estado({ nivel: 1, nivelCalor: 1 });
   const programado = await html(normal);

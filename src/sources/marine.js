@@ -1,5 +1,5 @@
 // Fonte: Open-Meteo Marine (https://open-meteo.com/en/docs/marine-weather-api)
-// API pública, gratuita, sem chave. Fornece altura/período/direção de ondas,
+// A produção usa o endpoint comercial customer-* com chave. Fornece altura/período/direção de ondas,
 // marulho (swell) e temperatura da superfície do mar.
 //
 // Atende ao item do protocolo original que pedia dados de mar (OCEANOP) para
@@ -13,6 +13,7 @@ const {
   API_TENTATIVAS,
   buscarJsonComRetentativa,
 } = require("./httpJsonClient");
+const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
 const {
   operacional,
   degradado,
@@ -21,7 +22,7 @@ const {
 } = require("./sourceHealth");
 
 const PERIODOS = {
-  manha: { label: "Manhã", horaInicio: 6, horaFim: 12 },
+  manha: { label: "Manhã", horaInicio: 5, horaFim: 12 },
   tarde: { label: "Tarde", horaInicio: 12, horaFim: 18 },
   noite: { label: "Noite", horaInicio: 18, horaFim: 24 },
 };
@@ -52,14 +53,23 @@ function direcaoCardinal(graus) {
 }
 
 function media(valores) {
-  const validos = valores.filter((v) => v !== null && v !== undefined);
+  const validos = valores.filter(Number.isFinite);
   if (validos.length === 0) return null;
   return validos.reduce((a, b) => a + b, 0) / validos.length;
 }
 
 function maximo(valores) {
-  const validos = valores.filter((v) => v !== null && v !== undefined);
+  const validos = valores.filter(Number.isFinite);
   return validos.length ? Math.max(...validos) : null;
+}
+
+function mediaCircular(valores) {
+  const validos = valores.filter(Number.isFinite);
+  if (!validos.length) return null;
+  const x = validos.reduce((soma, valor) => soma + Math.cos(valor * Math.PI / 180), 0) / validos.length;
+  const y = validos.reduce((soma, valor) => soma + Math.sin(valor * Math.PI / 180), 0) / validos.length;
+  if (Math.hypot(x, y) < 1e-8) return null;
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
 function arredondar(valor, casas = 1) {
@@ -73,8 +83,9 @@ function resumirPeriodo(horas, chave) {
   const idxs = horas.time
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => {
-      const h = new Date(t).getHours();
-      return h >= horaInicio && h < horaFim;
+      const correspondencia = String(t).match(/^\d{4}-\d{2}-\d{2}T(\d{2}):\d{2}/);
+      const h = correspondencia ? Number(correspondencia[1]) : NaN;
+      return Number.isFinite(h) && h >= horaInicio && h < horaFim;
     })
     .map(({ i }) => i);
 
@@ -87,7 +98,7 @@ function resumirPeriodo(horas, chave) {
     alturaMaxM: arredondar(alturaMax),
     alturaMediaM: arredondar(media(pegar("wave_height"))),
     periodoOndaS: arredondar(media(pegar("wave_period"))),
-    direcaoOnda: direcaoCardinal(media(pegar("wave_direction"))),
+    direcaoOnda: direcaoCardinal(mediaCircular(pegar("wave_direction"))),
     marulhoMaxM: arredondar(maximo(pegar("swell_wave_height"))),
     estadoMar: classificarEstadoMar(alturaMax),
   };
@@ -98,6 +109,7 @@ function resumirPeriodo(horas, chave) {
  * Lança se o ponto estiver em terra (a API responde só com nulos).
  */
 async function buscarMar(latitude, longitude, {
+  fuso = "America/Sao_Paulo",
   fetchImpl = fetch,
   timeoutMs = OPEN_METEO_MARINE_TIMEOUT_MS,
   esperarFn,
@@ -115,11 +127,11 @@ async function buscarMar(latitude, longitude, {
     longitude: String(longitude),
     hourly:
       "wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,sea_surface_temperature",
-    timezone: "America/Sao_Paulo",
+    timezone: fuso,
     forecast_days: "1",
   });
 
-  const url = `https://marine-api.open-meteo.com/v1/marine?${params.toString()}`;
+  const url = aplicarConfiguracaoOpenMeteo(`https://marine-api.open-meteo.com/v1/marine?${params.toString()}`);
 
   const json = await buscarJsonComRetentativa(url, {
     nomeFonte: "Open-Meteo Marine",
@@ -133,6 +145,15 @@ async function buscarMar(latitude, longitude, {
   });
   const horas = json.hourly;
 
+  if (json.timezone && json.timezone !== fuso) {
+    const erro = new Error(`Open-Meteo Marine retornou fuso divergente (${json.timezone}).`);
+    erro.name = "ParserError";
+    erro.tipo = "parser";
+    erro.code = "MARINE_TIMEZONE_MISMATCH";
+    erro.transitorio = false;
+    throw erro;
+  }
+
   if (!horas || !Array.isArray(horas.time)) {
     const erro = new Error("Open-Meteo Marine retornou payload sem série horária.");
     erro.name = "ParserError";
@@ -142,7 +163,7 @@ async function buscarMar(latitude, longitude, {
     throw erro;
   }
 
-  const temAlgumDado = (horas?.wave_height || []).some((v) => v !== null);
+  const temAlgumDado = (horas?.wave_height || []).some(Number.isFinite);
   if (!temAlgumDado) {
     const erro = new Error(
       "Ponto sem cobertura do modelo de ondas (coordenada em terra). Cadastre 'pontoMar' na base se ela tiver litoral."
@@ -164,7 +185,7 @@ async function buscarMar(latitude, longitude, {
 
   return {
     fonte: "Open-Meteo Marine",
-    url,
+    url: removerCredenciaisOpenMeteo(url),
     alturaMaxDiaM,
     estadoMarDia: classificarEstadoMar(alturaMaxDiaM),
     temperaturaMarC: arredondar(media(horas.sea_surface_temperature || [])),
@@ -197,7 +218,9 @@ async function buscarMarComFallback(cidade, {
   const ponto = cidade.pontoMar || { latitude: cidade.latitude, longitude: cidade.longitude };
   const checkedAt = agora().toISOString();
   try {
-    const resultado = await consultar(ponto.latitude, ponto.longitude);
+    const resultado = await consultar(ponto.latitude, ponto.longitude, {
+      fuso: cidade.fusoHorario || "America/Sao_Paulo",
+    });
     const dados = {
       ...resultado,
       consultadoEm: checkedAt,
@@ -246,6 +269,8 @@ module.exports = {
   buscarMar,
   buscarMarComFallback,
   classificarEstadoMar,
+  direcaoCardinal,
+  mediaCircular,
   OPEN_METEO_MARINE_TIMEOUT_MS,
   OPEN_METEO_MARINE_TENTATIVAS,
   ARQUIVO_CACHE_MARINE,

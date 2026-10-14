@@ -7,12 +7,13 @@
 
 const {
   GRAUS,
+  classificarCondicoesMeteorologicas,
   maiorGrau,
   recomendacoes,
 } = require("./inmetAlertRules");
 const { formatarTitulo } = require("../../public/alert-title");
 const { grauAvisoInmet, fenomenoAvisoInmet, normalizarComparacao } = require("../sources/inmet");
-const { recomendacoesProtecao } = require("./healthProtection");
+const { recomendacoesFenomeno } = require("./phenomenonRecommendations");
 
 const LIMIARES = {
   // Contrato legado do relatório semanal. O informativo diário não usa estes
@@ -23,7 +24,6 @@ const LIMIARES = {
   chuvaModeradaProb: 30,
   ventoForteKmh: 60,
   ventoModeradoKmh: 40,
-  calorExtremoC: 37,
   baixaUmidadePct: 20,
   // Índice UV — faixas da OMS: 8+ é "muito alto", 11+ é "extremo".
   uvMuitoAlto: 8,
@@ -32,12 +32,30 @@ const LIMIARES = {
   // transferência de pessoal e uso de heliponto em instalações costeiras.
   marGrossoM: 2.5,
   marModeradoM: 1.5,
-  // PM2.5 (µg/m³) — acima de 25 já é "moderada/ruim" pela diretriz da OMS.
-  pm25RuimUgM3: 25,
+  // European AQI da Open-Meteo/CAMS: acima de 60 começa a faixa "Ruim".
+  aqiEuropeuRuim: 60,
 };
 
 function textoAvisos(avisos, regex) {
   return avisos.some((a) => regex.test(a.descricao || ""));
+}
+
+function janelaDoEvento(periodos, assinatura) {
+  const lista = Object.values(periodos || {}).filter(Boolean);
+  const campos = assinatura === "vento"
+    ? ["rajadaMaxKmh"]
+    : ["precipitacaoHorariaMaxMm", "precipitacaoMm"];
+  let escolhido = null;
+  let maior = -Infinity;
+  for (const periodo of lista) {
+    const valor = campos.map((campo) => periodo?.[campo]).find(Number.isFinite);
+    if (Number.isFinite(valor) && valor > maior) {
+      maior = valor;
+      escolhido = periodo;
+    }
+  }
+  if (!escolhido) return "ao longo do dia";
+  return [escolhido.periodo, escolhido.janela ? `(${escolhido.janela})` : null].filter(Boolean).join(" ");
 }
 
 const NIVEL_POR_GRAU = Object.freeze({
@@ -64,6 +82,7 @@ function grauUvConfigurado(categoria) {
 function rotuloFenomeno(tipo) {
   return ({
     raios: "TEMPESTADE COM RAIOS",
+    tempestadePrevista: "TEMPESTADE",
     calorExtremo: "CALOR EXTREMO",
     baixaUmidade: "BAIXA UMIDADE",
     marGrosso: "AGITAÇÃO MARÍTIMA",
@@ -78,6 +97,12 @@ function avaliarRiscos(consolidado) {
   const {
     tempMax,
     umidadeMin,
+    rajadaMaxKmh,
+    precipitacaoHorariaMaxMm,
+    precipitacaoTotalMm,
+    temTempestadeHoje,
+    periodos,
+    fontesPorCampo = {},
     avisosInmet = [],
     mar,
     qualidadeAr,
@@ -85,10 +110,23 @@ function avaliarRiscos(consolidado) {
 
   const candidatos = [];
 
-  // Chuva intensa, vento/rajada e atividade elétrica só viram alertas a
-  // partir de aviso oficial do INMET. As previsões numéricas de terceiros
-  // permanecem informativas e nunca determinam existência ou severidade.
+  // Avisos oficiais sempre prevalecem. Quando não há aviso aplicável ao
+  // fenômeno, os valores numéricos confiáveis podem gerar uma classificação
+  // interna, identificada explicitamente como previsão e sem atribuição ao
+  // INMET.
   const avisosCobertos = new Set();
+  const contextosOficiais = avisosInmet.map((aviso) => {
+    const fenomeno = fenomenoAvisoInmet(aviso.descricao);
+    const texto = normalizarComparacao([aviso.descricao, aviso.riscos].flat().filter(Boolean).join(" "));
+    return {
+      aviso,
+      chuva: fenomeno === "chuva" || (fenomeno === "tempestade" && /chuva|alagamento/.test(texto)),
+      vento: fenomeno === "vento" || (fenomeno === "tempestade" && /vento|rajada/.test(texto)),
+    };
+  });
+  const temAvisoChuva = contextosOficiais.some((contexto) => contexto.chuva);
+  const temAvisoVento = contextosOficiais.some((contexto) => contexto.vento);
+  const temAvisoTempestade = avisosInmet.some((aviso) => fenomenoAvisoInmet(aviso.descricao) === "tempestade");
   const avisoEletrico = avisosInmet.find((aviso) => /raio|trovoada/i.test(aviso.descricao || ""));
   if (avisoEletrico) {
     const grau = grauAvisoInmet(avisoEletrico.severidade) || "ATENÇÃO";
@@ -100,6 +138,8 @@ function avaliarRiscos(consolidado) {
       fonteDados: "INMET — aviso oficial",
       descricao: "Atividade elétrica indicada em aviso oficial do INMET; consulte o aviso completo abaixo.",
       avisoInmet: avisoEletrico,
+      naturezaDado: "Aviso oficial",
+      recomendacoes: recomendacoesFenomeno("tempestade", grau),
     });
     avisosCobertos.add(avisoEletrico);
   }
@@ -121,6 +161,7 @@ function avaliarRiscos(consolidado) {
       recomendacoes: recomendacoes("chuva", grau),
       fonteDados: "INMET — aviso oficial",
       avisoInmet: aviso,
+      naturezaDado: "Aviso oficial",
     });
     if (vento) candidatos.push({
       assinatura: "vento",
@@ -132,53 +173,98 @@ function avaliarRiscos(consolidado) {
       recomendacoes: recomendacoes("vento", grau),
       fonteDados: "INMET — aviso oficial",
       avisoInmet: aviso,
+      naturezaDado: "Aviso oficial",
     });
     avisosCobertos.add(aviso);
   }
 
-  if (tempMax >= LIMIARES.calorExtremoC || textoAvisos(avisosInmet, /calor/i)) {
+  const internos = classificarCondicoesMeteorologicas({
+    rajadaKmh: rajadaMaxKmh,
+    chuvaHorariaMmH: precipitacaoHorariaMaxMm,
+    chuvaDiariaMm: precipitacaoTotalMm,
+  }).eventos;
+  for (const evento of internos) {
+    if ((evento.assinatura === "vento" && temAvisoVento)
+      || (evento.assinatura === "chuva" && temAvisoChuva)) continue;
+    const atencao = evento.grau === "ATENÇÃO";
+    const tipo = evento.assinatura === "vento"
+      ? (atencao ? "ventoModerado" : "ventoForte")
+      : (atencao ? "chuvaModerada" : "chuvaIntensa");
+    const fontes = evento.assinatura === "vento"
+      ? [fontesPorCampo.rajadaMaxKmh]
+      : [fontesPorCampo.precipitacaoHorariaMaxMm, fontesPorCampo.precipitacaoTotalMm];
     candidatos.push({
-      tipo: "calorExtremo",
-      nivel: 3,
-      janela: "tarde",
-      descricao: `Temperatura máxima elevada prevista (${tempMax}°C), com risco de estresse térmico em atividades externas.`,
+      ...evento,
+      tipo,
+      nivel: NIVEL_POR_GRAU[evento.grau],
+      janela: janelaDoEvento(periodos, evento.assinatura),
+      descricao: evento.detalhe,
+      fonteDados: [...new Set(fontes.filter((fonte) => fonte && fonte !== "Indisponível"))].join(" / ")
+        || "Previsão meteorológica integrada",
+      naturezaDado: "Classificação interna baseada na previsão",
     });
   }
 
-  if (umidadeMin <= LIMIARES.baixaUmidadePct || textoAvisos(avisosInmet, /baixa umidade/i)) {
+  if (temTempestadeHoje && !temAvisoTempestade) {
+    candidatos.push({
+      assinatura: "tempestade",
+      tipo: "tempestadePrevista",
+      grau: "ATENÇÃO",
+      nivel: NIVEL_POR_GRAU["ATENÇÃO"],
+      janela: "períodos com código meteorológico de tempestade",
+      descricao: "A previsão indica condição de tempestade ou trovoada; não há confirmação de descargas elétricas por aviso oficial nesta coleta.",
+      fonteDados: fontesPorCampo.temTempestadeHoje || "Previsão meteorológica integrada",
+      naturezaDado: "Classificação interna baseada na previsão",
+      recomendacoes: recomendacoesFenomeno("tempestade", "ATENÇÃO"),
+    });
+  }
+
+  if ((Number.isFinite(umidadeMin) && umidadeMin <= LIMIARES.baixaUmidadePct) || textoAvisos(avisosInmet, /baixa umidade/i)) {
     candidatos.push({
       tipo: "baixaUmidade",
       nivel: 1,
       janela: "tarde",
-      descricao: `Umidade relativa mínima baixa prevista (${umidadeMin}%), com atenção à saúde e risco de incêndio.`,
+      descricao: Number.isFinite(umidadeMin)
+        ? `Umidade relativa mínima baixa prevista (${umidadeMin}%), com atenção à saúde e risco de incêndio.`
+        : "Aviso oficial de baixa umidade, com atenção à saúde e risco de incêndio.",
+      naturezaDado: textoAvisos(avisosInmet, /baixa umidade/i)
+        ? "Aviso oficial"
+        : "Classificação interna baseada na previsão",
+      recomendacoes: recomendacoesFenomeno("umidade", "ATENÇÃO"),
     });
   }
 
   // Condições de mar (apenas bases costeiras — `mar` vem nulo nas demais).
-  if (!mar?.desatualizado && mar?.alturaMaxDiaM != null) {
+  if (!mar?.desatualizado && Number.isFinite(mar?.alturaMaxDiaM)) {
     if (mar.alturaMaxDiaM >= LIMIARES.marGrossoM || textoAvisos(avisosInmet, /ressaca|agitação marítima/i)) {
       candidatos.push({
         tipo: "marGrosso",
         nivel: 4,
         janela:
-          mar.periodos.find((p) => p.alturaMaxM >= LIMIARES.marGrossoM)?.periodo ||
+          mar.periodos?.find((p) => Number.isFinite(p.alturaMaxM) && p.alturaMaxM >= LIMIARES.marGrossoM)?.periodo ||
           "ao longo do dia",
         descricao: `Mar ${mar.estadoMarDia.toLowerCase()} previsto (ondas de até ${mar.alturaMaxDiaM} m), com impacto potencial em operação portuária, transferência de pessoal e uso de heliponto.`,
+        naturezaDado: textoAvisos(avisosInmet, /ressaca|agitação marítima/i)
+          ? "Aviso oficial"
+          : "Classificação interna baseada na previsão",
+        recomendacoes: recomendacoesFenomeno("mar", "ALERTA"),
       });
     } else if (mar.alturaMaxDiaM >= LIMIARES.marModeradoM) {
       candidatos.push({
         tipo: "marModerado",
         nivel: 2,
         janela:
-          mar.periodos.find((p) => p.alturaMaxM >= LIMIARES.marModeradoM)?.periodo ||
+          mar.periodos?.find((p) => Number.isFinite(p.alturaMaxM) && p.alturaMaxM >= LIMIARES.marModeradoM)?.periodo ||
           "ao longo do dia",
         descricao: `Mar ${mar.estadoMarDia.toLowerCase()} previsto (ondas de até ${mar.alturaMaxDiaM} m).`,
+        naturezaDado: "Classificação interna baseada na previsão",
+        recomendacoes: recomendacoesFenomeno("mar", "ATENÇÃO"),
       });
     }
   }
 
   // Índice UV — risco de queimadura solar para equipes em trabalho externo.
-  if (qualidadeAr?.uvMax != null && qualidadeAr.uvMax >= LIMIARES.uvMuitoAlto) {
+  if (Number.isFinite(qualidadeAr?.uvMax) && qualidadeAr.uvMax >= LIMIARES.uvMuitoAlto) {
     const extremo = qualidadeAr.uvMax >= LIMIARES.uvExtremo;
     const grauUv = grauUvConfigurado(extremo ? "extremo" : "muito_alto");
     candidatos.push({
@@ -187,17 +273,26 @@ function avaliarRiscos(consolidado) {
       nivel: NIVEL_POR_GRAU[grauUv],
       janela: qualidadeAr.horaPicoUv ? `pico por volta das ${qualidadeAr.horaPicoUv}` : "meio do dia",
       descricao: `Índice UV ${qualidadeAr.uvClassificacao.nivel.toLowerCase()} previsto (máx. ${qualidadeAr.uvMax}), com risco de queimadura solar em exposição curta sem proteção.`,
-      recomendacoes: recomendacoesProtecao(grauUv),
+      naturezaDado: "Classificação interna baseada na previsão",
+      recomendacoes: recomendacoesFenomeno("uv", grauUv),
     });
   }
 
-  // Qualidade do ar — material particulado fino (respirável).
-  if (qualidadeAr?.pm25Medio != null && qualidadeAr.pm25Medio > LIMIARES.pm25RuimUgM3) {
+  // Qualidade do ar — classificação oficial do European AQI calculada pela
+  // própria fonte. A concentração de PM2,5 continua visível, mas não é
+  // convertida localmente em uma categoria que a OMS não publica.
+  if (Number.isFinite(qualidadeAr?.aqiPm25) && qualidadeAr.aqiPm25 > LIMIARES.aqiEuropeuRuim) {
+    const grau = qualidadeAr.aqiPm25 > 100
+      ? "EMERGÊNCIA"
+      : qualidadeAr.aqiPm25 > 80 ? "ALERTA" : "ATENÇÃO";
     candidatos.push({
       tipo: "qualidadeArRuim",
-      nivel: 2,
+      grau,
+      nivel: NIVEL_POR_GRAU[grau],
       janela: "ao longo do dia",
-      descricao: `Qualidade do ar ${qualidadeAr.pm25Classificacao.nivel.toLowerCase()} prevista (PM2,5 médio de ${qualidadeAr.pm25Medio} µg/m³, acima da diretriz da OMS de 15 µg/m³).`,
+      descricao: `Qualidade do ar ${qualidadeAr.pm25Classificacao.nivel.toLowerCase()} prevista para PM2,5 (European AQI ${qualidadeAr.aqiPm25}; concentração média prevista de ${qualidadeAr.pm25Medio ?? "indisponível"} µg/m³).`,
+      naturezaDado: "Classificação interna baseada na previsão",
+      recomendacoes: recomendacoesFenomeno("ar", grau),
     });
   }
 
@@ -220,6 +315,7 @@ function avaliarRiscos(consolidado) {
           ? `${aviso.descricao} — ${aviso.severidade}: ${aviso.riscos.join(" ")}`
           : `${aviso.descricao} — ${aviso.severidade}. Detalhes do aviso indisponíveis na fonte oficial.`,
         avisoInmet: aviso,
+        naturezaDado: "Aviso oficial",
       });
     }
   }
@@ -257,7 +353,6 @@ function recomendacoesDeslocamento(categorias, janelaChuva) {
   if (categorias.has("chuvaIntensa") || categorias.has("chuvaModerada")) {
     pedestres.push(
       `Utilizar guarda-chuva ou capa de chuva a partir do período da ${janelaChuva || "tarde"}.`,
-      "Evitar caminhar próximo a bueiros, sarjetas e pontos de alagamento recorrente.",
       "Atenção redobrada ao piso escorregadio em calçadas, escadas e passarelas."
     );
     transporte.push(
@@ -267,8 +362,7 @@ function recomendacoesDeslocamento(categorias, janelaChuva) {
     );
     condutores.push(
       "Reduzir a velocidade e aumentar a distância de segurança em pistas molhadas.",
-      "Manter faróis acesos e redobrar atenção à visibilidade reduzida.",
-      "Evitar rotas com histórico de alagamento recorrente; buscar rotas alternativas."
+      "Manter faróis acesos e redobrar atenção à visibilidade reduzida."
     );
   }
 

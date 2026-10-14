@@ -43,7 +43,7 @@ const Dashboard = (() => {
   }
   function dateTimeBrasilia(value) {
     if (!value || !Number.isFinite(Date.parse(value))) return null;
-    return new Intl.DateTimeFormat('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).format(new Date(value)).replace(',', '');
+    return new Intl.DateTimeFormat('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).format(new Date(value)).replace(',', '');
   }
 
   // Card compacto "Calor e Saúde": selo discreto quando normal; dado ausente
@@ -95,7 +95,7 @@ const Dashboard = (() => {
       metric('Rajada prevista', gusts.length ? unit(Math.max(...gusts), ' <small>km/h</small>') : 'Dado indisponível', 'Máxima prevista na janela da edição', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
       metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), 'Estimativa diária · 00h–24h', 'rain', '', sources('precipitacaoDiariaMm')),
       metric('Índice UV máx.', escape(aq?.uvMax), aq?.uvClassificacao?.nivel || 'Dado indisponível', 'sun', `uv-${['baixo','moderado','alto','muito_alto','extremo'].includes(aq?.uvClassificacao?.categoria) ? aq.uvClassificacao.categoria : 'ausente'}`, sources('ar.uvMax')),
-      metric('Condição geral', escape(r.condicaoGeral), fields.condicaoGeral?.startsWith('Windy') ? 'Previsão no horário de referência' : 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
+      metric('Condição geral', escape(r.condicaoGeral), 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
       metric('Qualidade do ar', escape(aq?.pm25Classificacao?.nivel), '', 'leaf', 'air', sources('ar.pm25Medio')),
       comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.desatualizado ? `Dado armazenado · última atualização válida: ${dateTimeBrasilia(r.mar?.ultimaAtualizacao) || 'horário indisponível'}` : r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sources('mar.alturaMaxDiaM')) : '',
       heatCard(r),
@@ -213,7 +213,7 @@ const Dashboard = (() => {
 
   function currentWeather(r) {
     const a = r.atual;
-    const time = a?.previsao && Number.isFinite(Date.parse(a.horario)) ? new Date(a.horario).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }) : null;
+    const time = a?.previsao && Number.isFinite(Date.parse(a.horario)) ? new Date(a.horario).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
     return `<div class="current-location">${escape(r.cidade.nome)} — ${escape(r.cidade.uf)}</div><div class="current-reading">${icon(weatherIcon(a?.codigo, a?.dia))}<div><strong>${unit(a?.temperaturaC, '<small>°C</small>')}</strong><p>${escape(a?.condicao || 'Condição atual indisponível')}</p></div></div><div class="current-source">${a ? escape(`${a.previsao ? 'Previsão próxima ao horário atual' : 'Condição atual'} · ${a.fonte || 'Open-Meteo'}${time ? ' · '+time+' (Brasília)' : ''}`) : 'Aguardando dados da fonte'}</div>`;
   }
   function detailsTitle(r, type) {
@@ -224,7 +224,7 @@ const Dashboard = (() => {
     return {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[type] || 'Detalhes';
   }
   function details(r, type) {
-    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: Windy Point (previsão, ondas e PM2,5 quando disponível), Open-Meteo (previsão numérica, condições atuais, mar, UV e qualidade do ar) e INMET (previsão oficial e avisos de perigo).</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática a cada 10 minutos. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
+    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: Open-Meteo (previsão numérica, condições atuais, mar, UV e qualidade do ar) e INMET (previsão oficial e avisos de perigo).</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
     if (!r) return '<p>Os dados desta base ainda não estão disponíveis.</p>';
     if (String(type).startsWith('ocorrencia:')) return occurrenceDetails(r, type.slice(11));
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;

@@ -7,6 +7,8 @@ const {
 } = require("../src/sources/openMeteo");
 const { renderPdfHtml } = require("../src/render/pdfTemplate");
 const { renderEmailHtml } = require("../src/render/emailTemplate");
+const { montarVentoPorPeriodo } = require("../src/logic/reportBuilder");
+const { mapearFontesDoRelatorio } = require("../src/logic/sourceProvenance");
 
 function dadosOpenMeteo() {
   const time = [];
@@ -38,7 +40,7 @@ function dadosOpenMeteo() {
   };
 }
 
-test("edições usam janelas efetivas 05h–15h e 15h–00h", { concurrency: false }, async () => {
+test("edições usam janelas efetivas 05h–00h e 15h–00h", { concurrency: false }, async () => {
   const anterior = global.fetch;
   const urls = [];
   global.fetch = async (url) => {
@@ -46,20 +48,25 @@ test("edições usam janelas efetivas 05h–15h e 15h–00h", { concurrency: fal
     return { ok: true, json: async () => dadosOpenMeteo() };
   };
   try {
-    const manha = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 5, fimHora: 15, agregarJanela: true });
+    const manha = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 5, fimHora: 24, agregarJanela: true });
     const tarde = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 15, fimHora: 24, agregarJanela: true });
     const painel = await buscarOpenMeteo(-22.9, -43.2);
-    assert.equal(manha.precipitacaoTotalMm, 12);
+    assert.equal(manha.precipitacaoTotalMm, 17);
     assert.equal(tarde.precipitacaoTotalMm, 5);
     assert.equal(manha.periodos.manha.precipitacaoMm, 8);
-    assert.equal(manha.periodos.noite.disponivel, false);
+    assert.equal(manha.periodos.noite.disponivel, true);
     assert.equal(tarde.periodos.manha.disponivel, false);
     assert.equal(manha.periodosDiaCompleto.noite.disponivel, true);
     assert.equal(tarde.periodosDiaCompleto.manha.precipitacaoMm, 8);
     assert.equal(manha.tempMin, 20);
     assert.equal(manha.previsaoDias.length, 4, "a fixture traz 4 dias; o relatório usa só o primeiro");
-    assert.equal(manha.janelaHoje.rotulo, "05h–15h");
+    assert.equal(manha.janelaHoje.rotulo, "05h–00h");
     assert.equal(tarde.janelaHoje.rotulo, "15h–00h");
+    assert.deepEqual(
+      { fonte: manha.atual.fonte, previsao: manha.atual.previsao },
+      { fonte: "Open-Meteo", previsao: true },
+      "o bloco current da Open-Meteo deve permanecer identificado como saída de modelo"
+    );
     assert.match(urls[0], /forecast_days=1/);
     assert.match(urls[0], /timezone=America%2FSao_Paulo/);
     assert.equal(painel.precipitacaoTotalMm, 17);
@@ -84,6 +91,39 @@ test("vento e rajada são grandezas distintas: intensidade vem da velocidade mé
   }
 });
 
+test("vento por período cobre 05h–00h nas edições das 05h e 15h", () => {
+  const periodo = (periodo, janela, rajadaMaxKmh) => ({
+    periodo, janela, direcao: "SE", intensidadeVento: "Moderado (até 20 km/h)",
+    velocidadeMaxKmh: 20, rajadaMaxKmh, disponivel: true,
+  });
+  const periodosDiaCompleto = {
+    manha: periodo("Manhã", "05h–12h", 31),
+    tarde: periodo("Tarde", "12h–18h", 37),
+    noite: periodo("Noite", "18h–00h", 42),
+  };
+  const inmetPrevisao = { periodos: {
+    manha: { direcaoVento: "E", intensidadeVento: "Fracos" },
+    tarde: { direcaoVento: "SE", intensidadeVento: "Moderados" },
+    noite: { direcaoVento: "S", intensidadeVento: "Fracos" },
+  } };
+
+  for (const periodosDaEdicao of [
+    { manha: periodosDiaCompleto.manha, tarde: periodo("Tarde", "12h–15h", 34), noite: { disponivel: false } },
+    { manha: { disponivel: false }, tarde: periodo("Tarde", "15h–18h", 37), noite: periodosDiaCompleto.noite },
+  ]) {
+    const vento = montarVentoPorPeriodo({
+      base: { periodos: periodosDaEdicao },
+      openMeteo: { periodosDiaCompleto },
+      inmetPrevisao,
+    });
+    assert.deepEqual(vento.map(({ periodo, janela }) => [periodo, janela]), [
+      ["Manhã", "05h–12h"], ["Tarde", "12h–18h"], ["Noite", "18h–00h"],
+    ]);
+    assert.deepEqual(vento.map(({ rajadaMaxKmh }) => rajadaMaxKmh), [31, 37, 42]);
+    assert.deepEqual(vento.map(({ direcao }) => direcao), ["E", "SE", "S"]);
+  }
+});
+
 test("Open-Meteo pede o fuso da base e calcula a janela pelo horário local da resposta", { concurrency: false }, async () => {
   const anterior = global.fetch;
   const urls = [];
@@ -96,8 +136,39 @@ test("Open-Meteo pede o fuso da base e calcula a janela pelo horário local da r
   }
 });
 
-test("Windy não substitui vento, rajada e chuva por período quando a Open-Meteo responde", () => {
-  const { integrarWindy } = require("../src/logic/windyMerge");
+test("Open-Meteo não transforma séries ausentes em zero ou infinito", async () => {
+  const dados = dadosOpenMeteo();
+  dados.hourly.precipitation[5] = null;
+  dados.hourly.wind_gusts_10m = [];
+  dados.hourly.relative_humidity_2m = dados.hourly.relative_humidity_2m.map(() => null);
+  dados.daily.temperature_2m_min[0] = null;
+  const resultado = await buscarOpenMeteo(-22.9, -43.2, {
+    fetchImpl: async () => ({ ok: true, json: async () => dados }),
+  });
+  assert.equal(resultado.periodos.manha.precipitacaoMm, null);
+  assert.equal(resultado.precipitacaoTotalMm, null);
+  assert.equal(resultado.rajadaMaxKmh, null);
+  assert.equal(resultado.umidadeMin, null);
+  assert.equal(resultado.tempMin, null);
+});
+
+test("Open-Meteo rejeita unidade e fuso divergentes", async () => {
+  for (const alterar of [
+    (dados) => { dados.timezone = "UTC"; },
+    (dados) => { dados.hourly_units = { wind_speed_10m: "m/s" }; },
+  ]) {
+    const dados = dadosOpenMeteo();
+    alterar(dados);
+    await assert.rejects(
+      buscarOpenMeteo(-22.9, -43.2, {
+        fetchImpl: async () => ({ ok: true, json: async () => dados }),
+      }),
+      /fuso divergente|unidade inesperada/
+    );
+  }
+});
+
+test("rastreabilidade preserva os valores normalizados da Open-Meteo", () => {
   const base = {
     tempMin: 20, tempMax: 30, rajadaMaxKmh: 40, precipitacaoTotalMm: 3,
     periodos: {
@@ -106,19 +177,13 @@ test("Windy não substitui vento, rajada e chuva por período quando a Open-Mete
       noite: { periodo: "Noite", janela: "18h–00h", direcao: "E", intensidadeVento: "Fraco (até 12 km/h)", rajadaMaxKmh: 20, precipitacaoMm: 0, probabilidadeChuva: 10 },
     },
   };
-  const periodoWindy = { direcao: "N", intensidadeVento: "até 50 km/h", rajadaMaxKmh: 70, precipitacaoMm: 9 };
-  const weather = { fonte: "Windy (gfs)", tempMax: 31, rajadaMaxKmh: 70, precipitacaoTotalMm: 27, periodos: { manha: periodoWindy, tarde: periodoWindy, noite: periodoWindy } };
-  const comOpenMeteo = integrarWindy(base, null, null, { weather }, "Open-Meteo");
-  assert.equal(comOpenMeteo.base.rajadaMaxKmh, 40);
-  assert.equal(comOpenMeteo.base.precipitacaoTotalMm, 3);
-  assert.equal(comOpenMeteo.base.periodos.tarde.rajadaMaxKmh, 40);
-  assert.equal(comOpenMeteo.base.periodos.tarde.intensidadeVento, "Moderado (até 25 km/h)");
-  assert.equal(comOpenMeteo.fontesPorCampo["periodos.tarde.rajadaMaxKmh"], "Open-Meteo");
-  assert.equal(comOpenMeteo.base.tempMax, 31, "Windy continua valendo para os demais campos");
-  // Sem Open-Meteo, o Windy segue como alternativa.
-  const semOpenMeteo = integrarWindy(base, null, null, { weather }, "INMET");
-  assert.equal(semOpenMeteo.base.periodos.tarde.rajadaMaxKmh, 70);
-  assert.equal(semOpenMeteo.fontesPorCampo["periodos.tarde.rajadaMaxKmh"], "Windy (gfs)");
+  const rastreado = mapearFontesDoRelatorio(base, null, null, "Open-Meteo");
+  assert.equal(rastreado.base.tempMax, 30);
+  assert.equal(rastreado.base.rajadaMaxKmh, 40);
+  assert.equal(rastreado.base.precipitacaoTotalMm, 3);
+  assert.equal(rastreado.base.periodos.tarde.rajadaMaxKmh, 40);
+  assert.equal(rastreado.base.periodos.tarde.intensidadeVento, "Moderado (até 25 km/h)");
+  assert.equal(rastreado.fontesPorCampo["periodos.tarde.rajadaMaxKmh"], "Open-Meteo");
 });
 
 test("Open-Meteo usa 15 segundos e repete falhas transitórias de rede", async () => {

@@ -9,7 +9,7 @@
 
 const brand = require("./brand");
 const { barraHtml, fitaSeveridadeHtml } = require("./charts");
-const { renderEmailHeader } = require("./emailComponents");
+const { renderEmailHeader, renderEmailHeaderStyles } = require("./emailComponents");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -43,6 +43,7 @@ function linhaAlerta(a) {
 }
 
 function linhaBase(base, chuvaMaxRef, rajadaMaxRef) {
+  const valor = (numero, unidade = "") => Number.isFinite(numero) ? `${numero}${unidade}` : "—";
   return `<tr>
     <td style="padding:8px 0;border-bottom:1px solid #EEE;font-family:Arial,sans-serif;">
       <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
@@ -50,7 +51,7 @@ function linhaBase(base, chuvaMaxRef, rajadaMaxRef) {
           <strong>${esc(base.cidade.nome)}</strong>
           <span style="color:#888;font-size:11px;">${esc(base.cidade.uf)}</span>
           <div style="color:#777;font-size:11px;margin-top:1px;">
-            ${base.tempMinSemana}–${base.tempMaxSemana}°C · ${base.chuvaTotalSemana} mm · rajada prevista ${base.rajadaMaxSemana} km/h${base.ondaMaxSemana ? ` · onda ${base.ondaMaxSemana} m` : ""}
+            ${valor(base.tempMinSemana)}–${valor(base.tempMaxSemana, "°C")} · ${valor(base.chuvaTotalSemana, " mm")} · rajada prevista ${valor(base.rajadaMaxSemana, " km/h")}${Number.isFinite(base.ondaMaxSemana) ? ` · onda ${base.ondaMaxSemana} m` : ""}
           </div>
         </td>
         <td width="130" align="right" valign="middle">
@@ -64,10 +65,12 @@ function linhaBase(base, chuvaMaxRef, rajadaMaxRef) {
   </tr>`;
 }
 
+const { faixaSimulacaoEmail } = require("./simulationBanner");
+
 function renderWeeklyEmailHtml(r) {
   const alertasTopo = r.alertas.slice(0, 8);
-  const chuvaMaxRef = Math.max(...r.basesOrdenadas.map((b) => b.chuvaTotalSemana), 1);
-  const rajadaMaxRef = Math.max(...r.basesOrdenadas.map((b) => b.rajadaMaxSemana), 1);
+  const chuvaMaxRef = Math.max(...r.basesOrdenadas.map((b) => b.chuvaTotalSemana).filter(Number.isFinite), 1);
+  const rajadaMaxRef = Math.max(...r.basesOrdenadas.map((b) => b.rajadaMaxSemana).filter(Number.isFinite), 1);
 
   // Barras do panorama por dia: quantas bases críticas/atenção em cada dia.
   const maxBases = r.totalBases || 1;
@@ -91,12 +94,13 @@ function renderWeeklyEmailHtml(r) {
 
   return `<!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${renderEmailHeaderStyles()}</head>
 <body style="margin:0;padding:0;background:#EEF1EF;font-family:Arial,'Segoe UI',sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#EEF1EF;">
     <tr><td align="center" style="padding:18px 6px;">
       <!--[if mso]><table role="presentation" width="850" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:850px;background:#ffffff;">
+      <table class="cim-email-shell" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:850px;background:#ffffff;">
+        ${faixaSimulacaoEmail(r)}
 
         <!-- Cabeçalho -->
         ${renderEmailHeader({

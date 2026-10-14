@@ -1,23 +1,24 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { subirApp, SENHA_TESTE } = require("./helpers/servidor");
+const { registrarOperacionalTeste } = require("./helpers/provenance");
 
-async function postar(base, senha = SENHA_TESTE) {
+async function postar(base, senha = SENHA_TESTE, extra = {}) {
   const resposta = await fetch(`${base}/api/gerar-relatorio`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ senha, cidade: "rio_de_janeiro" }),
+    body: JSON.stringify({ senha, cidade: "rio_de_janeiro", ...extra }),
   });
   return { resposta, corpo: await resposta.json() };
 }
 
 function resultadoPipeline() {
   return {
-    report: {
+    report: registrarOperacionalTeste({
       cidade: { chave: "rio_de_janeiro" },
       geradoEmISO: "2026-09-28T14:00:00.000Z",
       avisosColeta: [],
-    },
+    }),
     arquivoPdf: "Informativo_Teste.pdf",
     envio: { destinatarios: ["destinatario@example.com"] },
   };
@@ -48,6 +49,23 @@ test("sucesso retorna HTTP 200 e mensagem segura", async (t) => {
   assert.equal(resposta.status, 200);
   assert.equal(corpo.ok, true);
   assert.equal(corpo.message, "Relatório gerado e enviado com sucesso.");
+});
+
+test("envio manual permite selecionar exclusivamente o aviso COR-RIO", async (t) => {
+  let opcoesRecebidas;
+  const srv = await subirApp({
+    executarPipelineRelatorio: async (opcoes) => {
+      opcoesRecebidas = opcoes;
+      return resultadoPipeline();
+    },
+  });
+  t.after(srv.fechar);
+
+  const { resposta, corpo } = await postar(srv.base, SENHA_TESTE, { tipoEnvio: "cor_rio", cidade: "macae" });
+  assert.equal(resposta.status, 200);
+  assert.equal(corpo.message, "Aviso COR-RIO enviado com sucesso.");
+  assert.equal(opcoesRecebidas.tipoEnvio, "cor_rio");
+  assert.equal(opcoesRecebidas.cidadeChave, "rio_de_janeiro", "COR-RIO não vira localidade meteorológica");
 });
 
 for (const caso of [

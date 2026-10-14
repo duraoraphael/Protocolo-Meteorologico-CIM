@@ -7,6 +7,7 @@ const { montarRelatorioSemanal } = require("./logic/weeklyBuilder");
 const { renderWeeklyPdfHtml, weeklyFooterTemplate } = require("./render/weeklyPdfTemplate");
 const { renderWeeklyEmailHtml } = require("./render/weeklyEmailTemplate");
 const ged = require("./integrations/sharepointGed");
+const { validarDocumentoOperacional } = require("./logic/documentProvenance");
 
 const PASTA_SAIDA = path.join(__dirname, "..", "output");
 
@@ -40,11 +41,13 @@ async function gerarPdfSemanalBuffer(relatorio) {
  */
 async function executarPipelineSemanal({ bases, dias = 7, enviarEmail = false, salvarPreviewHtml = false } = {}) {
   const relatorio = await montarRelatorioSemanal({ bases, dias });
+  validarDocumentoOperacional(relatorio, "geração do relatório semanal");
 
   const pdfBuffer = await gerarPdfSemanalBuffer(relatorio);
   const emailHtml = renderWeeklyEmailHtml(relatorio);
 
   if (!fs.existsSync(PASTA_SAIDA)) fs.mkdirSync(PASTA_SAIDA, { recursive: true });
+  validarDocumentoOperacional(relatorio, "gravação do PDF semanal");
   const caminhoPdf = path.join(PASTA_SAIDA, `${relatorio.nomeArquivoBase}.pdf`);
   fs.writeFileSync(caminhoPdf, pdfBuffer);
 
@@ -67,6 +70,7 @@ async function executarPipelineSemanal({ bases, dias = 7, enviarEmail = false, s
   let gedEnvio = null;
   if (enviarEmail && ged.destinoConfigurado()) {
     try {
+      validarDocumentoOperacional(relatorio, "publicação semanal no GED");
       gedEnvio = await ged.enviarInformativo(pdfBuffer, `${relatorio.nomeArquivoBase}.pdf`, "Relatorios Semanais");
     } catch (erro) {
       console.error("[CIM] Falha ao gravar relatório semanal no GED:", erro.message);

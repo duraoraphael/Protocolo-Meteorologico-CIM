@@ -2,7 +2,7 @@
 //
 // Fonte: Open-Meteo, agregado DIÁRIO. É a única fonte integrada que entrega,
 // para os três dias seguintes, todos os campos da tabela (máx./mín., rajada,
-// chuva acumulada, UV máximo e código de tempo): o Windy não traz UV e o INMET
+// chuva acumulada, UV máximo e código de tempo): o INMET
 // não traz rajada nem volume de chuva.
 //
 // A Open-Meteo calcula os agregados diários no dia civil (00h–24h) do fuso
@@ -13,6 +13,7 @@
 
 const { WMO } = require("./wmoCodes");
 const { buscarJsonComRetentativa } = require("./httpJsonClient");
+const { aplicarConfiguracaoOpenMeteo } = require("./openMeteoConfig");
 
 const DIAS_PREVISAO = 3;
 const FUSO_PADRAO = "America/Sao_Paulo";
@@ -173,7 +174,7 @@ async function obterPrevisaoProximosDias(cidade, { agora = new Date(), fetchImpl
     start_date: datas[0],
     end_date: datas.at(-1),
   });
-  const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+  const url = aplicarConfiguracaoOpenMeteo(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
 
   try {
     const json = await buscarJsonComRetentativa(url, {

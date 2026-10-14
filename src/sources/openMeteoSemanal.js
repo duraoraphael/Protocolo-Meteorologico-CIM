@@ -7,6 +7,7 @@
 
 const { descreverCodigoSemanal, CODIGOS_TEMPESTADE } = require("./wmoCodes");
 const { buscarJsonComRetentativa } = require("./httpJsonClient");
+const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
 
 // A consulta semanal pede 12 parâmetros diários por 7 dias — bem mais pesada
 // que a diária, e a Open-Meteo às vezes estoura o tempo de resposta.
@@ -28,7 +29,7 @@ async function buscarComRetentativa(url, nomeFonte) {
 }
 
 const arred = (v, casas = 0) => {
-  if (v === null || v === undefined || Number.isNaN(v)) return null;
+  if (!Number.isFinite(v)) return null;
   const f = Math.pow(10, casas);
   return Math.round(v * f) / f;
 };
@@ -54,18 +55,19 @@ const CAMPOS_DIARIOS = [
 const TAMANHO_LOTE = 4;
 
 function converterDias(d) {
+  if (!Array.isArray(d?.time) || !d.time.length) throw new Error("Open-Meteo semanal retornou série diária inválida.");
   return d.time.map((data, i) => ({
     data,
-    codigoTempo: d.weather_code[i],
-    condicao: descreverCodigoSemanal(d.weather_code[i]),
-    temMuitaChuva: CODIGOS_TEMPESTADE.has(d.weather_code[i]),
-    tempMin: arred(d.temperature_2m_min[i]),
-    tempMax: arred(d.temperature_2m_max[i]),
-    precipitacaoMm: arred(d.precipitation_sum[i], 1),
-    probabilidadeChuva: arred(d.precipitation_probability_max[i]),
-    ventoMaxKmh: arred(d.wind_speed_10m_max[i]),
-    rajadaMaxKmh: arred(d.wind_gusts_10m_max[i]),
-    uvMax: arred(d.uv_index_max[i], 1),
+    codigoTempo: arred(d.weather_code?.[i]),
+    condicao: descreverCodigoSemanal(d.weather_code?.[i]),
+    temMuitaChuva: CODIGOS_TEMPESTADE.has(d.weather_code?.[i]),
+    tempMin: arred(d.temperature_2m_min?.[i]),
+    tempMax: arred(d.temperature_2m_max?.[i]),
+    precipitacaoMm: arred(d.precipitation_sum?.[i], 1),
+    probabilidadeChuva: arred(d.precipitation_probability_max?.[i]),
+    ventoMaxKmh: arred(d.wind_speed_10m_max?.[i]),
+    rajadaMaxKmh: arred(d.wind_gusts_10m_max?.[i]),
+    uvMax: arred(d.uv_index_max?.[i], 1),
   }));
 }
 
@@ -84,10 +86,10 @@ async function buscarSemanaEmLote(pontos, diasPrevisao = 7) {
       latitude: lote.map((p) => p.latitude).join(","),
       longitude: lote.map((p) => p.longitude).join(","),
       daily: CAMPOS_DIARIOS,
-      timezone: "America/Sao_Paulo",
+      timezone: "auto",
       forecast_days: String(diasPrevisao),
     });
-    const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+    const url = aplicarConfiguracaoOpenMeteo(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
 
     try {
       const json = await buscarComRetentativa(url, "Open-Meteo (semanal)");
@@ -96,7 +98,7 @@ async function buscarSemanaEmLote(pontos, diasPrevisao = 7) {
       lote.forEach((_, i) => {
         const local = locais[i];
         resultados[inicio + i] = local?.daily
-          ? { fonte: "Open-Meteo", url, dias: converterDias(local.daily) }
+          ? { fonte: "Open-Meteo", url: removerCredenciaisOpenMeteo(url), dias: converterDias(local.daily) }
           : { erro: "Open-Meteo não retornou dados para este ponto." };
       });
     } catch (erro) {
@@ -134,21 +136,21 @@ async function buscarSemanaMarEmLote(pontos, diasPrevisao = 7) {
       latitude: lote.map((p) => p.latitude).join(","),
       longitude: lote.map((p) => p.longitude).join(","),
       daily: "wave_height_max,wave_period_max",
-      timezone: "America/Sao_Paulo",
+      timezone: "auto",
       forecast_days: String(diasPrevisao),
     });
-    const url = `https://marine-api.open-meteo.com/v1/marine?${params.toString()}`;
+    const url = aplicarConfiguracaoOpenMeteo(`https://marine-api.open-meteo.com/v1/marine?${params.toString()}`);
 
     try {
       const json = await buscarComRetentativa(url, "Open-Meteo Marine (semanal)");
       const locais = Array.isArray(json) ? json : [json];
       lote.forEach((_, i) => {
         const d = locais[i]?.daily;
-        const temDado = (d?.wave_height_max || []).some((v) => v !== null);
+        const temDado = (d?.wave_height_max || []).some(Number.isFinite);
         resultados[inicio + i] = temDado
           ? {
               fonte: "Open-Meteo Marine",
-              url,
+              url: removerCredenciaisOpenMeteo(url),
               dias: d.time.map((data, k) => ({
                 data,
                 alturaMaxM: arred(d.wave_height_max[k], 1),

@@ -92,17 +92,18 @@ function tabelaDiasBase(base) {
 function secaoBase(base, indice) {
   const c = base.cidade;
   const riscosUnicos = [...new Set(base.dias.flatMap((d) => d.riscos.map((x) => x.tipo)))];
+  const valor = (numero, unidade = "") => Number.isFinite(numero) ? `${numero}${unidade}` : "—";
 
   return `<div class="base ${indice > 0 ? "quebra-pagina" : ""}">
     <div class="base-cabecalho" style="border-left:6px solid ${base.severidadeMax.cor};">
       <div>
         <div class="base-nome">${esc(c.nome)} <span class="base-uf">${esc(c.uf)}</span></div>
         <div class="base-resumo">
-          ${base.tempMinSemana}°C a ${base.tempMaxSemana}°C &nbsp;·&nbsp;
-          ${base.chuvaTotalSemana} mm na semana &nbsp;·&nbsp;
-          rajada prevista ${base.rajadaMaxSemana} km/h &nbsp;·&nbsp;
-          UV máx. ${base.uvMaxSemana}
-          ${base.ondaMaxSemana ? ` &nbsp;·&nbsp; onda máx. ${base.ondaMaxSemana} m` : ""}
+          ${valor(base.tempMinSemana, "°C")} a ${valor(base.tempMaxSemana, "°C")} &nbsp;·&nbsp;
+          ${valor(base.chuvaTotalSemana, " mm")} na semana &nbsp;·&nbsp;
+          rajada prevista ${valor(base.rajadaMaxSemana, " km/h")} &nbsp;·&nbsp;
+          UV máx. ${valor(base.uvMaxSemana)}
+          ${Number.isFinite(base.ondaMaxSemana) ? ` &nbsp;·&nbsp; onda máx. ${base.ondaMaxSemana} m` : ""}
         </div>
       </div>
       <div class="base-situacao">
@@ -131,6 +132,8 @@ function secaoBase(base, indice) {
     }
   </div>`;
 }
+
+const { faixaSimulacaoDocumento } = require("./simulationBanner");
 
 function renderWeeklyPdfHtml(r) {
   const corDiaCritico =
@@ -253,6 +256,7 @@ function renderWeeklyPdfHtml(r) {
 </style>
 </head>
 <body>
+  ${faixaSimulacaoDocumento(r)}
   ${cabecalhoPdfHtml({
     titulo: "RELATÓRIO METEOROLÓGICO SEMANAL",
     linhaLocal: `Bases monitoradas — ${esc(r.periodoLabel)} — ${esc(r.dataGeracao)}`,
@@ -278,7 +282,7 @@ function renderWeeklyPdfHtml(r) {
       ? `<div class="destaque-dia">
     <strong>Dia de maior atenção:</strong> ${esc(r.diaMaisCritico.diaSemana)}, ${esc(r.diaMaisCritico.diaMes)} —
     ${r.diaMaisCritico.basesCriticas} base(s) em situação crítica e ${r.diaMaisCritico.basesAtencao} em atenção,
-    com rajadas de até ${r.diaMaisCritico.rajadaMaxKmh} km/h e média de ${r.diaMaisCritico.chuvaMediaMm} mm de chuva entre as bases.
+    com rajadas de até ${Number.isFinite(r.diaMaisCritico.rajadaMaxKmh) ? `${r.diaMaisCritico.rajadaMaxKmh} km/h` : "valor indisponível"} e média de ${Number.isFinite(r.diaMaisCritico.chuvaMediaMm) ? `${r.diaMaisCritico.chuvaMediaMm} mm` : "valor indisponível"} de chuva entre as bases.
   </div>`
       : ""
   }

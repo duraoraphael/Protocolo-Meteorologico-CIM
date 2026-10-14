@@ -20,9 +20,9 @@ const INMET_TIMEOUT_MS = API_TIMEOUT_MS;
 const INMET_AVISOS_TIMEOUT_MS = 15000;
 const INMET_TENTATIVAS = API_TENTATIVAS;
 
-function hojeDDMMAAAA() {
+function hojeDDMMAAAA(instante = new Date()) {
   const agora = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })
+    instante.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })
   );
   const dd = String(agora.getDate()).padStart(2, "0");
   const mm = String(agora.getMonth() + 1).padStart(2, "0");
@@ -31,6 +31,7 @@ function hojeDDMMAAAA() {
 }
 
 async function buscarPrevisaoInmet(codigoIbge, {
+  agora = new Date(),
   fetchImpl = fetch,
   timeoutMs = INMET_TIMEOUT_MS,
   esperarFn,
@@ -49,10 +50,12 @@ async function buscarPrevisaoInmet(codigoIbge, {
     throw new Error(`INMET não retornou previsão para o código ${codigoIbge}`);
   }
 
-  const dataAlvo = hojeDDMMAAAA();
-  const diaEscolhido = porData[dataAlvo] || porData[Object.keys(porData)[0]];
+  const dataAlvo = hojeDDMMAAAA(agora);
+  const diaEscolhido = porData[dataAlvo];
   if (!diaEscolhido) {
-    throw new Error("INMET retornou payload sem períodos de previsão");
+    const erro = new Error(`INMET não retornou previsão para a data solicitada (${dataAlvo}).`);
+    erro.name = "ParserError";
+    throw erro;
   }
 
   const numeroOficial = (...valores) => {

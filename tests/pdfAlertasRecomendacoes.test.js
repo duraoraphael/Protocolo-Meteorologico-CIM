@@ -7,7 +7,7 @@ function report(extra = {}) {
   return {
     cidade: { nome: "Rio de Janeiro", uf: "RJ", fuso: "America/Sao_Paulo" },
     dataFormatadaLonga: "sexta-feira, 9 de outubro de 2026",
-    dataFormatadaCurta: "09/10/2026", horaConsulta: "05:00", previsaoAte: "15h",
+    dataFormatadaCurta: "09/10/2026", horaConsulta: "05:00", previsaoAte: "00h",
     tabelaTemperaturaUmidade: [], ventoPorPeriodo: [], chuvaPorPeriodo: [], chuvaPorHora: [],
     mar: null, qualidadeAr: null, severidade: { grau: "EMERGÊNCIA", eventos: [{
       tipo: "uvAlto", grau: "EMERGÊNCIA", titulo: "ÍNDICE UV ELEVADO — EMERGÊNCIA",

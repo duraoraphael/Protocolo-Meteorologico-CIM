@@ -2,6 +2,7 @@ const { alertasCimExibiveis, renderAlertEmailHtml, assuntoAlerta } = require("..
 const { listaDestinatarios } = require("./sendReport");
 const { criarTransportador, enderecoRemetente } = require("./transport");
 const { anexosLogosEmail } = require("../config/headerAssets");
+const { validarDocumentoOperacional } = require("../logic/documentProvenance");
 
 /**
  * Envia um alerta para os responsáveis da base afetada.
@@ -25,6 +26,8 @@ async function enviarAlertaPorEmail(base, { teste = false } = {}) {
       motivo: "sem-alerta-relevante",
     };
   }
+
+  validarDocumentoOperacional(base?.report, "envio de alerta meteorológico");
 
   const baseExibicao = { ...base, alertas };
   const destinatarios = listaDestinatarios(base.chave);

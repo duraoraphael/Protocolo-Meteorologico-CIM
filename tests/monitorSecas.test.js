@@ -193,3 +193,15 @@ test("PDF: seção indisponível aparece sem quebrar o relatório", () => {
   assert.ok(iMs > 0 && iMs < html.indexOf("Fontes Consultadas"));
   assert.match(html, /Não disponível na fonte para agosto\/2026/);
 });
+
+test("PDF lista os sites oficiais de consulta da ANA, Clima Saúde, INMET e COR", () => {
+  const html = renderPdfHtml(relatorio(CIDADES.rio_de_janeiro, {
+    status: "indisponivel", competencia: AGOSTO,
+    urls: { pagina: ms.urlPaginaMapa(AGOSTO) },
+  }));
+  assert.match(html, /https:\/\/monitordesecas\.ana\.gov\.br\//);
+  assert.match(html, /https:\/\/monitordesecas\.ana\.gov\.br\/tabela-de-classificacao/);
+  assert.match(html, /https:\/\/clima\.saude\.gov\.br\//);
+  assert.match(html, /https:\/\/cor\.rio\//);
+  assert.match(html, /https:\/\/previsao\.inmet\.gov\.br\/3304557/);
+});

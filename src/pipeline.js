@@ -3,12 +3,19 @@ const path = require("path");
 const { getCidade } = require("./config/cities");
 const { montarRelatorio } = require("./logic/reportBuilder");
 const { gerarPdfBuffer } = require("./render/pdfGenerator");
-const { enviarRelatorioPorEmail } = require("./email/sendReport");
+const { enviarRelatorioPorEmail, enviarAvisoCorRioPorEmail } = require("./email/sendReport");
 const ged = require("./integrations/sharepointGed");
 const { resumo, compararComManha } = require("./logic/scheduledReport");
 const { obterMonitorSecas } = require("./sources/monitorSecas");
 const { obterPrevisaoProximosDias } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
+const { validadeInformativo } = require("./logic/informativoValidity");
+const { TIPOS_DOCUMENTO } = require("./logic/alertPresentation");
+const {
+  registrarDocumentoOperacional,
+  atualizarAssinaturaDocumentoOperacional,
+  validarDocumentoOperacional,
+} = require("./logic/documentProvenance");
 
 const PASTA_SAIDA = path.join(__dirname, "..", "output");
 
@@ -99,7 +106,55 @@ async function salvarCopiaLocal(pdfBuffer, nomeBase) {
  * @param {boolean} [opcoes.teste=false] envio de teste: assunto "[TESTE …]",
  *   PDF com sufixo _TESTE (não sobrescreve o real) e sem gravação no GED.
  */
-async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false } = {}) {
+function relatorioBaseCorRio(cidade, horarioAgendado = null) {
+  const dataNow = new Date();
+  return {
+    cidade: { chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, fuso: cidade.fusoHorario || "America/Sao_Paulo" },
+    dataFormatadaLonga: new Intl.DateTimeFormat("pt-BR", { dateStyle: "full", timeZone: "America/Sao_Paulo" }).format(dataNow),
+    dataFormatadaCurta: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "America/Sao_Paulo" }).format(dataNow),
+    horaConsulta: horarioAgendado || new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Sao_Paulo" }).format(dataNow),
+    geradoEmISO: dataNow.toISOString(),
+    horarioAgendado,
+    tipoDocumento: TIPOS_DOCUMENTO.AVISO_COR_RIO,
+    validadeInformativo: validadeInformativo(horarioAgendado, dataNow),
+    fontesAutomatizadas: [],
+    fontesManuais: [],
+    avisosColeta: [],
+  };
+}
+
+async function executarPipelineCorRio({ enviarEmail = true, horarioAgendado = null, teste = false, permitirSemDestinatarios = false } = {}) {
+  const cidade = getCidade("rio_de_janeiro");
+  const report = relatorioBaseCorRio(cidade, horarioAgendado);
+  if (teste) report.envioTeste = true;
+  await anexarCorRioAoRelatorio(report, cidade);
+  registrarDocumentoOperacional(report, {
+    tipo: TIPOS_DOCUMENTO.AVISO_COR_RIO,
+    fontes: ["COR-Rio — Centro de Operações e Resiliência"],
+  });
+
+  let envio = null;
+  if (enviarEmail) {
+    try {
+      envio = await enviarAvisoCorRioPorEmail(report);
+      if (!envio && !permitirSemDestinatarios) {
+        const erro = new Error("Nenhum destinatário vinculado à base COR-RIO.");
+        const erroPublico = erroDaEtapa("email", "DESTINATARIOS_COR_RIO", "enviarAvisoCorRioPorEmail", erro);
+        erroPublico.mensagemPublica = erro.message;
+        throw erroPublico;
+      }
+    } catch (erro) {
+      if (erro instanceof ErroPipelineRelatorio) throw erro;
+      throw erroDaEtapa("email", "SMTP_COR_RIO", "enviarAvisoCorRioPorEmail", erro);
+    }
+  }
+  return { report, arquivoPdf: null, caminhoArquivo: null, envio, ged: null };
+}
+
+async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false, tipoEnvio = "informativo", permitirSemDestinatarios = false } = {}) {
+  if (tipoEnvio === "cor_rio") {
+    return executarPipelineCorRio({ enviarEmail, horarioAgendado, teste, permitirSemDestinatarios });
+  }
   const cidade = getCidade(cidadeChave);
   let report;
   console.log("[RELATORIO] Buscando dados meteorológicos");
@@ -168,6 +223,9 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // PDF baixado e anexo do e-mail mostram a mesma consulta. Nunca lança.
   await anexarCorRioAoRelatorio(report, cidade);
 
+  atualizarAssinaturaDocumentoOperacional(report);
+  validarDocumentoOperacional(report, "geração do documento operacional", { exigirCamposCriticos: true });
+
   let pdfBuffer;
   console.log("[RELATORIO] Gerando HTML");
   console.log("[RELATORIO] Gerando PDF");
@@ -180,6 +238,7 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
 
   let copiaLocal;
   try {
+    validarDocumentoOperacional(report, "gravação do PDF operacional", { exigirCamposCriticos: true });
     copiaLocal = await salvarCopiaLocal(pdfBuffer, report.nomeArquivoBase);
   } catch (erro) {
     throw erroDaEtapa("pdf", "GRAVACAO_PDF", "salvarCopiaLocal", erro);
@@ -187,13 +246,13 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   const { caminhoArquivo, aviso } = copiaLocal;
   if (aviso) report.avisosColeta.push(aviso);
 
-  // PDF anexado ao e-mail: na base Rio, o card do COR-Rio traz só o
-  // comunicado do dia (o PDF salvo/baixado pelo site segue completo). Nas
-  // demais bases o anexo é o mesmo PDF.
+  // O PDF salvo/baixado preserva o painel técnico completo. O anexo enviado
+  // aos destinatários da base meteorológica não inclui o aviso COR-RIO, que
+  // possui lista e mensagem próprias.
   let pdfAnexoEmail = pdfBuffer;
   if (enviarEmail && report.corRio) {
     try {
-      pdfAnexoEmail = await gerarPdfBuffer(report, { corRioSomenteDoDia: true });
+      pdfAnexoEmail = await gerarPdfBuffer(report, { incluirCorRio: false });
     } catch (erro) {
       throw erroDaEtapa("pdf", "GERACAO_PDF_EMAIL", "gerarPdfBuffer", erro);
     }
@@ -223,6 +282,7 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   let ged_ = null;
   if (enviarEmail && !teste && ged.destinoConfigurado()) {
     try {
+      validarDocumentoOperacional(report, "publicação no GED", { exigirCamposCriticos: true });
       ged_ = await ged.enviarInformativo(pdfBuffer, `${report.nomeArquivoBase}.pdf`, report.cidade.nome);
     } catch (erro) {
       report.avisosColeta.push(`Não foi possível gravar no GED SharePoint: ${erro.message}`);
@@ -238,4 +298,4 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   };
 }
 
-module.exports = { ErroPipelineRelatorio, executarPipeline, PASTA_SAIDA };
+module.exports = { ErroPipelineRelatorio, executarPipeline, executarPipelineCorRio, PASTA_SAIDA };

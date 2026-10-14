@@ -90,9 +90,14 @@ function relatorioBase() {
   };
 }
 
-test("monitor não transforma chuva ou vento numéricos de terceiros em alertas", () => {
+test("monitor cria classificações internas de chuva e vento quando não há aviso oficial", () => {
   const alertas = detectarAlertasGraves(relatorioBase());
-  assert.equal(alertas.some((a) => a.assinatura === "chuva" || a.assinatura === "vento"), false);
+  const vento = alertas.find((a) => a.assinatura === "vento");
+  const chuva = alertas.find((a) => a.assinatura === "chuva");
+  assert.equal(vento.grau, "ATENÇÃO");
+  assert.equal(chuva.grau, "ALERTA");
+  assert.equal(vento.naturezaDado, "Classificação interna baseada na previsão");
+  assert.equal(chuva.fonteDados, "Open-Meteo");
 });
 
 test("deduplicação ignora variação no mesmo grau e reavisa quando agrava", () => {
@@ -222,7 +227,7 @@ test("e-mail apresenta fenômeno, grau, fontes, valores e recomendações", () =
 
   assert.match(html, /CHUVA INTENSA — ALERTA/);
   assert.doesNotMatch(html, /Fonte do critério/);
-  assert.match(html, /Fonte de dados: INMET/);
+  assert.doesNotMatch(html, /Fonte de dados:|Origem da classificação|Significado do nível CIM|Instalações/);
   assert.match(html, /Chuva entre 30 e 60 mm\/h/);
   assert.match(html, /Recomendações – Protocolo Meteorológico do COMPARTILHADO/);
   assert.match(assuntoAlerta(base), /CHUVA INTENSA — ALERTA — Rio de Janeiro\/RJ/);
@@ -246,11 +251,8 @@ test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem
     alertas: [oficial],
   });
   assert.match(html, /TEMPESTADE COM RAIOS — ALERTA/);
-  assert.match(html, /MUDANÇA DE AVISO OFICIAL INMET · NOVO ALERTA/);
-  assert.match(html, /Classificação:<\/strong> ALERTA/);
-  assert.match(html, /Instruções oficiais:/);
-  assert.match(html, /Motivo do aviso:.*Chuva entre 30 e 60 mm\/h\. Ventos intensos de 60 a 100 km\/h\./);
-  assert.match(html, /Fonte de dados: INMET/);
+  assert.match(html, /Informe do aviso:<\/strong> Chuva entre 30 e 60 mm\/h\. Ventos intensos de 60 a 100 km\/h\./);
+  assert.doesNotMatch(html, /AVISO OFICIAL INMET|Órgão emissor|Previsão complementar|Classificação:|Instruções oficiais:|Fonte de dados:/);
   assert.equal((html.match(/Chuva entre 30 e 60 mm\/h/g) || []).length, 1);
 });
 
@@ -277,7 +279,7 @@ test("normalização oficial isolada não renderiza Alerta CIM", () => {
 test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {
   const cores = [
     ["NORMAL", "normal", "#2E7D32"],
-    ["ATENÇÃO", "atencao", "#FBC02D"],
+    ["ATENÇÃO", "atencao", "#9A7600"],
     ["ALERTA", "alto", "#EF6C00"],
     ["EMERGÊNCIA", "severo", "#C62828"],
   ];
@@ -296,7 +298,6 @@ test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {
     assert.match(html, /Centro Integrado<br>de Monitoramento/);
     assert.match(html, /COMPARTILHADO/);
     assert.match(html, /background:#047C3E/);
-    assert.match(html, /Fonte de dados: Open-Meteo/);
-    assert.doesNotMatch(html, /Fonte do critério|Fonte do dado/);
+    assert.doesNotMatch(html, /Fonte de dados:|Fonte do critério|Fonte do dado/);
   }
 });

@@ -1,10 +1,9 @@
 const { esc } = require("./pdfTemplate");
-const { renderDailyChanges, renderEmailHeader } = require("./emailComponents");
+const { renderDailyChanges, renderEmailHeader, renderEmailHeaderStyles } = require("./emailComponents");
 const { montarCardsAlerta, visualNivel } = require("./alertCards");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
 const AlertTitle = require("../../public/alert-title");
-const { maiorGrau } = require("../logic/inmetAlertRules");
 const { calorPorData, dataLocal, ROTULOS_CALOR } = require("../logic/calorPorData");
 const { TIPOS_DOCUMENTO, alertaExibivel } = require("../logic/alertPresentation");
 
@@ -58,9 +57,8 @@ function celulaMetrica(rotulo, valor, ultimaColuna = false) {
 // A janela da previsão depende da edição (horário agendado), não da hora em
 // que o e-mail é aberto.
 function frasePrevisao(r) {
-  if (r.horarioAgendado === "05:00") return "Previsão até as 15hrs";
-  if (r.horarioAgendado === "15:00") return "Previsão até as 00h";
-  return "";
+  if (!r.horarioAgendado || !r.previsaoAte) return "";
+  return `Previsão até as ${r.previsaoAte}`;
 }
 
 // Linha acima dos cards: "Hora da consulta" à esquerda e a janela da previsão
@@ -75,27 +73,25 @@ function linhaReferencia(r) {
   </table>`;
 }
 
-// Card "CALOR": usa o maior nível entre o EHF do dia e os alertas de calor
-// exibidos no próprio informativo. Assim o resumo nunca contradiz o card de
-// alerta logo abaixo. Sem nenhuma classificação → "Indisponível".
+// Card "CALOR": fonte única EHF/Clima e Saúde. Temperatura elevada e avisos
+// meteorológicos de calor permanecem informações separadas e não substituem
+// a classificação oficial do indicador de saúde.
 function valorCalor(r) {
   const hoje = dataLocal(r.geradoEmISO || Date.now(), r.cidade?.fuso);
   const calor = calorPorData(r.climaSaude, hoje);
-  const grausAlertas = (r.severidade?.eventos || [])
-    .filter((evento) => evento?.tipo === "calorExtremo" || evento?.assinatura === "calor")
-    .map((evento) => AlertTitle.normalizarGrau(evento.grau || evento.titulo))
-    .filter(Boolean);
-  if (!calor && grausAlertas.length === 0) {
+  if (!calor) {
     return `<span style="color:${COR.secundario};font:bold 21px/1.2 Arial,sans-serif;">Indisponível</span>`;
   }
-  const grau = maiorGrau(calor?.grau || "NORMAL", ...grausAlertas);
+  const grau = calor.grau;
   return `<span style="color:${visualNivel(grau).texto};">${esc(ROTULOS_CALOR[grau])}</span>`;
 }
 
 function resumoMeteorologico(r) {
   const rajada = rajadaMaxima(r);
   const rajadaValor = Number.isFinite(rajada.valor) ? numeroUnidade(rajada.valor, "km/h") : "Dado indisponível";
-  const ar = texto(r.qualidadeAr?.pm25Classificacao?.nivel);
+  const ar = Number.isFinite(r.qualidadeAr?.aqiPm25)
+    ? texto(r.qualidadeAr?.pm25Classificacao?.nivel)
+    : "Dado indisponível";
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-bottom:0;border-collapse:separate;">
     <tr>
       ${celulaMetrica("TEMP. MÍN/MÁX", parOuTraco(r.tempMin, r.tempMax, "°", "°C"))}
@@ -205,7 +201,9 @@ function fontesDeDados(r, eventos) {
   return fontes.size ? [...fontes].map(esc).join(" | ") : "Dados indisponíveis nesta emissão.";
 }
 
-function renderEmailHtml(r) {
+const { faixaSimulacaoEmail } = require("./simulationBanner");
+
+function renderEmailHtml(r, { incluirCorRio = true } = {}) {
   const eventos = eventosLocais(r);
   const mudancas = renderDailyChanges(r.mudancasDia);
   // O corpo do e-mail mantém o filtro de antes (oculta NORMAL); ordem, cores
@@ -214,12 +212,13 @@ function renderEmailHtml(r) {
 
   return `<!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only">${renderEmailHeaderStyles()}</head>
 <body bgcolor="${COR.fundo}" style="margin:0;padding:0;background:${COR.fundo};background-color:${COR.fundo};color:${COR.texto};font-family:Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.fundo}" style="width:100%;background:${COR.fundo};background-color:${COR.fundo};">
     <tr><td align="center" bgcolor="${COR.fundo}" style="padding:8px 6px;background:${COR.fundo};">
       <!--[if mso]><table role="presentation" width="850" cellpadding="0" cellspacing="0" bgcolor="${COR.painel}"><tr><td bgcolor="${COR.painel}"><![endif]-->
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.painel}" style="width:100%;max-width:850px;background:${COR.painel};background-color:${COR.painel};color:${COR.texto};border:1px solid ${COR.borda};">
+      <table class="cim-email-shell" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.painel}" style="width:100%;max-width:850px;background:${COR.painel};background-color:${COR.painel};color:${COR.texto};border:1px solid ${COR.borda};">
+        ${faixaSimulacaoEmail(r)}
         ${renderEmailHeader({
           titulo: "INFORMATIVO METEOROLÓGICO",
           cidade: r.cidade?.nome,
@@ -230,7 +229,7 @@ function renderEmailHtml(r) {
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:4px 20px 5px;">${resumoMeteorologico(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:3px 20px 0;">${marECondicao(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${cartoesAlerta}${mudancas}</td></tr>
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}</td></tr>
+        ${incluirCorRio ? `<tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}</td></tr>` : ""}
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:10px 25px 6px;color:${COR.texto};font:14px/1.4 Arial,sans-serif;"><strong>Fontes de dados:</strong><br>${fontesDeDados(r, eventos)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-left:4px solid ${COR.verde};"><tr><td bgcolor="${COR.celula}" style="padding:11px 17px;background:${COR.celula};color:#333333;font:14px/1.4 Arial,sans-serif;">Relatório técnico completo com tabelas, avisos oficiais e fontes consultadas em anexo (PDF).</td></tr></table></td></tr>
         <tr><td bgcolor="${COR.amarelo}" style="height:3px;background:${COR.amarelo};font-size:0;line-height:3px;">&nbsp;</td></tr>

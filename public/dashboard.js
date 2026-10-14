@@ -5,6 +5,7 @@ const seletorBaseEl = document.getElementById("seletor-base");
 
 const overlaySenha = document.getElementById("overlay-senha");
 const inputSenha = document.getElementById("input-senha");
+const tipoEnvioEl = document.getElementById("tipo-envio");
 const modalMensagem = document.getElementById("modal-mensagem");
 const botaoConfig = document.getElementById("botao-config");
 const botaoCancelar = document.getElementById("botao-cancelar");
@@ -50,7 +51,7 @@ function atualizarRelogio() {
   const data = document.getElementById("data-atual");
   data.textContent = agora.toLocaleDateString("pt-BR", { dateStyle: "full", timeZone: "America/Sao_Paulo" });
   data.dateTime = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(agora);
-  relogioEl.textContent = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "America/Sao_Paulo" });
+  relogioEl.textContent = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: "America/Sao_Paulo" });
 }
 setInterval(atualizarRelogio, 1000);
 atualizarRelogio();
@@ -311,27 +312,31 @@ function mostrarToast(mensagem, tipo = "sucesso") {
 
 botaoConfirmar.addEventListener("click", async () => {
   const senha = inputSenha.value;
+  const tipoEnvio = tipoEnvioEl.value;
+  const avisoCorRio = tipoEnvio === "cor_rio";
   if (!senha) {
     modalMensagem.textContent = "Digite a senha.";
     return;
   }
   botaoConfirmar.disabled = true;
-  botaoConfirmar.textContent = "Gerando relatório…";
-  modalMensagem.textContent = "Atualizando os dados meteorológicos…";
+  botaoConfirmar.textContent = avisoCorRio ? "Preparando aviso…" : "Gerando relatório…";
+  modalMensagem.textContent = avisoCorRio ? "Consultando o conteúdo oficial do COR-Rio…" : "Atualizando os dados meteorológicos…";
   const avisoPdf = setTimeout(() => {
-    botaoConfirmar.textContent = "Gerando PDF…";
-    modalMensagem.textContent = "Gerando o PDF completo…";
+    if (!avisoCorRio) {
+      botaoConfirmar.textContent = "Gerando PDF…";
+      modalMensagem.textContent = "Gerando o PDF completo…";
+    }
   }, 1500);
   const avisoEnvio = setTimeout(() => {
-    botaoConfirmar.textContent = "Enviando relatório…";
-    modalMensagem.textContent = "Anexando o PDF e enviando o relatório…";
+    botaoConfirmar.textContent = avisoCorRio ? "Enviando aviso…" : "Enviando relatório…";
+    modalMensagem.textContent = avisoCorRio ? "Enviando somente aos destinatários COR-RIO…" : "Anexando o PDF e enviando o relatório…";
   }, 5000);
 
   try {
     const resp = await fetch("/api/gerar-relatorio", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ senha, cidade: seletorBaseEl.value }),
+      body: JSON.stringify({ senha, cidade: seletorBaseEl.value, tipoEnvio }),
     });
     const dados = await resp.json();
     if (!dados.ok) {

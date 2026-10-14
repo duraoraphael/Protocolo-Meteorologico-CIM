@@ -10,4 +10,6 @@ test("formulário de responsáveis identifica nome da pessoa e e-mail", () => {
   assert.match(html, /<label[^>]+for="resp-input-email"[\s\S]*E-mail/);
   assert.match(html, /id="resp-input-email"[^>]+type="email"[^>]+autocomplete="email"[^>]+required/);
   assert.match(html, /id="resp-botao-cadastrar"[^>]*>Cadastrar responsável</);
+  assert.match(html, /id="tipo-envio"/);
+  assert.match(html, /value="cor_rio">Aviso exclusivo COR-RIO — RJ</);
 });

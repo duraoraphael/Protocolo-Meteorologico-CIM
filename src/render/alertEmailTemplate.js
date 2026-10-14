@@ -7,6 +7,7 @@ const {
   nomeParametroAlerta,
   normalizarGrau,
   renderEmailHeader,
+  renderEmailHeaderStyles,
   renderStatusChangeCard,
 } = require("./emailComponents");
 const { ordenarEventosParaExibicao, prioridadeNivel } = require("./eventOrdering");
@@ -23,6 +24,7 @@ function alertasCimExibiveis(alertas) {
 
 function blocoAlerta(a) {
   return renderStatusChangeCard({
+    resumido: true,
     tipo: a.tipo,
     grauAnterior: a.grauAnterior,
     grau: a.grau,
@@ -33,38 +35,59 @@ function blocoAlerta(a) {
     protocolo: a.protocolo,
     naturezaDado: a.naturezaDado,
     severidadeTexto: a.severidadeTexto,
+    orgaoEmissor: a.orgaoEmissor,
     instrucoesOficiais: a.instrucoesOficiais,
+    previsaoComplementar: a.previsaoComplementar,
+    periodoPrevisao: a.periodoPrevisao,
+    fontePrevisao: a.fontePrevisao,
     recomendacoes: a.recomendacoes,
   });
+}
+
+function sitesOficiaisHtml(cidade) {
+  const sites = [
+    ["INMET", cidade?.links?.inmet || "https://portal.inmet.gov.br/"],
+    ["ANA — Monitor de Secas", "https://monitordesecas.ana.gov.br/"],
+    ["ANA — classificação da seca", "https://monitordesecas.ana.gov.br/tabela-de-classificacao"],
+    ["Ministério da Saúde — Excesso de Calor", "https://clima.saude.gov.br/"],
+    cidade?.integracaoCorRio && ["Centro de Operações e Resiliência", "https://cor.rio/"],
+  ].filter(Boolean);
+  return sites.map(([nome, url]) => `<a href="${esc(url)}" style="color:#006B3C;text-decoration:underline;">${esc(nome)}</a>`).join(" &nbsp;|&nbsp; ");
 }
 
 /**
  * @param {object} base item de `porBase` retornado por verificarAlertas()
  */
+const { faixaSimulacaoEmail } = require("./simulationBanner");
+
 function renderAlertEmailHtml(base) {
   const r = base.report;
   const cidade = base.cidade;
   const alertas = alertasCimExibiveis(base.alertas);
   if (!alertas.length) return "";
   const apenasCalorEhf = alertas.every((alerta) => alerta.assinatura === 'calor-ehf');
+  const temTransicao = alertas.some((alerta) => normalizarGrau(alerta.grauAnterior));
+  const rajadas = (r.ventoPorPeriodo || []).map((periodo) => periodo?.rajadaMaxKmh).filter(Number.isFinite);
+  const rajada = rajadas.length ? `${Math.max(...rajadas)} km/h` : "—";
 
   return `<!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${renderEmailHeaderStyles()}</head>
 <body style="margin:0;padding:0;background:#EEF1EF;font-family:Arial,'Segoe UI',sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#EEF1EF;">
     <tr><td align="center" style="padding:18px 6px;">
       <!--[if mso]><table role="presentation" width="850" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:850px;background:#ffffff;">
+      <table class="cim-email-shell" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:850px;background:#ffffff;">
+        ${faixaSimulacaoEmail(r)}
         ${renderEmailHeader({
           titulo: "ALERTA METEOROLÓGICO",
           cidade: cidade.nome,
           uf: cidade.uf,
-          data: r.dataFormatadaCurta,
+          data: r.dataFormatadaLonga || r.dataFormatadaCurta,
         })}
 
         <tr><td style="padding:16px 22px 4px 22px;font-family:Arial,sans-serif;font-size:13.5px;color:#333;">
-          Mudança de gatilho ${apenasCalorEhf ? 'de calor / risco à saúde' : 'meteorológico'} identificada para <strong>${esc(cidade.nome)}</strong>.
+          ${temTransicao ? "Mudança de gatilho" : "Novo enquadramento"} ${apenasCalorEhf ? 'de calor / risco à saúde' : 'meteorológico'} identificado para <strong>${esc(cidade.nome)}</strong>.
           Consulte abaixo o grau atual e as recomendações aplicáveis.
         </td></tr>
 
@@ -81,7 +104,7 @@ function renderAlertEmailHtml(base) {
               </td>
               <td style="padding:9px 12px;text-align:center;border-right:1px solid #EEE;font-family:Arial,sans-serif;">
                 <div style="font-size:9px;color:#777;text-transform:uppercase;">Rajada prevista</div>
-                <div style="font-size:16px;font-weight:bold;color:#333;">${Math.max(...(r.ventoPorPeriodo || []).map((p) => p.rajadaMaxKmh ?? 0), 0)} km/h</div>
+                <div style="font-size:16px;font-weight:bold;color:#333;">${rajada}</div>
               </td>
               <td style="padding:9px 12px;text-align:center;font-family:Arial,sans-serif;">
                 <div style="font-size:9px;color:#777;text-transform:uppercase;">Condição</div>
@@ -96,12 +119,15 @@ function renderAlertEmailHtml(base) {
             O detalhamento complementar por período está no informativo diário desta base.
             Em caso de emergência, acionar a Defesa Civil pelo <strong>199</strong>.
           </div>
+          <div data-official-consultation-sites="true" style="padding:11px 2px 0;font-size:11px;line-height:1.6;color:#666;">
+            <strong>Sites oficiais para consulta:</strong><br>${sitesOficiaisHtml(cidade)}
+          </div>
         </td></tr>
 
         <tr><td style="height:3px;background:#FFCC00;line-height:3px;font-size:0;">&nbsp;</td></tr>
         <tr><td style="padding:11px 22px 16px 22px;text-align:center;color:#888;font-size:10.5px;font-family:Arial,sans-serif;">
           Alerta gerado automaticamente pelo monitor do CIM em ${esc(r.dataFormatadaCurta)} às ${esc(r.horaConsulta)}.
-          Enviado quando há mudança de gatilho para o fenômeno monitorado.
+          Enviado quando surge um novo enquadramento ou há mudança de gatilho para o fenômeno monitorado.
           Sujeito a revisão humana antes de uso operacional.
         </td></tr>
 

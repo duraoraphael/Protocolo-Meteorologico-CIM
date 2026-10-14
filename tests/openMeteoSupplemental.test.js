@@ -42,6 +42,7 @@ function respostaAir() {
       uv_index: time.map((_, hora) => hora === 12 ? 9 : 2),
       dust: time.map(() => 4),
       carbon_monoxide: time.map(() => 100),
+      european_aqi_pm2_5: time.map(() => 18),
     },
   };
 }
@@ -81,9 +82,45 @@ test("Air Quality usa 15 segundos e recupera após falhas transitórias", async 
   assert.equal(OPEN_METEO_AIR_TENTATIVAS, 3);
   assert.equal(chamadas.length, 3);
   assert.deepEqual(esperas, [2000, 4000]);
-  assert.equal(resultado.fonte, "Open-Meteo Air Quality");
+  assert.equal(resultado.fonte, "Open-Meteo Air Quality / CAMS");
   assert.equal(resultado.uvMax, 9);
+  assert.equal(resultado.horaPicoUv, "12:00");
   assert.equal(resultado.pm25Medio, 12);
+  assert.equal(resultado.aqiPm25, 18);
+  assert.equal(resultado.pm25Classificacao.nivel, "Boa");
+});
+
+test("Marine calcula direção circular e respeita 05h no horário local", async () => {
+  const resposta = respostaMarine();
+  resposta.hourly.wave_direction = resposta.hourly.time.map((_, hora) => hora === 5 ? 350 : 10);
+  resposta.hourly.wave_height[5] = 1.2;
+  let urlConsultada;
+  const resultado = await buscarMar(-3.1, -60, {
+    fuso: "America/Manaus",
+    fetchImpl: async (url) => { urlConsultada = url; return { ok: true, json: async () => resposta }; },
+  });
+  assert.match(urlConsultada, /timezone=America%2FManaus/);
+  assert.equal(resultado.periodos[0].alturaMaxM, 1.2);
+  assert.equal(resultado.periodos[0].direcaoOnda, "N");
+});
+
+test("Air Quality rejeita fuso divergente e nunca converte nulos em zero", async () => {
+  const resposta = respostaAir();
+  resposta.timezone = "UTC";
+  resposta.hourly.pm2_5 = resposta.hourly.pm2_5.map(() => null);
+  await assert.rejects(
+    buscarQualidadeAr(-3.1, -60, {
+      fuso: "America/Manaus",
+      fetchImpl: async () => ({ ok: true, json: async () => resposta }),
+    }),
+    /fuso divergente/
+  );
+  delete resposta.timezone;
+  const resultado = await buscarQualidadeAr(-3.1, -60, {
+    fuso: "America/Manaus",
+    fetchImpl: async () => ({ ok: true, json: async () => resposta }),
+  });
+  assert.equal(resultado.pm25Medio, null);
 });
 
 test("Marine e Air Quality não repetem erro HTTP permanente", async () => {

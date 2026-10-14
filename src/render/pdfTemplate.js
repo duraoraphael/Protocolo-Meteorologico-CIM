@@ -95,10 +95,8 @@ function blocoDivergencias(divergencias) {
 }
 
 function blocoAvisosColeta(r) {
-  const windyValido = (r.fontesAutomatizadas || r.fontes || []).some((fonte) => /^Windy\b/i.test(fonte.nome || ""));
   const avisosColeta = [...new Set((r.avisosColeta || [])
     .filter((aviso) => typeof aviso === "string" && aviso.trim())
-    .filter((aviso) => windyValido || !/^Windy\b/i.test(aviso.trim()))
     .map((aviso) => aviso.trim()))];
   if (!avisosColeta.length) return "";
   return `<div class="warning-box">
@@ -438,10 +436,10 @@ function tabelaQualidadeAr(qa, fontesPorCampo = {}) {
     <thead><tr><th>Indicador</th><th>Valor</th><th>Classificação</th><th>Referência</th></tr></thead>
     <tbody>
       <tr>
-        <td>QUALIDADE DO AR</td>
-        <td></td>
-        <td>${esc(qa.pm25Classificacao?.nivel)}</td>
-        <td></td>
+        <td>Qualidade do Ar</td>
+        <td>${Number.isFinite(qa.aqiPm25) ? qa.aqiPm25 : "—"}</td>
+        <td>${Number.isFinite(qa.aqiPm25) ? esc(qa.pm25Classificacao?.nivel) : "—"}</td>
+        <td>${Number.isFinite(qa.aqiPm25) ? "Classificação informada pela Open-Meteo/CAMS" : "Classificação indisponível"}</td>
       </tr>
       ${linhasParticulado}
       <tr class="zebra">
@@ -489,14 +487,34 @@ function blocoFontes(r) {
     antes: `<p class="rotulo-tabela"><strong>Verificação manual (não integradas):</strong></p>`,
     tabela: tabelaManuais,
   })}
+  ${blocoSitesOficiaisConsulta(r)}
   ${blocoFontesMonitorSecas(r.monitorSecas)}
   ${blocoDivergencias(r.divergencias)}`;
+}
+
+function blocoSitesOficiaisConsulta(r) {
+  const sites = [
+    ["INMET — previsão e avisos meteorológicos", r.cidade?.links?.inmet || "https://portal.inmet.gov.br/"],
+    ["ANA — Monitor de Secas por região", monitorSecas.PORTAL_URL],
+    ["ANA — tabela de classificação de severidade da seca", monitorSecas.CLASSIFICACAO_URL],
+    ["Ministério da Saúde — Excesso de Calor (EHF e risco combinado)", "https://clima.saude.gov.br/"],
+    r.cidade?.integracaoCorRio && ["COR — Centro de Operações e Resiliência", "https://cor.rio/"],
+  ].filter(Boolean);
+  return blocoTabela({
+    antes: `<p class="rotulo-tabela"><strong>Sites oficiais para consulta:</strong></p>`,
+    tabela: `<table class="fontes-consulta">
+      <thead><tr><th>Fonte</th><th>Endereço oficial</th></tr></thead>
+      <tbody>${sites.map(([nome, url], i) => `<tr class="${i % 2 ? "zebra" : ""}"><td style="width:42%;">${esc(nome)}</td><td class="ms-url"><a href="${escAtributo(url)}">${esc(url)}</a></td></tr>`).join("")}</tbody>
+    </table>`,
+  });
 }
 
 // Endereços oficiais efetivamente usados na seção do Monitor de Secas.
 function blocoFontesMonitorSecas(ms) {
   if (!ms?.urls?.pagina) return "";
   const linhas = [
+    ["Portal do Monitor de Secas", ms.urls.portal || monitorSecas.PORTAL_URL],
+    ["Tabela oficial de classificação S0–S4", ms.urls.classificacao || monitorSecas.CLASSIFICACAO_URL],
     ["Página do mapa (fonte de referência)", ms.urls.pagina],
     ms.urls.api && ["API pública consumida pela página: resumo oficial por UF e data de elaboração", ms.urls.api],
     ms.urls.mapa && ["Mapa oficial (imagem reproduzida)", ms.urls.mapa],
@@ -505,7 +523,7 @@ function blocoFontesMonitorSecas(ms) {
     antes: `<p class="rotulo-tabela"><strong>Monitor de Secas — ANA (${esc(ms.competencia?.rotulo || "competência indisponível")}):</strong></p>`,
     tabela: `<table class="ms-fontes">
     <thead><tr><th>Uso</th><th>Endereço</th></tr></thead>
-    <tbody>${linhas.map(([uso, url], i) => `<tr class="${i % 2 ? "zebra" : ""}"><td style="width:38%;">${esc(uso)}</td><td class="ms-url">${esc(url)}</td></tr>`).join("")}</tbody>
+    <tbody>${linhas.map(([uso, url], i) => `<tr class="${i % 2 ? "zebra" : ""}"><td style="width:38%;">${esc(uso)}</td><td class="ms-url"><a href="${escAtributo(url)}">${esc(url)}</a></td></tr>`).join("")}</tbody>
   </table>`,
   });
 }
@@ -646,7 +664,7 @@ function dataHoraLocal(iso, fuso) {
   if (!iso || Number.isNaN(instante.getTime())) return null;
   const partes = new Intl.DateTimeFormat("pt-BR", {
     timeZone: fuso, day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit", timeZoneName: "shortOffset",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "shortOffset",
   }).formatToParts(instante);
   const p = Object.fromEntries(partes.map(({ type, value }) => [type, value]));
   return `${p.day}/${p.month}/${p.year} às ${p.hour}:${p.minute} (${p.timeZoneName})`;
@@ -835,6 +853,8 @@ function cabecalhoPdfHtml({ titulo, linhaLocal }) {
  * @param {boolean} [opcoes.corRioSomenteDoDia] card do COR-Rio só com o
  *   comunicado do dia (PDF anexado ao e-mail).
  */
+const { faixaSimulacaoDocumento } = require("./simulationBanner");
+
 function renderPdfHtml(r, opcoes = {}) {
   return `<!doctype html>
 <html lang="pt-BR">
@@ -1040,6 +1060,7 @@ function renderPdfHtml(r, opcoes = {}) {
 </style>
 </head>
 <body>
+  ${faixaSimulacaoDocumento(r)}
   ${cabecalhoPdfHtml({
     titulo: "INFORMATIVO METEOROLÓGICO",
     linhaLocal: `${esc(r.cidade.nome)} — ${esc(r.cidade.uf)} — ${esc(r.dataFormatadaLonga)}`,
@@ -1050,11 +1071,11 @@ function renderPdfHtml(r, opcoes = {}) {
 
   ${blocosPrevisao(r)}
 
-  ${tabelaMar(r.mar, r.fontesPorCampo)}
   ${tabelaCalor(r)}
   ${tabelaQualidadeAr(r.qualidadeAr, r.fontesPorCampo)}
+  ${tabelaMar(r.mar, r.fontesPorCampo)}
   ${tabelaAvisosInmet(r)}
-  ${blocoCorRio(r, { somenteDoDia: opcoes.corRioSomenteDoDia })}
+  ${opcoes.incluirCorRio === false ? "" : blocoCorRio(r, { somenteDoDia: opcoes.corRioSomenteDoDia })}
   ${blocoMonitorSecas(r)}
   ${blocoPrevisaoProximosDias(r, 2)}
 

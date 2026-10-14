@@ -30,7 +30,6 @@ const RECOMENDACOES = Object.freeze({
     ALERTA: Object.freeze([
       "Suspender trabalho em altura e em telhados.",
       "Suspender atividades externas não essenciais.",
-      "Controlar acesso a áreas alagáveis.",
       "Manter prontidão de saúde e equipes de contingência.",
     ]),
     "EMERGÊNCIA": Object.freeze([

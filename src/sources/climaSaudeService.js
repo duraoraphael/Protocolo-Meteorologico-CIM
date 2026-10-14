@@ -21,10 +21,22 @@ function dispatcherSistema() {
   return agenteSistema;
 }
 const NIVEIS = Object.freeze({
-  'sem excesso': { grau: 'NORMAL', protocolo: null, gravidade: 'normal' },
-  baixo: { grau: 'ATENÇÃO', protocolo: 'P1', gravidade: 'atencao' },
-  severo: { grau: 'ALERTA', protocolo: 'P2', gravidade: 'alto' },
-  extremo: { grau: 'EMERGÊNCIA', protocolo: 'P3', gravidade: 'severo' },
+  'sem excesso': {
+    grau: 'NORMAL', protocolo: null, gravidade: 'normal',
+    significado: 'Ausência de sinal térmico relevante no dia. Manter monitoramento ativo e rotinas de vigilância.',
+  },
+  baixo: {
+    grau: 'ATENÇÃO', protocolo: 'P1', gravidade: 'atencao',
+    significado: 'Calor acima do habitual com potencial impacto na população de risco. Reforçar medidas preventivas, com foco em hidratação e orientação a grupos vulnerabilizados.',
+  },
+  severo: {
+    grau: 'ALERTA', protocolo: 'P2', gravidade: 'alto',
+    significado: 'Potencial concreto de adoecimento, internações e sobrecarga assistencial, sobretudo em populações vulnerabilizadas. Considerar priorização de resposta no mesmo dia.',
+  },
+  extremo: {
+    grau: 'EMERGÊNCIA', protocolo: 'P3', gravidade: 'severo',
+    significado: 'Calor excepcional e perigoso, com elevado potencial de impactos à saúde, incluindo aumento de internações e óbitos evitáveis. Prioridade máxima para contingência e resposta intersetorial.',
+  },
 });
 function normalizar(texto) {
   return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
@@ -36,18 +48,42 @@ function numero(texto) {
 function nivelEhf(classificacao) {
   return NIVEIS[normalizar(classificacao)] || null;
 }
+function riscoCombinadoCanonico(classificacao) {
+  const chave = normalizar(classificacao);
+  return ({
+    'sem risco': 'Normal', normal: 'Normal', baixo: 'Baixo', moderado: 'Moderado',
+    alto: 'Alto', 'muito alto': 'Muito Alto',
+  })[chave] || classificacao || null;
+}
 function recomendacoesCalor(nivel) {
   return recomendacoesPorProtocolo(nivel?.protocolo);
 }
 
-function interpretarHtml(html, { url, consultadoEm = new Date().toISOString() } = {}) {
+const MESES = Object.freeze({
+  jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
+  jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+});
+
+function dataIsoPainel(texto) {
+  const partes = normalizar(texto).match(/\b(\d{1,2})\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\s+(\d{4})\b/);
+  if (!partes) return null;
+  return `${partes[3]}-${String(MESES[partes[2]]).padStart(2, '0')}-${String(Number(partes[1])).padStart(2, '0')}`;
+}
+
+function dataLocalBrasilia(instante) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(instante));
+}
+
+function interpretarHtml(html, { url, consultadoEm = new Date().toISOString(), dataReferencia = null } = {}) {
   const $ = cheerio.load(html);
   // Não interpreta scripts de hidratação: os campos úteis estão no HTML SSR.
   $('script, style, svg').remove();
   const municipio = $('h1').first().text().trim() || null;
   const uf = $('h1').first().parent().find('p').first().text().match(/\b[A-Z]{2}\b/)?.[0] || null;
   const ehfBadge = $('[aria-label^="EHF:"]').first().attr('aria-label')?.replace(/^EHF:\s*/, '').trim() || null;
-  const riscoCombinado = $('[aria-label^="Risco Combinado:"]').first().attr('aria-label')?.replace(/^Risco Combinado:\s*/, '').trim() || null;
+  const riscoCombinado = riscoCombinadoCanonico($('[aria-label^="Risco Combinado:"]').first().attr('aria-label')?.replace(/^Risco Combinado:\s*/, '').trim() || null);
   const rotuloEhf = $('span').filter((_, el) => $(el).text().trim() === 'EHF').first();
   const linhaEhf = rotuloEhf.parent();
   const spansEhf = linhaEhf.children('span');
@@ -56,12 +92,16 @@ function interpretarHtml(html, { url, consultadoEm = new Date().toISOString() } 
   const linhaTemperatura = linhaEhf.next().text().replace(/\s+/g, ' ');
   const geosesRotulo = $('p').filter((_, el) => /Vulnerabilidade social\s*\(GeoSES\)/i.test($(el).text())).first();
   const geosesTexto = geosesRotulo.parent().find('span').first().text();
-  const dataConsulta = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(consultadoEm));
+  const dataPainel = dataIsoPainel(linhaEhf.parent().text()) || dataIsoPainel($.root().text());
+  const dataConsulta = dataPainel || dataLocalBrasilia(consultadoEm);
   const previsaoDias = $('[aria-label]').map((_, el) => $(el).attr('aria-label'))
     .get().map((rotulo) => rotulo.match(/^(\d{4}-\d{2}-\d{2}):\s*(Sem excesso|Baixo|Severo|Extremo),\s*(-?\d+(?:[.,]\d+)?)°/i))
     .filter((partes) => partes && partes[1] >= dataConsulta).map((partes) => ({ data: partes[1], classificacao: partes[2], tempMax: numero(partes[3]) }));
   if (!municipio || !uf || !nivelEhf(classificacao) || rotuloEhf.length === 0) {
     throw new Error('HTML municipal sem município, UF ou classificação EHF reconhecível.');
+  }
+  if (dataReferencia && dataConsulta !== dataReferencia) {
+    throw new Error(`Clima e Saúde retornou EHF de ${dataConsulta}, mas a data solicitada é ${dataReferencia}.`);
   }
   const nivel = nivelEhf(classificacao);
   return {
@@ -109,10 +149,20 @@ function lerArmazenado(cidade, { carregar = lerCache } = {}) {
     }
     : { status: 'indisponivel', mensagem: 'Clima e Saúde: dados indisponíveis nesta atualização.', dados: null };
 }
-async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar = gravarCache, tentativas = 2, timeoutMs = 8000 } = {}) {
+async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar = gravarCache, tentativas = 2, timeoutMs = 8000, agora = () => new Date() } = {}) {
   if (!cidade.climaSaudeUrl) return lerArmazenado(cidade, { carregar });
   let url;
-  try { url = validarUrl(cidade.climaSaudeUrl); }
+  let dataReferencia;
+  let consultadoEm;
+  try {
+    const instante = agora();
+    consultadoEm = instante.toISOString();
+    dataReferencia = dataLocalBrasilia(instante);
+    const urlValidada = new URL(validarUrl(cidade.climaSaudeUrl));
+    urlValidada.searchParams.set('modo', 'ehf');
+    urlValidada.searchParams.set('data', dataReferencia);
+    url = urlValidada.href;
+  }
   catch (erro) { return { status: 'indisponivel', mensagem: erro.message, dados: null }; }
   console.log(`[CLIMA-SAÚDE] Consultando ${cidade.nome}/${cidade.uf}`);
   for (let i = 0; i < tentativas; i++) {
@@ -126,7 +176,7 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
       if (resposta.status !== 200) throw new Error(`HTTP ${resposta.status}`);
       const html = await resposta.text();
       if (Buffer.byteLength(html, 'utf8') > 2_000_000) throw new Error('HTML maior que o limite de 2 MB.');
-      const dados = interpretarHtml(html, { url });
+      const dados = interpretarHtml(html, { url, consultadoEm, dataReferencia });
       const esperado = cidade.climaSaudeMunicipio || cidade.nome;
       if (normalizar(dados.municipio) !== normalizar(esperado) || dados.uf !== cidade.uf) throw new Error('Município/UF da página não corresponde à base.');
       const estado = carregar();
@@ -157,4 +207,4 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
   };
 }
 
-module.exports = { interpretarHtml, nivelEhf, recomendacoesCalor, consultar, lerArmazenado, validarUrl, ARQUIVO };
+module.exports = { interpretarHtml, nivelEhf, recomendacoesCalor, riscoCombinadoCanonico, consultar, lerArmazenado, validarUrl, dataIsoPainel, ARQUIVO };

@@ -1,9 +1,10 @@
-const { buscarPacoteWindy } = require('../sources/windy');
-const { integrarWindy } = require('./windyMerge');
+const { mapearFontesDoRelatorio } = require('./sourceProvenance');
+const { registrarDocumentoOperacional } = require('./documentProvenance');
 const { buscarOpenMeteo, INICIO_JANELA_HOJE, PERIODOS: PERIODOS_HOJE } = require("../sources/openMeteo");
 const { buscarPrevisaoInmet, buscarAvisosInmet, deduplicarAvisosInmet } = require("../sources/inmet");
 const { montarOcorrencias } = require("./ocorrenciasPainel");
 const { tipoDocumentoPorHorario } = require("./alertPresentation");
+const { edicaoInformativo, intervaloAvisos, validadeInformativo } = require("./informativoValidity");
 const { aplicarPoliticaFontes } = require("./weatherSourcePolicy");
 const { buscarMarComFallback } = require("../sources/marine");
 const { buscarQualidadeAr } = require("../sources/airQuality");
@@ -27,23 +28,7 @@ const {
 
 function agora() { return new Date(); }
 
-const JANELAS_EDICAO = Object.freeze({
-  "05:00": Object.freeze({ inicioHora: 5, fimHora: 15, previsaoAte: "15h", periodo: "hoje, das 05h até 15h" }),
-  "15:00": Object.freeze({ inicioHora: 15, fimHora: 24, previsaoAte: "00h", periodo: "hoje, das 15h até 00h do dia seguinte" }),
-});
 const PERIODO_COBERTO_AGENDADO = "definido pela edição do informativo";
-function intervaloAvisos(horarioAgendado, instante) {
-  const janela = JANELAS_EDICAO[horarioAgendado];
-  if (!janela) return { inicioPeriodo: instante, fimPeriodo: null };
-  const data = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(instante);
-  const inicioPeriodo = new Date(`${data}T${String(janela.inicioHora).padStart(2, "0")}:00:00-03:00`);
-  const fimPeriodo = janela.fimHora === 24
-    ? new Date(new Date(`${data}T00:00:00-03:00`).getTime() + 24 * 60 * 60 * 1000)
-    : new Date(`${data}T${String(janela.fimHora).padStart(2, "0")}:00:00-03:00`);
-  return { inicioPeriodo, fimPeriodo };
-}
 const janelaPeriodo = (chave) => {
   const { horaInicio, horaFim } = PERIODOS_HOJE[chave];
   return `${String(horaInicio).padStart(2, "0")}h–${String(horaFim % 24).padStart(2, "0")}h`;
@@ -57,6 +42,30 @@ function slugCidade(nome) {
     .replace(/[^A-Z0-9]+/g, "");
 }
 
+function montarVentoPorPeriodo({ base, openMeteo, inmetPrevisao }) {
+  // A edição limita os indicadores resumidos do cabeçalho à sua própria
+  // janela, mas esta tabela sempre apresenta o dia operacional completo.
+  const periodos = openMeteo?.periodosDiaCompleto || base.periodos;
+  return ["manha", "tarde", "noite"]
+    .filter((chave) => periodos?.[chave]?.disponivel !== false)
+    .map((chave) => {
+      const p = periodos[chave];
+      const oficial = inmetPrevisao?.periodos?.[chave];
+      return {
+        periodo: p.periodo,
+        janela: p.janela || janelaPeriodo(chave),
+        direcao: oficial ? oficial.direcaoVento || "—" : p.direcao,
+        // Vento (velocidade sustentada) e rajada são grandezas distintas.
+        intensidade: oficial ? oficial.intensidadeVento || "—" : p.intensidadeVento,
+        velocidadeMaxKmh: p.velocidadeMaxKmh ?? null,
+        rajadaMaxKmh: p.rajadaMaxKmh,
+        referenciaInmet: oficial
+          ? `${oficial.direcaoVento || "—"} / ${oficial.intensidadeVento || "—"}`
+          : null,
+      };
+    });
+}
+
 /**
  * Monta o objeto de dados completo do informativo para uma cidade cadastrada
  * em src/config/cities.js. Não lança em caso de falha parcial de uma fonte —
@@ -66,17 +75,16 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   const dataNow = agora();
   const avisosColeta = [];
   const falhasApi = {};
-  const windyPromise = buscarPacoteWindy(cidade);
   const climaSaudePromise = (horarioAgendado || atualizarClimaSaude)
     ? climaSaudeService.consultar(cidade)
     : Promise.resolve(climaSaudeService.lerArmazenado(cidade));
   let openMeteo, inmetPrevisao, inmetAvisos;
 
-  const janelaEdicao = JANELAS_EDICAO[horarioAgendado] || null;
+  const janelaEdicao = edicaoInformativo(horarioAgendado);
   try {
     openMeteo = await buscarOpenMeteo(cidade.latitude, cidade.longitude, {
       inicioHora: janelaEdicao?.inicioHora ?? INICIO_JANELA_HOJE,
-      fimHora: janelaEdicao?.fimHora ?? 24,
+      fimHora: janelaEdicao?.fimPrevisaoHora ?? 24,
       fuso: cidade.fusoHorario || "America/Sao_Paulo",
       ...(horarioAgendado ? { agregarJanela: true } : {}),
     });
@@ -126,27 +134,27 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   // equipes em trabalho externo e qualidade do ar respirável).
   let qualidadeAr = null;
   try {
-    qualidadeAr = await buscarQualidadeAr(cidade.latitude, cidade.longitude);
+    qualidadeAr = await buscarQualidadeAr(cidade.latitude, cidade.longitude, {
+      fuso: cidade.fusoHorario || "America/Sao_Paulo",
+    });
   } catch (erro) {
     falhasApi.airQuality = erro;
     registrarFalha("OPEN-METEO-AIR-QUALITY", erro);
     avisosColeta.push("Open-Meteo Air Quality: não foi possível atualizar esta fonte.");
   }
 
-  const windy = await windyPromise;
   let climaSaude;
   try { climaSaude = await climaSaudePromise; }
   catch (erro) {
     registrarFalha(`CLIMA-SAÚDE:${cidade.chave}`, erro);
     climaSaude = { status: "indisponivel", mensagem: "Clima e Saúde: dados indisponíveis nesta atualização.", dados: null };
   }
-  avisosColeta.push(...windy.avisos);
   if (horarioAgendado && !openMeteo) {
     throw new Error("Previsão horária e dos dias seguintes indisponível para a janela do relatório agendado.");
   }
-  if (!openMeteo && !inmetPrevisao && windy.weather?.tempMax == null) {
+  if (!openMeteo && !inmetPrevisao) {
     throw new Error(
-      "Nenhuma fonte meteorológica respondeu (Windy, Open-Meteo e INMET indisponíveis). Verifique a conexão com a internet e tente novamente."
+      "Nenhuma fonte meteorológica respondeu (Open-Meteo e INMET indisponíveis). Verifique a conexão com a internet e tente novamente."
     );
   }
 
@@ -162,7 +170,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     precipitacaoHorariaMaxMm: null,
     probabilidadeChuvaMax: null,
     rajadaMaxKmh: null,
-    temTempestadeHoje: false,
+    temTempestadeHoje: null,
     // null (e não 0) é essencial aqui: o INMET não fornece rajada em km/h nem
     // probabilidade de chuva numérica. Zerar esses campos faria o painel
     // exibir "0 km/h" / "0%" como se fossem previsões reais de calmaria,
@@ -176,7 +184,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
 
   const marOpenMeteo = mar;
   const arOpenMeteo = qualidadeAr;
-  const integrado = integrarWindy(base, mar, qualidadeAr, windy, openMeteo ? 'Open-Meteo' : inmetPrevisao ? 'INMET' : 'Indisponível');
+  const integrado = mapearFontesDoRelatorio(
+    base,
+    mar,
+    qualidadeAr,
+    openMeteo ? "Open-Meteo" : inmetPrevisao ? "INMET — previsão oficial" : "Indisponível"
+  );
   ({ base, mar, qualidadeAr } = integrado);
   const marAtualParaRisco = mar;
   if (!mar && marArmazenado) {
@@ -231,6 +244,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     precipitacaoTotalMm: base.precipitacaoTotalMm,
     temTempestadeHoje: base.temTempestadeHoje,
     periodos: base.periodos,
+    fontesPorCampo: integrado.fontesPorCampo,
     avisosInmet,
     mar: marAtualParaRisco,
     qualidadeAr,
@@ -262,22 +276,9 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     umidadeMax: base.umidadeMax,
   }];
 
-  // Mesmos três períodos (e janelas) no painel e nos PDFs das 05h e 15h.
-  const chavesPeriodo = ["manha", "tarde", "noite"].filter((k) => base.periodos[k]?.disponivel !== false);
-  const ventoPorPeriodo = chavesPeriodo.map((k) => {
-    const p = base.periodos[k];
-    const i = inmetPrevisao?.periodos[k];
-    return {
-      periodo: p.periodo,
-      janela: p.janela || janelaPeriodo(k),
-      direcao: p.direcao,
-      // Vento (velocidade sustentada) e rajada são grandezas distintas.
-      intensidade: p.intensidadeVento,
-      velocidadeMaxKmh: p.velocidadeMaxKmh ?? null,
-      rajadaMaxKmh: p.rajadaMaxKmh,
-      referenciaInmet: i ? `${i.direcaoVento || "—"} / ${i.intensidadeVento || "—"}` : null,
-    };
-  });
+  // No PDF das duas edições, o vento cobre sempre o dia operacional inteiro
+  // (05h–00h); apenas os cards consolidados permanecem limitados à edição.
+  const ventoPorPeriodo = montarVentoPorPeriodo({ base, openMeteo, inmetPrevisao });
 
   const chuvaPorPeriodo = ["manha", "tarde", "noite"].map((k) => {
     const p = openMeteo?.periodosDiaCompleto?.[k] || base.periodos[k];
@@ -306,7 +307,6 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   // automática e o que ainda depende de conferência humana — a transparência
   // sobre o que NÃO é automatizado é exigência do protocolo original.
   const fontesAutomatizadas = [];
-  for (const [grupo, dados] of Object.entries(windy)) if (dados?.fonte) fontesAutomatizadas.push({ nome: dados.fonte, uso: ({weather:'Previsão meteorológica normalizada; valores ausentes usam a fonte alternativa',sea:'Ondas e marulho',air:'PM2,5 e AQI US; UV preservado na fonte Open-Meteo'})[grupo] });
   if (openMeteo)
     fontesAutomatizadas.push({
       nome: "Open-Meteo",
@@ -330,7 +330,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   if (arOpenMeteo)
     fontesAutomatizadas.push({
       nome: "Open-Meteo Air Quality",
-      uso: "Material particulado (PM2,5 e PM10) e índice UV",
+      uso: "Material particulado (PM2,5 e PM10), European AQI para PM2,5 e índice UV; dados CAMS distribuídos pela Open-Meteo",
     });
   if (climaSaude.dados)
     fontesAutomatizadas.push({ nome: "Clima e Saúde — Ministério da Saúde", uso: "EHF, risco combinado à saúde e vulnerabilidade social municipal" });
@@ -382,7 +382,6 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   // fontes que responderam e uma lista solta de avisos; agora cada integração
   // aparece mesmo quando está indisponível, não configurada ou não se aplica
   // à base selecionada.
-  const windyConfigurado = Boolean(process.env.WINDY_API_KEY?.trim());
   const checkedAt = dataNow.toISOString();
   const erroFonte = (erro) => {
     if (erro instanceof Error) return erro;
@@ -410,9 +409,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     if (evento.tipo === "raios" && evento.fonteDados?.startsWith("Previsão horária")) {
       evento.fonteDados = openMeteo?.temTempestadeHoje
         ? "Open-Meteo — código de trovoada"
-        : windy.weather?.temTempestadeHoje
-          ? `${windy.weather.fonte} — código de trovoada`
-          : evento.fonteDados;
+        : evento.fonteDados;
     }
     if (evento.fonteDados) continue;
     if (evento.tipo === "avisoInmet") evento.fonteDados = "INMET — aviso oficial";
@@ -428,7 +425,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
         marGrosso: "mar.alturaMaxDiaM",
         marModerado: "mar.alturaMaxDiaM",
         uvAlto: "ar.uvMax",
-        qualidadeArRuim: "ar.pm25Medio",
+        qualidadeArRuim: "ar.aqiPm25",
       }[evento.tipo];
       const fonte = integrado.fontesPorCampo[campo];
       if (fonte && fonte !== "Indisponível") evento.fonteDados = fonte;
@@ -442,17 +439,6 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     }
   }
   const monitoramentoApis = [
-    paraMonitoramento("windy-weather", "Windy Point — Meteorologia", windyConfigurado
-      ? healthDaColeta("Windy Point — Meteorologia", Boolean(windy.weather), windy.falhas?.weather, `${windy.weather?.amostras ?? 0} amostras recebidas`)
-      : naoConfigurada("Windy Point — Meteorologia", "WINDY_API_KEY não configurada.")),
-    paraMonitoramento("windy-air", "Windy Point — Qualidade do ar", windyConfigurado
-      ? healthDaColeta("Windy Point — Qualidade do ar", Boolean(windy.air), windy.falhas?.air, `${windy.air?.amostras ?? 0} amostras recebidas`)
-      : naoConfigurada("Windy Point — Qualidade do ar", "WINDY_API_KEY não configurada.")),
-    paraMonitoramento("windy-sea", "Windy Point — Ondas", !cidade.costeira
-      ? naoAplicavel("Windy Point — Ondas", "Base não costeira.")
-      : windyConfigurado
-        ? healthDaColeta("Windy Point — Ondas", Boolean(windy.sea), windy.falhas?.sea, `${windy.sea?.amostras ?? 0} amostras recebidas`)
-        : naoConfigurada("Windy Point — Ondas", "WINDY_API_KEY não configurada.")),
     paraMonitoramento("open-meteo", "Open-Meteo — Meteorologia",
       healthDaColeta("Open-Meteo — Meteorologia", Boolean(openMeteo), falhasApi.openMeteo, "Previsão e condição atual recebidas")),
     paraMonitoramento("inmet-previsao", "INMET — Previsão",
@@ -480,9 +466,11 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     horaConsulta: new Intl.DateTimeFormat("pt-BR", {
       hour: "2-digit",
       minute: "2-digit",
+      hourCycle: "h23",
       timeZone: "America/Sao_Paulo",
     }).format(dataNow),
     condicaoGeral: base.condicaoGeral,
+    temTempestadeHoje: base.temTempestadeHoje,
     atual: integrado.atual ?? null,
     fontesPorCampo: integrado.fontesPorCampo,
     tempMin: base.tempMin,
@@ -521,7 +509,8 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     tipoDocumento: tipoDocumentoPorHorario(horarioAgendado),
     previsaoAte: janelaEdicao?.previsaoAte || null,
     periodoCoberto: janelaEdicao?.periodo || null,
-    // Só hoje: chuva e rajada na janela 05h–00h (as mesmas dos períodos acima).
+    validadeInformativo: validadeInformativo(horarioAgendado, dataNow),
+    // Só hoje: chuva e rajada na janela da edição (as mesmas dos períodos acima).
     previsaoDias: horarioAgendado ? openMeteo.previsaoDias.slice(0, 1).map((dia) => ({
       ...dia,
       janela: openMeteo.janelaHoje.rotulo,
@@ -534,7 +523,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   };
   if (horarioAgendado) relatorio.horaConsulta = horarioAgendado;
   relatorio.ocorrencias = montarOcorrencias(relatorio);
-  return relatorio;
+  return registrarDocumentoOperacional(relatorio);
 }
 
-module.exports = { montarRelatorio, PERIODO_COBERTO_AGENDADO };
+module.exports = { montarRelatorio, montarVentoPorPeriodo, PERIODO_COBERTO_AGENDADO };

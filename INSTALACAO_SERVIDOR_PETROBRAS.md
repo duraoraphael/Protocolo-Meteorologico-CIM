@@ -97,7 +97,7 @@ comitados no repositório**):
 | `HORA_ENVIO_DIARIO` | `07:30` |
 | `MONITOR_ALERTAS` | `true` |
 
-Demais variáveis (bases monitoradas, Windy opcional etc.) já vêm com
+Demais variáveis (bases monitoradas e integrações opcionais) já vêm com
 valores padrão razoáveis — ver comentários no próprio `.env.example`.
 
 ### 5.1 Certificado do relay SMTP (CA interna)

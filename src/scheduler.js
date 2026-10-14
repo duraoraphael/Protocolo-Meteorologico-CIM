@@ -1,7 +1,8 @@
 const cron = require("node-cron");
 const { executarPipeline } = require("./pipeline");
 const { CIDADES } = require("./config/cities");
-const { dataBrasilia, lerEstado, gravarEstado, resumo } = require("./logic/scheduledReport");
+const { dataBrasilia, lerEstado, gravarEstado, registroHistorico } = require("./logic/scheduledReport");
+const { BASE_COR_RIO } = require("./config/distributionBases");
 const {
   relatorioDiarioAtivo,
   envioUnicoAgendadoAtivo,
@@ -62,7 +63,7 @@ async function executarHorarioAgendado(horario, {
           comparacaoAnterior: horario === "15:00" ? estado[`${data}|${cidadeChave}|05:00`]?.resumo || null : null,
         });
         if (!resultado.envio) throw new Error("SMTP não confirmou o envio do relatório.");
-        estado[chave] = { enviadoEmISO: new Date().toISOString(), resumo: resumo(resultado.report) };
+        estado[chave] = registroHistorico(resultado.report);
         salvar(estado);
         console.log(`[AGENDADOR] ${nome}: relatório gerado e e-mail enviado com sucesso (${horario}).`);
         if (alertasAutomaticosAtivos() && process.env.MONITOR_ALERTAS !== "false" && resultado.report.climaSaude?.status === 'operacional') {
@@ -77,6 +78,31 @@ async function executarHorarioAgendado(horario, {
       } catch (erro) {
         console.error(`[AGENDADOR] ${nome}: falha às ${horario}: ${erro.message}`);
         onResultado?.(erro, null);
+      }
+    }
+    {
+      const chaveCorRio = `${data}|${BASE_COR_RIO}|${horario}`;
+      if (!estado[chaveCorRio]) {
+        try {
+          const resultado = await executar({
+            cidadeChave: "rio_de_janeiro",
+            enviarEmail: true,
+            horarioAgendado: horario,
+            tipoEnvio: "cor_rio",
+            permitirSemDestinatarios: true,
+          });
+          if (resultado.envio) {
+            estado[chaveCorRio] = registroHistorico(resultado.report);
+            salvar(estado);
+            console.log(`[AGENDADOR] COR-RIO: aviso enviado com sucesso (${horario}).`);
+            onResultado?.(null, resultado);
+          } else {
+            console.log(`[AGENDADOR] COR-RIO: nenhum destinatário vinculado; envio ignorado (${horario}).`);
+          }
+        } catch (erro) {
+          console.error(`[AGENDADOR] COR-RIO: falha às ${horario}: ${erro.message}`);
+          onResultado?.(erro, null);
+        }
       }
     }
   } catch (erro) {
@@ -101,7 +127,7 @@ function iniciarAgendamentoDiario(onResultado, agendar = cron.schedule) {
 
   const manha = agendar("0 5 * * *", () => executarHorarioAgendado("05:00", { onResultado }), { timezone: "America/Sao_Paulo" });
   const tarde = agendar("0 15 * * *", () => executarHorarioAgendado("15:00", { onResultado }), { timezone: "America/Sao_Paulo" });
-  console.log(`[AGENDADOR] 05:00 e 15:00 (America/Sao_Paulo), ${Object.keys(CIDADES).length} bases cadastradas.`);
+  console.log(`[AGENDADOR] 05:00 e 15:00 (America/Sao_Paulo), ${Object.keys(CIDADES).length} bases meteorológicas + distribuição COR-RIO.`);
   return { manha, tarde };
 }
 

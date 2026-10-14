@@ -24,6 +24,7 @@ function dataLocal(instante, fuso = "America/Sao_Paulo") {
  * @returns {{grau: string, rotulo: string, classificacaoEhf: string} | null}
  */
 function calorPorData(climaSaude, dataIso) {
+  if (climaSaude?.status !== "operacional") return null;
   const dados = climaSaude?.dados;
   if (!dados || !dataIso) return null;
   const previsto = (dados.previsaoDias || []).find((dia) => dia.data === dataIso);

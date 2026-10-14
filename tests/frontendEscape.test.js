@@ -44,7 +44,7 @@ test("Monitoramento e fontes exibe o estado de todas as APIs", () => {
     horaConsulta: "16:30",
     monitoramentoApis: [
       { id: "open-meteo", nome: "Open-Meteo — Meteorologia", status: "operacional", detalhe: "Dados recebidos" },
-      { id: "windy-weather", nome: "Windy Point", status: "indisponivel", detalhe: "HTTP 429" },
+      { id: "open-meteo-air", nome: "Open-Meteo Air Quality", status: "indisponivel", detalhe: "HTTP 429" },
       { id: "open-meteo-marine", nome: "Open-Meteo Marine", status: "degradado", detalhe: "Consulta atual indisponível. Utilizando última coleta válida de 01/10/2026 06:00." },
       { id: "oceanop", nome: "Oceanop / Petrobras", status: "nao_configurada", detalhe: "Local não vinculado" },
     ],
@@ -53,7 +53,7 @@ test("Monitoramento e fontes exibe o estado de todas as APIs", () => {
   assert.match(html, /Status de todas as APIs/);
   assert.match(html, /Open-Meteo — Meteorologia/);
   assert.match(html, /Operacional/);
-  assert.match(html, /Windy Point/);
+  assert.match(html, /Open-Meteo Air Quality/);
   assert.match(html, /Indisponível/);
   assert.match(html, /Open-Meteo Marine/);
   assert.match(html, /Degradado/);

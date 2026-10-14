@@ -9,8 +9,9 @@
 // Duas regras guiam o desenho, ambas para não virar spam (alerta que é
 // ignorado não protege ninguém):
 //
-// 1. SÓ O QUE EXIGE AÇÃO. Chuva intensa e vento entram exclusivamente por
-//    aviso oficial do INMET; as demais categorias preservam suas fontes.
+// 1. SÓ O QUE EXIGE AÇÃO. Avisos oficiais prevalecem; quando eles não existem,
+//    uma previsão confiável pode gerar classificação interna explicitamente
+//    identificada, usando os limites documentados do projeto.
 //
 // 2. SÓ MUDANÇAS. Cada fenômeno tem uma assinatura; o último grau confirmado
 //    pelo SMTP fica em data/alertas-notificados.json. Grau inalterado não reenvia.
@@ -19,9 +20,10 @@ const fs = require("fs");
 const path = require("path");
 const { CIDADES, getCidade } = require("../config/cities");
 const { montarRelatorio } = require("./reportBuilder");
-const { LIMIARES, grauUvConfigurado } = require("./riskEngine");
+const { avaliarRiscos } = require("./riskEngine");
 const { recomendacoes } = require("./inmetAlertRules");
-const { recomendacoesProtecao } = require("./healthProtection");
+const { contextoPrevisao } = require("./forecastAlertContext");
+const { recomendacoesFenomeno } = require("./phenomenonRecommendations");
 const {
   consolidarAvisosInmet,
   fenomenoAvisoInmet,
@@ -106,7 +108,7 @@ function detectarAlertasGraves(report) {
       tipo: 'Calor / risco à saúde', assinatura: 'calor-ehf',
       grau: calorSaude.nivel.grau, gravidade: calorSaude.nivel.gravidade,
       protocolo: calorSaude.nivel.protocolo,
-      detalhe: `EHF ${calorSaude.ehf.classificacao}${calorSaude.ehf.valor == null ? '' : ` (${calorSaude.ehf.valor})`}; risco combinado: ${calorSaude.riscoCombinado ?? 'indisponível'}.`,
+      detalhe: `EHF ${calorSaude.ehf.classificacao}${calorSaude.ehf.valor == null ? '' : ` (${calorSaude.ehf.valor})`}; risco combinado: ${calorSaude.riscoCombinado ?? 'indisponível'}. ${calorSaude.nivel.significado || ''}`.trim(),
       janela: 'consulta atual', naturezaDado: 'Indicador EHF',
       recomendacoes: calorSaude.recomendacoes,
     });
@@ -124,6 +126,7 @@ function detectarAlertasGraves(report) {
     if (fenomeno === "chuva" || (fenomeno === "tempestade" && /chuva|alagamento/.test(texto))) protocolos.push("chuva");
     if (fenomeno === "vento" || (fenomeno === "tempestade" && /vento|rajada/.test(texto))) protocolos.push("vento");
     const janela = [aviso.inicio, aviso.fim].filter(Boolean).join(" até ");
+    const previsao = contextoPrevisao(report, fenomeno);
 
     achados.push({
       origem: "INMET",
@@ -136,47 +139,68 @@ function detectarAlertasGraves(report) {
       janela: janela || null,
       naturezaDado: "Aviso oficial",
       fonteDados: "INMET",
-      recomendacoes: [...new Set(protocolos.flatMap((protocolo) => recomendacoes(protocolo, grau)))],
+      orgaoEmissor: "INMET",
+      previsaoComplementar: previsao?.detalhe || null,
+      periodoPrevisao: previsao?.janela || null,
+      fontePrevisao: previsao?.fonteDados || null,
+      recomendacoes: [...new Set([
+        ...protocolos.flatMap((protocolo) => recomendacoes(protocolo, grau)),
+        ...(fenomeno === "tempestade" ? recomendacoesFenomeno("tempestade", grau) : []),
+      ])],
       assinatura: `inmet:${fenomeno}`,
     });
   }
 
-  if (!report.mar?.desatualizado && report.mar?.alturaMaxDiaM != null && report.mar.alturaMaxDiaM >= LIMIARES.marGrossoM) {
+  const periodos = report.periodos || Object.fromEntries(["manha", "tarde", "noite"].map((chave, indice) => [
+    chave,
+    { ...(report.ventoPorPeriodo?.[indice] || {}), ...(report.chuvaPorPeriodo?.[indice] || {}) },
+  ]));
+  const eventos = report.severidade?.eventos || avaliarRiscos({
+    ...report,
+    periodos,
+    fontesPorCampo: report.fontesPorCampo || {},
+  }).severidade.eventos;
+  const assinaturaPorTipo = {
+    baixaUmidade: "umidade",
+    marGrosso: "mar",
+    marModerado: "mar",
+    uvAlto: "uv",
+    qualidadeArRuim: "ar",
+    tempestadePrevista: "tempestade",
+  };
+  const tipoExibicao = {
+    baixaUmidade: "Baixa umidade",
+    marGrosso: "Agitação marítima",
+    marModerado: "Condição marítima",
+    uvAlto: "Índice UV",
+    qualidadeArRuim: "Qualidade do ar",
+    tempestadePrevista: "Tempestade",
+  };
+  const fontePorTipo = {
+    baixaUmidade: report.fontesPorCampo?.umidadeMin,
+    marGrosso: report.fontesPorCampo?.["mar.alturaMaxDiaM"],
+    marModerado: report.fontesPorCampo?.["mar.alturaMaxDiaM"],
+    uvAlto: report.fontesPorCampo?.["ar.uvMax"],
+    qualidadeArRuim: report.fontesPorCampo?.["ar.aqiPm25"],
+    tempestadePrevista: report.fontesPorCampo?.temTempestadeHoje,
+  };
+  for (const evento of eventos) {
+    if (!evento || evento.avisoInmet || evento.naturezaDado === "Aviso oficial") continue;
+    const assinatura = evento.assinatura || assinaturaPorTipo[evento.tipo];
+    const grau = evento.grau;
+    if (!assinatura || !GRAVIDADE_POR_GRAU[grau]) continue;
+    const contexto = contextoPrevisao(report, assinatura);
     achados.push({
       origem: "Previsão",
-      fonteDados: report.fontesPorCampo?.["mar.alturaMaxDiaM"] || "Previsão marítima",
-      tipo: "Mar grosso",
-      gravidade: "alto",
-      detalhe: `Ondas de até ${report.mar.alturaMaxDiaM} m (${report.mar.estadoMarDia})`,
-      janela: "próximas horas",
-      assinatura: "mar",
-    });
-  }
-
-  if (report.tempMax != null && report.tempMax >= LIMIARES.calorExtremoC) {
-    achados.push({
-      origem: "Previsão",
-      fonteDados: report.fontesPorCampo?.tempMax || "Previsão meteorológica",
-      tipo: "Calor extremo",
-      gravidade: "alto",
-      detalhe: `Máxima prevista de ${report.tempMax}°C`,
-      janela: "tarde",
-      assinatura: "calor",
-    });
-  }
-
-  if (report.qualidadeAr?.uvMax != null && report.qualidadeAr.uvMax >= LIMIARES.uvExtremo) {
-    const grau = grauUvConfigurado("extremo");
-    achados.push({
-      origem: "Previsão",
-      fonteDados: report.fontesPorCampo?.["ar.uvMax"] || "Previsão de UV",
-      tipo: "Índice UV extremo",
+      fonteDados: contexto?.fonteDados || evento.fonteDados || fontePorTipo[evento.tipo] || "Previsão meteorológica integrada",
+      tipo: tipoExibicao[evento.tipo] || evento.tipo,
       grau,
       gravidade: GRAVIDADE_POR_GRAU[grau],
-      detalhe: `Índice UV de ${report.qualidadeAr.uvMax}`,
-      janela: report.qualidadeAr.horaPicoUv ? `pico ~${report.qualidadeAr.horaPicoUv}` : "meio do dia",
-      recomendacoes: recomendacoesProtecao(grau),
-      assinatura: "uv",
+      detalhe: contexto?.detalhe || evento.descricao || evento.detalhe,
+      janela: contexto?.janela || evento.janela,
+      naturezaDado: "Classificação interna baseada na previsão",
+      recomendacoes: evento.recomendacoes,
+      assinatura,
     });
   }
 
@@ -300,8 +324,11 @@ async function verificarAlertas({ ignorarHistorico = false } = {}) {
         if (assinatura === "calor") return Number.isFinite(report.tempMax);
         if (assinatura === "calor-ehf") return report.climaSaude?.status === 'operacional' && Boolean(report.climaSaude.dados?.nivel);
         if (assinatura === "uv") return Number.isFinite(report.qualidadeAr?.uvMax);
+        if (assinatura === "ar") return Number.isFinite(report.qualidadeAr?.aqiPm25);
+        if (assinatura === "umidade") return Number.isFinite(report.umidadeMin);
+        if (assinatura === "tempestade") return typeof report.temTempestadeHoje === "boolean";
         if (assinatura === "raios") return report.monitoramentoApis?.some((api) =>
-          ["open-meteo", "windy-weather", "inmet-avisos"].includes(api.id) && api.status === "operacional");
+          ["open-meteo", "inmet-avisos"].includes(api.id) && api.status === "operacional");
         return true;
       };
       const novos = filtrarNovidades(chave, graves, estado, dadosDisponiveis);

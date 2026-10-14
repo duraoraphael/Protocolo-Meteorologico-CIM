@@ -37,6 +37,10 @@ test("cadastra a pessoa uma vez e depois vincula uma ou várias bases", async (t
   assert.equal(dados.responsaveis.length, 1, "migração reúne o mesmo e-mail cadastrado em duas bases");
   assert.deepEqual(dados.responsaveis[0].bases, ["rio_de_janeiro", "macae"]);
   assert.ok(dados.basesDisponiveis.length > 2);
+  assert.deepEqual(
+    dados.basesDisponiveis.find((base) => base.chave === "cor_rio"),
+    { chave: "cor_rio", nome: "COR-RIO", uf: "RJ", tipo: "aviso_cor_rio" }
+  );
 
   r = await pedir(srv.base, "POST", { nome: "João Operação", email: "joao@exemplo.com" });
   assert.equal(r.status, 200);
@@ -47,6 +51,18 @@ test("cadastra a pessoa uma vez e depois vincula uma ou várias bases", async (t
   assert.equal(r.status, 200);
   dados = await r.json();
   assert.deepEqual(dados.responsavel.bases, ["cabiunas", "santos"]);
+
+  r = await pedir(srv.base, "PUT", { email: "joao@exemplo.com", bases: ["cor_rio"] });
+  assert.equal(r.status, 200);
+  dados = await r.json();
+  assert.deepEqual(dados.responsavel.bases, ["cor_rio"], "COR-RIO pode ser o único vínculo");
+
+  r = await fetch(srv.base + "/api/responsaveis?cidade=cor_rio");
+  dados = await r.json();
+  assert.deepEqual(dados.bases[0].responsaveis, [{ nome: "João Operação" }]);
+
+  r = await pedir(srv.base, "PUT", { email: "joao@exemplo.com", bases: ["cabiunas", "santos", "cor_rio"] });
+  assert.equal(r.status, 200);
 
   r = await fetch(srv.base + "/api/responsaveis?cidade=cabiunas");
   dados = await r.json();

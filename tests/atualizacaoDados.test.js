@@ -2,13 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { criarAtualizadorDados, intervaloAtualizacaoMin } = require("../src/logic/atualizacaoDados");
 const { iniciarAtualizacaoAutomatica } = require("../src/scheduler");
+const { registrarOperacionalTeste } = require("./helpers/provenance");
 
 const silencioso = { log() {}, warn() {}, error() {} };
 const RIO = { chave: "rio_de_janeiro", nome: "Rio de Janeiro" };
 const MACAE = { chave: "macae", nome: "Macaé" };
 
-function relatorio(cidade, iso) {
-  return { cidade: { chave: cidade.chave }, geradoEmISO: iso, horaConsulta: iso.slice(11, 16), avisosColeta: [] };
+function relatorio(cidade, iso, extra = {}) {
+  return registrarOperacionalTeste({ cidade: { chave: cidade.chave }, geradoEmISO: iso, horaConsulta: iso.slice(11, 16), avisosColeta: [], ...extra });
 }
 
 function relogio(inicioISO) {
@@ -72,7 +73,7 @@ test("horário muda a cada consulta bem-sucedida mesmo com valores iguais", asyn
   const r = relogio("2026-10-02T13:00:00.000Z");
   const atualizador = criarAtualizadorDados({
     intervaloMs: 30 * 60000, agora: r.agora, logger: silencioso,
-    montar: async (c) => ({ ...relatorio(c, new Date(r.agora()).toISOString()), tempMax: 30 }),
+    montar: async (c) => relatorio(c, new Date(r.agora()).toISOString(), { tempMax: 30 }),
   });
   await atualizador.atualizarTodas([RIO]);
   r.avancar(30 * 60000);

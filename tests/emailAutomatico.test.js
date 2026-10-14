@@ -76,9 +76,12 @@ test("duas rodadas percorrem bases, isolam falha e não repetem envio confirmado
   assert.ok(estado["2026-09-28|cabiunas|05:00"]);
   assert.equal(estado["2026-09-28|macae|05:00"], undefined);
   await executarHorarioAgendado("05:00", opcoes);
-  assert.equal(chamadas.filter((c) => c.horarioAgendado === "05:00" && c.cidadeChave === "rio_de_janeiro").length, 1);
+  assert.equal(chamadas.filter((c) => c.horarioAgendado === "05:00" && c.cidadeChave === "rio_de_janeiro" && c.tipoEnvio !== "cor_rio").length, 1);
   await executarHorarioAgendado("15:00", opcoes);
-  assert.equal(chamadas.find((c) => c.horarioAgendado === "15:00" && c.cidadeChave === "rio_de_janeiro").comparacaoAnterior.grau, "ATENÇÃO");
+  assert.equal(chamadas.find((c) => c.horarioAgendado === "15:00" && c.cidadeChave === "rio_de_janeiro" && c.tipoEnvio !== "cor_rio").comparacaoAnterior.grau, "ATENÇÃO");
   assert.ok(estado["2026-09-28|rio_de_janeiro|15:00"]);
+  assert.ok(estado["2026-09-28|cor_rio|05:00"]);
+  assert.ok(estado["2026-09-28|cor_rio|15:00"]);
+  assert.equal(chamadas.filter((c) => c.tipoEnvio === "cor_rio").length, 2);
   assert.match(compararComManha({ grau: "ATENÇÃO", vento: "ATENÇÃO", chuva: "NORMAL", fenomenos: [], rajadaMaxKmh: 35, precipitacaoTotalMm: 0 }, { grau: "ALERTA", vento: "ALERTA", chuva: "NORMAL", fenomenos: ["ALERTA — VENTO"], rajadaMaxKmh: 48, precipitacaoTotalMm: 0 }).join(" "), /ATENÇÃO → ALERTA/);
 });

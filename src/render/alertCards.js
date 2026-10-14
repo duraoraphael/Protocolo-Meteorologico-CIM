@@ -4,7 +4,8 @@
 // recomendações não divergem entre o corpo do e-mail e o PDF anexado.
 const AlertTitle = require("../../public/alert-title");
 const { ordenarEventosParaExibicao } = require("./eventOrdering");
-const { consolidarAvisosInmet, grauAvisoInmet } = require("../sources/inmet");
+const { consolidarAvisosInmet, fenomenoAvisoInmet, grauAvisoInmet } = require("../sources/inmet");
+const { contextoPrevisao } = require("../logic/forecastAlertContext");
 const {
   TIPOS_DOCUMENTO,
   alertaExibivel,
@@ -69,7 +70,7 @@ function recomendacoesDoCard(grau, resolver) {
 function eventosDoRelatorio(r, tipoDocumento) {
   const eventos = r.severidade?.eventos || (r.eventoMaisRelevante ? [r.eventoMaisRelevante] : []);
   return (Array.isArray(eventos) ? eventos : []).filter((evento) =>
-    evento && evento.tipo !== "avisoInmet"
+    evento && evento.tipo !== "avisoInmet" && !evento.avisoInmet
     && deveExibirNoDocumento({ nivel: evento.grau || AlertTitle.normalizarGrau(evento.titulo), tipoDocumento })
   );
 }
@@ -80,7 +81,7 @@ function cardEvento(evento, r) {
     origem: "previsao",
     nivel,
     titulo: AlertTitle.tituloEvento(evento, nivel),
-    rotuloOrigem: "Previsão meteorológica",
+    rotuloOrigem: evento.naturezaDado || "Classificação interna baseada na previsão",
     linhas: [
       linha(null, evento.descricao),
       linha("Janela prevista", evento.janela),
@@ -98,6 +99,7 @@ function cardCalor(r, detalhado) {
   const linhas = detalhado
     ? [
       linha("EHF", ehf),
+      linha("Significado para a vigilância em saúde", dados.nivel?.significado),
       linha("Temperatura média", unidade(temperatura.media, "°C")),
       linha("Temperatura máxima prevista", unidade(temperatura.maxima, "°C")),
       linha("Temperatura mínima", unidade(temperatura.minima, "°C")),
@@ -106,7 +108,7 @@ function cardCalor(r, detalhado) {
         ? "indisponível"
         : `${dados.geoses.valor}${dados.geoses.classificacao ? ` (${dados.geoses.classificacao})` : ""}`),
       linha("Consulta", presente(dados.consultadoEm)
-        ? `${dados.consultadoEm}${r.climaSaude.status === "armazenado" ? " — última coleta válida armazenada" : ""}`
+        ? `${dados.consultadoEm}${r.climaSaude.status !== "operacional" ? " — última coleta válida armazenada" : ""}`
         : null),
       (dados.previsaoDias || []).length ? {
         rotulo: "Previsão Clima e Saúde",
@@ -117,6 +119,7 @@ function cardCalor(r, detalhado) {
     ]
     : [
       linha("EHF", `${dados.ehf?.classificacao || "Indisponível"} · Temperatura máxima prevista: ${unidade(temperatura.maxima, "°C")}`),
+      linha("Significado para a vigilância em saúde", dados.nivel?.significado),
       linha("RISCO COMBINADO À SAÚDE", dados.riscoCombinado),
       linha("Fonte de dados", dados.source || "Indisponível"),
     ];
@@ -133,12 +136,14 @@ function cardCalor(r, detalhado) {
   };
 }
 
-function cardAvisoInmet(aviso, eventosLocais) {
+function cardAvisoInmet(aviso, eventosLocais, r) {
   const evento = aviso.event || aviso.evento || aviso.descricao || aviso.headline;
   const severidade = aviso.severity || aviso.severidade;
   const inicio = aviso.onset || aviso.inicio;
   const fim = aviso.expires || aviso.fim;
   const nivel = nivelCanonico(grauAvisoInmet(severidade));
+  const fenomeno = fenomenoAvisoInmet(evento);
+  const previsao = contextoPrevisao(r, fenomeno);
   const recomendacoes = recomendacoesDoCard(nivel, () => resolverRecomendacoesAlerta({ aviso, eventosLocais }));
   // Quando as recomendações já são as instruções oficiais, elas aparecem só
   // na seção RECOMENDAÇÕES (sem repetir o mesmo texto dentro do card).
@@ -154,6 +159,9 @@ function cardAvisoInmet(aviso, eventosLocais) {
       linha("Motivo do aviso", listaOficial(aviso.description || aviso.riscos).join("\n") || null, { multilinha: true }),
       instrucoes.length ? linha("Instruções oficiais", instrucoes.join("\n"), { multilinha: true }) : null,
       linha("Fonte de dados", "INMET"),
+      previsao ? linha("Previsão complementar", previsao.detalhe) : null,
+      previsao?.janela ? linha("Período da previsão", previsao.janela) : null,
+      previsao?.fonteDados ? linha("Fonte da previsão", previsao.fonteDados) : null,
     ].filter(Boolean),
     recomendacoes,
   };
@@ -188,12 +196,12 @@ function montarCardsAlerta(r, { tipoDocumento = TIPOS_DOCUMENTO.EXTRAORDINARIO, 
   const eventos = eventosDoRelatorio(r, tipoDocumento);
   const cards = eventos.map((evento) => cardEvento(evento, r));
 
-  if (r.climaSaude?.dados && deveExibirNoDocumento({ nivel: r.climaSaude.dados.nivel?.grau || "NORMAL", tipoDocumento })) {
+  if (r.climaSaude?.status === "operacional" && r.climaSaude?.dados && deveExibirNoDocumento({ nivel: r.climaSaude.dados.nivel?.grau || "NORMAL", tipoDocumento })) {
     cards.push(cardCalor(r, detalhado));
   }
 
   for (const aviso of avisosExibiveis(consolidarAvisosInmet(r.avisosInmet), tipoDocumento)) {
-    cards.push(cardAvisoInmet(aviso, eventos));
+    cards.push(cardAvisoInmet(aviso, eventos, r));
   }
 
   if (incluirNormal && !eventos.length && informativoProgramado(tipoDocumento) && (r.severidade?.grau || "NORMAL") === "NORMAL") {

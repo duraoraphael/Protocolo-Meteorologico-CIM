@@ -13,6 +13,7 @@
 // - Nenhum e-mail é disparado daqui: só montarRelatorio(), que apenas coleta.
 
 const { montarRelatorio } = require("./reportBuilder");
+const { validarDocumentoOperacional } = require("./documentProvenance");
 
 const INTERVALO_PADRAO_MIN = 30;
 // Depois de uma falha, pedidos do navegador não voltam a consultar as APIs
@@ -59,6 +60,7 @@ function criarAtualizadorDados({
   }
 
   function registrar(report) {
+    validarDocumentoOperacional(report, "publicação no painel");
     const item = entrada(report.cidade.chave);
     item.report = report;
     item.consultadoEm = Date.parse(report.geradoEmISO) || agora();

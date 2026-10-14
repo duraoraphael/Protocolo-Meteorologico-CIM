@@ -2,7 +2,7 @@
   "name": "protocolo-meteorologico-cim",
   "version": "1.0.0",
   "private": true,
-  "description": "Geracao automatica do Informativo Meteorologico CIM (PDF + email) a partir de APIs meteorologicas gratuitas.",
+  "description": "Geracao automatica do Informativo Meteorologico CIM (PDF + email) a partir de fontes meteorologicas rastreaveis.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,9 +16,9 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "node-cron": "^4.6.0",
-    "nodemailer": "^9.1.1",
+    "nodemailer": "^10.1.0",
     "puppeteer": "^25.9.0",
-    "undici": "^6.28.0"
+    "undici": "^6.28.1"
   },
   "overrides": {
     "qs": "^6.16.0"

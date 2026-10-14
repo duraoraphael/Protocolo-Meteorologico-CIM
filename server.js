@@ -22,6 +22,7 @@ const {
   iniciarAtualizacaoAutomatica,
 } = require("./src/scheduler");
 const responsaveis = require("./src/config/recipients");
+const { BASES_DISTRIBUICAO, getBaseDistribuicao } = require("./src/config/distributionBases");
 const { arquivosLogos } = require("./src/config/logos");
 const { problemaSenhaConfigurada, criarComparadorSenha } = require("./src/security/senha");
 const { cabecalhosSeguranca } = require("./src/security/cabecalhos");
@@ -29,6 +30,7 @@ const { tratadorDeErros, naoEncontrado } = require("./src/security/erros");
 const { criarLinksRelatorio, senhaDoBasicAuth } = require("./src/security/linksRelatorio");
 const { criarControleTentativas, valorTrustProxy } = require("./src/security/tentativas");
 const { opcoesDeRede, carregarPfx, redirecionarParaHttps } = require("./src/security/https");
+const { validarDocumentoOperacional } = require("./src/logic/documentProvenance");
 
 // Hospedagens em nuvem (Render, Railway, etc.) definem PORT automaticamente —
 // PORTA continua valendo para rodar local/Windows sem mexer no .env.
@@ -59,7 +61,6 @@ function criarApp({
   if (confiancaProxy !== false) app.set("trust proxy", confiancaProxy);
   app.use(cabecalhosSeguranca());
   app.use(express.json({ limit: "100kb" }));
-  app.use("/api/windy", require("./src/integrations/windyRoutes"));
   app.use("/api/oceanop", require("./src/integrations/oceanopRoutes"));
   app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
   // Logos (Petrobras + CIM) ficam em Logo/, na raiz do projeto, fora de
@@ -150,6 +151,8 @@ function criarApp({
   // -----------------------------------------------------------------------
   const linksRelatorio = criarLinksRelatorio();
   app.locals.linksRelatorio = linksRelatorio;
+  const arquivosOperacionais = new Set();
+  app.locals.arquivosOperacionais = arquivosOperacionais;
   const NOME_PDF_VALIDO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.pdf$/;
 
   app.get("/relatorios/:arquivo", async (req, res, next) => {
@@ -157,9 +160,9 @@ function criarApp({
     if (!NOME_PDF_VALIDO.test(arquivo)) {
       return res.status(404).json({ ok: false, erro: "Não encontrado." });
     }
-
     const token = req.query.token;
-    if (!(typeof token === "string" && linksRelatorio.valido(token, arquivo))) {
+    const tokenValido = typeof token === "string" && linksRelatorio.valido(token, arquivo);
+    if (!tokenValido) {
       const senha = senhaDoBasicAuth(req);
       const checagem = senha === undefined ? { ok: false, status: 401 } : await verificarSenha(req, senha);
       if (!checagem.ok) {
@@ -168,6 +171,9 @@ function criarApp({
         }
         return res.status(checagem.status).json({ ok: false, erro: checagem.erro || "Não autorizado." });
       }
+    }
+    if (!tokenValido && !arquivosOperacionais.has(arquivo)) {
+      return res.status(404).json({ ok: false, erro: "Não encontrado." });
     }
 
     res.sendFile(
@@ -206,23 +212,32 @@ function criarApp({
       });
     }
 
+    const tipoEnvio = req.body?.tipoEnvio === "cor_rio" ? "cor_rio" : "informativo";
     let cidadeChave;
     try {
-      cidadeChave = getCidade(req.body?.cidade || CIDADE_ATIVA).chave;
+      cidadeChave = tipoEnvio === "cor_rio"
+        ? "rio_de_janeiro"
+        : getCidade(req.body?.cidade || CIDADE_ATIVA).chave;
     } catch (erro) {
       return res.status(400).json({ ok: false, erro: "Base inválida." });
     }
 
     geracaoEmAndamento = true;
     try {
-      const resultado = await executarPipelineRelatorio({ cidadeChave, enviarEmail: true });
+      const resultado = await executarPipelineRelatorio({ cidadeChave, enviarEmail: true, tipoEnvio });
+      validarDocumentoOperacional(resultado.report, "publicação pelo servidor", {
+        exigirCamposCriticos: tipoEnvio === "informativo",
+      });
       // atualiza o cache dessa base na hora, sem esperar o próximo /api/preview
-      atualizadorDados.registrar(resultado.report);
+      if (tipoEnvio === "informativo") atualizadorDados.registrar(resultado.report);
+      if (resultado.arquivoPdf) arquivosOperacionais.add(resultado.arquivoPdf);
       // Link de download com token aleatório, válido por 24 h (V-07).
       const link = resultado.arquivoPdf ? linksRelatorio.gerar(resultado.arquivoPdf) : null;
       res.json({
         ok: true,
-        message: "Relatório gerado e enviado com sucesso.",
+        message: tipoEnvio === "cor_rio"
+          ? "Aviso COR-RIO enviado com sucesso."
+          : "Relatório gerado e enviado com sucesso.",
         arquivo: resultado.arquivoPdf,
         urlArquivo: link
           ? `/relatorios/${encodeURIComponent(resultado.arquivoPdf)}?token=${link.token}`
@@ -284,8 +299,8 @@ function criarApp({
   function basesResponsaveis(cidadeChave, { comEmail }) {
     const formatar = comEmail ? (l) => l : somenteNomes;
     if (cidadeChave) {
-      const cidade = getCidade(cidadeChave);
-      return [{ chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, responsaveis: formatar(responsaveis.listarPorCidade(cidade.chave)) }];
+      const base = getBaseDistribuicao(cidadeChave);
+      return [{ chave: base.chave, nome: base.nome, uf: base.uf, responsaveis: formatar(responsaveis.listarPorCidade(base.chave)) }];
     }
     return responsaveis.listarTodos().map((b) => ({ ...b, responsaveis: formatar(b.responsaveis) }));
   }
@@ -315,7 +330,7 @@ function criarApp({
         ok: true,
         bases: basesResponsaveis(req.body?.cidade, { comEmail: true }),
         responsaveis: responsaveis.listarResponsaveis(),
-        basesDisponiveis: Object.values(CIDADES).map(({ chave, nome, uf }) => ({ chave, nome, uf })),
+        basesDisponiveis: Object.values(BASES_DISTRIBUICAO).map(({ chave, nome, uf, tipo }) => ({ chave, nome, uf, tipo })),
       });
     } catch (erro) {
       responderErro(res, erro, "Erro ao consultar responsáveis");

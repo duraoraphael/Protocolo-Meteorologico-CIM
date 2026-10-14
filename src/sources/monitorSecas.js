@@ -23,8 +23,9 @@ const { registrarFalha } = require("./sourceHealth");
 
 const API_URL = "https://apimsbr.ana.gov.br/rest/cms-msne/mapa-monitor";
 const ARQUIVOS_URL = "https://ana-monitor-secas-files.s3.sa-east-1.amazonaws.com/";
+const PORTAL_URL = "https://monitordesecas.ana.gov.br/";
+const CLASSIFICACAO_URL = "https://monitordesecas.ana.gov.br/tabela-de-classificacao";
 const PASTA_CACHE = path.join(__dirname, "..", "..", "data", "monitor-secas");
-const COMPETENCIA_PADRAO = "2026-08";
 const LIMITE_JSON = 2_000_000;
 const LIMITE_PNG = 15_000_000;
 const VERSAO_CACHE = 2;
@@ -55,7 +56,13 @@ const UFS = Object.freeze({
 // --- Competência -----------------------------------------------------------
 
 function competenciaConfigurada(valor = process.env.MONITOR_SECAS_COMPETENCIA) {
-  const texto = String(valor || COMPETENCIA_PADRAO).trim();
+  // O Monitor é mensal e costuma fechar com defasagem. Sem configuração
+  // explícita, usa dois meses antes da data atual; nunca congela uma
+  // competência de calendário no código.
+  const referencia = new Date();
+  const padrao = new Date(Date.UTC(referencia.getUTCFullYear(), referencia.getUTCMonth() - 2, 1));
+  const competenciaPadrao = `${padrao.getUTCFullYear()}-${String(padrao.getUTCMonth() + 1).padStart(2, "0")}`;
+  const texto = String(valor || competenciaPadrao).trim();
   const partes = texto.match(/^(\d{4})-(\d{2})$/);
   const ano = partes && Number(partes[1]);
   const mes = partes && Number(partes[2]);
@@ -218,7 +225,13 @@ async function coletar(competencia, { fetchFn, pasta }) {
     ...api,
     coletadoEm: new Date().toISOString(),
     sha256Mapa: sha256(png),
-    urls: { pagina: urlPaginaMapa(competencia), api: urlApi(competencia), mapa: urlArquivo(api.caminhoMapa) },
+    urls: {
+      portal: PORTAL_URL,
+      classificacao: CLASSIFICACAO_URL,
+      pagina: urlPaginaMapa(competencia),
+      api: urlApi(competencia),
+      mapa: urlArquivo(api.caminhoMapa),
+    },
   };
   gravarCache(competencia, { meta, png }, pasta);
   console.log(`[MONITOR-SECAS] ${competencia.rotulo} coletado e armazenado (mapa id ${api.mapaId}, elaborado em ${api.dataElaboracao}).`);
@@ -237,7 +250,7 @@ function montarResultado(competencia, meta, status, uf) {
     mapaId: meta.mapaId,
     dataElaboracao: meta.dataElaboracao,
     coletadoEm: meta.coletadoEm,
-    urls: meta.urls,
+    urls: { portal: PORTAL_URL, classificacao: CLASSIFICACAO_URL, ...meta.urls },
     resumosUf: ufs.filter((sigla) => UFS[sigla]).map((sigla) => ({
       uf: sigla,
       nome: UFS[sigla][1],
@@ -293,7 +306,7 @@ async function obterMonitorSecas({ uf, competencia, fetchFn = fetch, pasta = PAS
       status: "indisponivel",
       competencia: comp,
       mensagem: `Dados do Monitor de Secas de ${comp.rotulo} indisponíveis nesta emissão.`,
-      urls: { pagina: urlPaginaMapa(comp) },
+      urls: { portal: PORTAL_URL, classificacao: CLASSIFICACAO_URL, pagina: urlPaginaMapa(comp) },
     };
   }
 }
@@ -306,5 +319,7 @@ module.exports = {
   urlArquivo,
   urlPaginaMapa,
   CATEGORIAS,
+  PORTAL_URL,
+  CLASSIFICACAO_URL,
   PASTA_CACHE,
 };
