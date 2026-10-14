@@ -310,7 +310,49 @@ function iniciarAtualizacaoAutomatica(atualizador, agendar = cron.schedule) {
   return tarefa;
 }
 
+/**
+ * Verificação preventiva das fontes 30 min antes de cada informativo
+ * (04:30 e 14:30). Só avisa a equipe técnica (EMAIL_ALERTA_FONTES) quando há
+ * problema; sem a variável, registra apenas no log. Controlado por env:
+ *   VERIFICACAO_FONTES=false   (desliga; padrão: ligado)
+ */
+async function executarVerificacaoFontes({
+  verificar = () => require("./logic/verificacaoFontes").executarVerificacao(),
+  avisar = (resultado) => require("./email/sendVerificacaoFontes").enviarVerificacaoFontes(resultado),
+} = {}) {
+  try {
+    const resultado = await verificar();
+    for (const p of resultado.problemas) {
+      console.warn(`[FONTES] ${p.situacao.toUpperCase()} — ${p.fonte} (${p.escopo}): ${p.detalhe}`);
+    }
+    if (!resultado.problemas.length) {
+      console.log(`[FONTES] Todas as fontes responderam (${resultado.itens.length} verificações).`);
+      return resultado;
+    }
+    const envio = await avisar(resultado);
+    console.log(envio.enviado
+      ? `[FONTES] ${resultado.problemas.length} problema(s); aviso enviado para ${envio.destinatarios.join(", ")}.`
+      : `[FONTES] ${resultado.problemas.length} problema(s); aviso por e-mail não enviado: ${envio.motivo}.`);
+    return resultado;
+  } catch (erro) {
+    console.error(`[FONTES] Falha na verificação preventiva: ${erro.message}`);
+    return null;
+  }
+}
+
+function iniciarVerificacaoFontes(agendar = cron.schedule) {
+  if (process.env.VERIFICACAO_FONTES === "false") {
+    console.log("[FONTES] Verificação preventiva desativada via VERIFICACAO_FONTES=false.");
+    return null;
+  }
+  const tarefa = agendar("30 4,14 * * *", () => executarVerificacaoFontes(), { timezone: "America/Sao_Paulo" });
+  console.log("[FONTES] Verificação preventiva das fontes às 04:30 e 14:30 (America/Sao_Paulo).");
+  return tarefa;
+}
+
 module.exports = {
+  iniciarVerificacaoFontes,
+  executarVerificacaoFontes,
   iniciarAgendamentoDiario,
   executarHorarioAgendado,
   agendarEnvioUnicoHoje,

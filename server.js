@@ -20,6 +20,7 @@ const {
   agendarEnvioUnicoHoje,
   iniciarMonitorAlertas,
   iniciarAtualizacaoAutomatica,
+  iniciarVerificacaoFontes,
 } = require("./src/scheduler");
 const responsaveis = require("./src/config/recipients");
 const { BASES_DISTRIBUICAO, getBaseDistribuicao } = require("./src/config/distributionBases");
@@ -420,6 +421,7 @@ function iniciarServidor() {
     agendarEnvioUnicoHoje();
     iniciarMonitorAlertas();
     iniciarAtualizacaoAutomatica(app.locals.atualizadorDados);
+    iniciarVerificacaoFontes();
   };
   const hostLog = rede.host || "localhost";
 

@@ -247,9 +247,11 @@ function criarServicoCorRio({
       parte.dados = interpretar(json);
       parte.consultadoEm = new Date(agora()).toISOString();
       parte.ultimaFalha = null;
+      parte.tipoFalha = null;
       return true;
     } catch (erro) {
       parte.ultimaFalha = motivoFalha(erro);
+      parte.tipoFalha = erro?.name === "ParserError" ? "parser" : erro?.tipo || null;
       logger.error?.(`[COR-RIO] ${nomeFonte}: ${erro.message}. ${parte.dados ? "Mantida a última coleta válida." : "Sem coleta válida anterior."}`);
       return false;
     }
@@ -289,6 +291,7 @@ function criarServicoCorRio({
         consultadoEm: estagio.consultadoEm,
         ultimaTentativaEm: estagio.ultimaTentativaEm,
         falha: estagio.ultimaFalha,
+        tipoFalha: estagio.tipoFalha || null,
       },
       calor: {
         status: situacao(calor),
@@ -296,6 +299,7 @@ function criarServicoCorRio({
         consultadoEm: calor.consultadoEm,
         ultimaTentativaEm: calor.ultimaTentativaEm,
         falha: calor.ultimaFalha,
+        tipoFalha: calor.tipoFalha || null,
       },
       comunicados: {
         status: situacao(comunicados),
@@ -304,6 +308,7 @@ function criarServicoCorRio({
         consultadoEm: comunicados.consultadoEm,
         ultimaTentativaEm: comunicados.ultimaTentativaEm,
         falha: comunicados.ultimaFalha,
+        tipoFalha: comunicados.tipoFalha || null,
       },
     };
   }

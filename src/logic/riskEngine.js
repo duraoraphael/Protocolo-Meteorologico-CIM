@@ -290,7 +290,9 @@ function avaliarRiscos(consolidado) {
       grau,
       nivel: NIVEL_POR_GRAU[grau],
       janela: "ao longo do dia",
-      descricao: `Qualidade do ar ${qualidadeAr.pm25Classificacao.nivel.toLowerCase()} prevista para PM2,5 (European AQI ${qualidadeAr.aqiPm25}; concentração média prevista de ${qualidadeAr.pm25Medio ?? "indisponível"} µg/m³).`,
+      // Texto para leitor leigo; a concentração em µg/m³ segue na tabela de
+      // qualidade do ar do informativo.
+      descricao: `Qualidade do ar ${qualidadeAr.pm25Classificacao.nivel.toLowerCase()} prevista: o ar terá mais partículas finas de poluição (como fumaça e poeira), que podem irritar olhos, nariz e garganta e piorar problemas respiratórios. Índice ${qualidadeAr.aqiPm25} — quanto maior, pior; acima de 60 o ar já é considerado ruim.`,
       naturezaDado: "Classificação interna baseada na previsão",
       recomendacoes: recomendacoesFenomeno("ar", grau),
     });

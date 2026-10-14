@@ -6,6 +6,7 @@ const tls = require('node:tls');
 const { Agent } = require('undici');
 const cheerio = require('cheerio');
 const { formatarDataBrasilia, registrarFalha } = require('./sourceHealth');
+const { tipoErro } = require('./httpJsonClient');
 const { recomendacoesPorProtocolo } = require('../logic/healthProtection');
 
 const ARQUIVO = path.join(__dirname, '..', '..', 'data', 'clima-saude.json');
@@ -64,6 +65,13 @@ const MESES = Object.freeze({
   jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
 });
 
+// Página fora do layout esperado: distingue "o portal mudou" de "o portal caiu".
+function erroFormato(mensagem) {
+  const erro = new Error(mensagem);
+  erro.name = 'ParserError';
+  return erro;
+}
+
 function dataIsoPainel(texto) {
   const partes = normalizar(texto).match(/\b(\d{1,2})\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\s+(\d{4})\b/);
   if (!partes) return null;
@@ -98,7 +106,7 @@ function interpretarHtml(html, { url, consultadoEm = new Date().toISOString(), d
     .get().map((rotulo) => rotulo.match(/^(\d{4}-\d{2}-\d{2}):\s*(Sem excesso|Baixo|Severo|Extremo),\s*(-?\d+(?:[.,]\d+)?)°/i))
     .filter((partes) => partes && partes[1] >= dataConsulta).map((partes) => ({ data: partes[1], classificacao: partes[2], tempMax: numero(partes[3]) }));
   if (!municipio || !uf || !nivelEhf(classificacao) || rotuloEhf.length === 0) {
-    throw new Error('HTML municipal sem município, UF ou classificação EHF reconhecível.');
+    throw erroFormato('HTML municipal sem município, UF ou classificação EHF reconhecível.');
   }
   if (dataReferencia && dataConsulta !== dataReferencia) {
     throw new Error(`Clima e Saúde retornou EHF de ${dataConsulta}, mas a data solicitada é ${dataReferencia}.`);
@@ -165,6 +173,7 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
   }
   catch (erro) { return { status: 'indisponivel', mensagem: erro.message, dados: null }; }
   console.log(`[CLIMA-SAÚDE] Consultando ${cidade.nome}/${cidade.uf}`);
+  let ultimoErro = null;
   for (let i = 0; i < tentativas; i++) {
     try {
       const resposta = await fetchFn(url, {
@@ -173,21 +182,24 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
         headers: { 'User-Agent': 'Protocolo-Meteorologico-CIM/1.0 (consulta publica institucional)', Accept: 'text/html' },
       });
       console.log(`[CLIMA-SAÚDE] HTTP ${resposta.status}`);
-      if (resposta.status !== 200) throw new Error(`HTTP ${resposta.status}`);
+      if (resposta.status !== 200) throw Object.assign(new Error(`HTTP ${resposta.status}`), { httpStatus: resposta.status });
       const html = await resposta.text();
       if (Buffer.byteLength(html, 'utf8') > 2_000_000) throw new Error('HTML maior que o limite de 2 MB.');
       const dados = interpretarHtml(html, { url, consultadoEm, dataReferencia });
       const esperado = cidade.climaSaudeMunicipio || cidade.nome;
-      if (normalizar(dados.municipio) !== normalizar(esperado) || dados.uf !== cidade.uf) throw new Error('Município/UF da página não corresponde à base.');
+      if (normalizar(dados.municipio) !== normalizar(esperado) || dados.uf !== cidade.uf) throw erroFormato('Município/UF da página não corresponde à base.');
       const estado = carregar();
       estado[cidade.chave] = dados;
       salvar(estado);
       console.log(`[CLIMA-SAÚDE] EHF=${dados.ehf.classificacao}; Risco=${dados.riscoCombinado ?? 'indisponível'}; dados armazenados.`);
       return { status: 'operacional', mensagem: 'Dados atualizados.', dados };
     } catch (erro) {
+      ultimoErro = erro;
       registrarFalha(`CLIMA-SAÚDE:${cidade.chave}`, erro);
     }
   }
+  // "parser" = o portal respondeu, mas o layout mudou; demais = falha de acesso.
+  const tipoFalha = tipoErro(ultimoErro);
   let ultimoValido = null;
   try { ultimoValido = carregar()[cidade.chave] || null; } catch (erro) { console.error(`[CLIMA-SAÚDE][ERRO] cache: ${erro.message}`); }
   if (ultimoValido) {
@@ -197,6 +209,7 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
       dados: ultimoValido,
       ultimoValido,
       lastSuccessAt: ultimoValido.consultadoEm || null,
+      tipoFalha,
     };
   }
   return {
@@ -204,6 +217,7 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
     mensagem: 'Clima e Saúde: dados indisponíveis nesta atualização.',
     dados: null,
     ultimoValido: null,
+    tipoFalha,
   };
 }
 

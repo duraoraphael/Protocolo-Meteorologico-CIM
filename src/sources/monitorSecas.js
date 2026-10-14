@@ -316,6 +316,7 @@ module.exports = {
   mapaDataUri,
   competenciaConfigurada,
   interpretarApi,
+  urlApi,
   urlArquivo,
   urlPaginaMapa,
   CATEGORIAS,

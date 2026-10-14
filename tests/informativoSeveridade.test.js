@@ -123,7 +123,8 @@ test("qualidade do ar usa o European AQI informado pela fonte", () => {
     aqiPm25: 61, pm25Medio: 18, pm25Classificacao: { nivel: "Ruim" },
   } })).severidade.eventos.find((evento) => evento.tipo === "qualidadeArRuim");
   assert.equal(atencao.grau, "ATENÇÃO");
-  assert.match(atencao.descricao, /European AQI 61/);
+  assert.match(atencao.descricao, /Índice 61/);
+  assert.doesNotMatch(atencao.descricao, /European AQI|µg\/m³|PM2,5/);
 
   const emergencia = avaliarRiscos(entrada({ qualidadeAr: {
     aqiPm25: 101, pm25Medio: 35, pm25Classificacao: { nivel: "Extremamente ruim" },
