@@ -35,12 +35,16 @@ function fetchAna(comp) {
 function fontesOk(extra = {}) {
   const { competenciaConfigurada } = require("../src/sources/monitorSecas");
   return {
-    openMeteo: async () => ({ atual: { temperaturaC: 23 }, tempMin: 22, tempMax: 28, precipitacaoTotalMm: 0.8, rajadaMaxKmh: 31 }),
+    openMeteo: async () => ({
+      condicaoGeral: "Poucas nuvens", tempMin: 21, tempMax: 31,
+      umidadeMin: 50, umidadeMax: 90, precipitacaoTotalMm: 2.5, rajadaMaxKmh: 34,
+    }),
     qualidadeAr: async () => ({ uvMax: 9, pm25Medio: 35 }),
     mar: async () => ({ alturaMaxDiaM: 1.1, temperaturaMarC: 26.9 }),
     avisosInmet: async () => ({ avisos: [] }),
     previsaoInmet: async () => ({ data: "13/10/2026", periodos: { manha: PERIODO, tarde: PERIODO, noite: PERIODO } }),
-    climaSaude: async () => ({ status: "operacional", dados: { dataConsulta: "2026-10-13", ehf: { classificacao: "Sem excesso" }, riscoCombinado: "Normal" } }),
+    observacaoInmet: async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: 22, temperaturaMaxC: 37, chuvaUltimaHoraMm: 0.8, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: 31 } }),
+    climaSaude: async () => ({ status: "operacional", dados: { dataConsulta: "2026-10-13", municipio: "Rio de Janeiro", uf: "RJ", ehf: { classificacao: "Sem excesso" }, riscoCombinado: "Normal" } }),
     corRio: (opcoes) => criarServicoCorRio({ ...opcoes, fetchImpl: fetchCorRio, esperarFn: semEspera }),
     fetch: fetchAna(competenciaConfigurada()),
     ...extra,
@@ -89,27 +93,27 @@ test("COR-Rio com resposta fora do formato aponta a parte afetada", async () => 
   assert.equal(itemDe(r, "COR-Rio (estágio operacional)").situacao, SITUACAO.OK);
 });
 
-test("INMET sem temperatura de um período gera campos ausentes; rajada e chuva não são exigidas", async () => {
-  const previsaoInmet = async () => ({ periodos: { manha: PERIODO, tarde: { ...PERIODO, tempMax: null }, noite: PERIODO } });
-  const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ previsaoInmet }) });
-  const item = itemDe(r, "INMET Previsão");
+test("INMET Observação sem temperatura, chuva ou rajada gera campos ausentes", async () => {
+  const observacaoInmet = async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: null, temperaturaMaxC: null, chuvaUltimaHoraMm: null, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: null } });
+  const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ observacaoInmet }) });
+  const item = itemDe(r, "INMET Observação");
   assert.equal(item.situacao, SITUACAO.CAMPOS_AUSENTES);
-  assert.match(item.detalhe, /temperatura máxima \(tarde\)/);
-  assert.doesNotMatch(item.detalhe, /rajada|chuva/);
+  assert.match(item.detalhe, /temperatura mínima observada/);
+  assert.match(item.detalhe, /chuva horária observada/);
+  assert.match(item.detalhe, /rajada medida pela estação/);
 });
 
-test("falha de DNS vira indisponível; licença Open-Meteo ausente em produção vira bloqueada", async () => {
+test("falha de DNS no serviço marinho vira indisponível; licença Open-Meteo ausente em produção vira bloqueada", async () => {
   const dns = Object.assign(new Error("Open-Meteo: falha de resolução DNS"), { tipo: "dns" });
-  const licenca = Object.assign(new Error("OPEN_METEO_API_KEY é obrigatória"), { code: "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED" });
   const r = await executarVerificacao({
     cidades: [RIO],
     env: { NODE_ENV: "production" },
-    fontes: fontesOk({ openMeteo: async () => { throw licenca; }, mar: async () => { throw dns; } }),
+    fontes: fontesOk({ mar: async () => { throw dns; } }),
   });
-  assert.equal(itemDe(r, "Open-Meteo Weather").situacao, SITUACAO.BLOQUEADA);
+  assert.equal(itemDe(r, "Open-Meteo Weather").situacao, SITUACAO.OK);
   assert.equal(itemDe(r, "Open-Meteo Marine").situacao, SITUACAO.INDISPONIVEL);
   assert.equal(itemDe(r, "Licença Open-Meteo").situacao, SITUACAO.BLOQUEADA);
-  assert.equal(r.problemas.length, 3);
+  assert.equal(r.problemas.length, 2);
 });
 
 test("ANA avisa quando já existe competência mais nova que a configurada", async () => {

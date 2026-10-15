@@ -150,8 +150,9 @@ test('PDF técnico, e-mail e painel exibem calor sem alterar severidade meteorol
     climaSaude: { status: 'operacional', dados },
   };
   const pdf = renderPdfHtml(report);
-  assert.match(pdf, /Condições de Calor — Indicadores e Previsões/);
-  assert.match(pdf, /EHF 7\.76/);
+  assert.match(pdf, /Excesso de calor/);
+  assert.match(pdf, /<th>EHF<\/th>/);
+  assert.match(pdf, />7\.76<\/td>/);
   assert.doesNotMatch(pdf, /RECOMENDAÇÕES|class="card-alerta"/);
   const email = renderEmailHtml(report);
   assert.match(email, /CALOR \/ RISCO À SAÚDE|Calor \/ risco à saúde/);

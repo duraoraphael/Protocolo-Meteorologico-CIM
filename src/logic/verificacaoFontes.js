@@ -15,6 +15,7 @@ const { buscarOpenMeteo } = require("../sources/openMeteo");
 const { buscarQualidadeAr } = require("../sources/airQuality");
 const { buscarMar } = require("../sources/marine");
 const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
+const { buscarObservacaoInmet } = require("../sources/inmetObservations");
 const { criarServicoCorRio } = require("../sources/corRio");
 const climaSaude = require("../sources/climaSaudeService");
 const { competenciaConfigurada, interpretarApi, urlApi } = require("../sources/monitorSecas");
@@ -82,20 +83,35 @@ async function verificar(fonte, escopo, consulta, campos) {
   }
 }
 
-// Rajada e chuva em mm não entram: o INMET não publica esses campos e o
-// informativo já os completa com a Open-Meteo.
+// A previsão municipal é textual. Chuva e vento numéricos são verificados
+// separadamente na observação da estação automática mais próxima.
 const CAMPOS_INMET = Object.fromEntries(["manha", "tarde", "noite"].flatMap((periodo) => [
   [`periodos.${periodo}.resumo`, `resumo (${periodo})`],
-  [`periodos.${periodo}.tempMax`, `temperatura máxima (${periodo})`],
-  [`periodos.${periodo}.tempMin`, `temperatura mínima (${periodo})`],
 ]));
+
+const CAMPOS_INMET_OBSERVACAO = {
+  "observacao.medidoEm": "horário da medição",
+  "observacao.estacao.codigo": "código da estação",
+  "observacao.temperaturaMinC": "temperatura mínima observada",
+  "observacao.temperaturaMaxC": "temperatura máxima observada",
+  "observacao.chuvaUltimaHoraMm": "chuva horária observada",
+  "observacao.ventoVelocidadeKmh": "velocidade do vento observada",
+  "observacao.ventoDirecaoGraus": "direção do vento observada",
+  "observacao.rajadaKmh": "rajada medida pela estação",
+};
 
 function verificarClimaSaude(cidade, consultar) {
   const escopo = cidade.nome;
   if (!cidade.climaSaudeUrl) return Promise.resolve(item("Clima e Saúde", escopo, SITUACAO.NAO_CONFIGURADA, "Base sem página municipal cadastrada."));
   return consultar(cidade, OPCOES_HTTP).then((r) => {
     if (r.status === "operacional") {
-      const faltando = camposFaltando(r.dados, { "ehf.classificacao": "classificação EHF", riscoCombinado: "risco combinado" });
+      const faltando = camposFaltando(r.dados, {
+        dataConsulta: "data de referência",
+        municipio: "município",
+        uf: "UF",
+        "ehf.classificacao": "classificação EHF",
+        riscoCombinado: "risco combinado",
+      });
       return faltando.length
         ? item("Clima e Saúde", escopo, SITUACAO.CAMPOS_AUSENTES, `Sem ${faltando.join(", ")}.`)
         : item("Clima e Saúde", escopo, SITUACAO.OK, `EHF de ${r.dados.dataConsulta} lido da página.`);
@@ -191,6 +207,7 @@ async function executarVerificacao({
     qualidadeAr: buscarQualidadeAr,
     mar: buscarMar,
     previsaoInmet: buscarPrevisaoInmet,
+    observacaoInmet: buscarObservacaoInmet,
     avisosInmet: buscarAvisosInmet,
     climaSaude: climaSaude.consultar,
     corRio: criarServicoCorRio,
@@ -204,12 +221,8 @@ async function executarVerificacao({
   const opcoes = { fuso, timeoutMs: OPCOES_HTTP.timeoutMs, logger: { log() {}, warn() {}, error() {} } };
 
   const gerais = await Promise.all([
-    verificar("Open-Meteo Weather", "Rio de Janeiro", () => f.openMeteo(rio.latitude, rio.longitude, opcoes), {
-      "atual.temperaturaC": "temperatura atual", tempMin: "temperatura mínima", tempMax: "temperatura máxima",
-      precipitacaoTotalMm: "chuva acumulada", rajadaMaxKmh: "rajada",
-    }),
     verificar("Open-Meteo Air Quality", "Rio de Janeiro", () => f.qualidadeAr(rio.latitude, rio.longitude, opcoes), {
-      uvMax: "índice UV", pm25Medio: "PM2,5",
+      pm25Medio: "PM2,5", uvMax: "índice UV",
     }),
     verificar("Open-Meteo Marine", costeira.nome, () => f.mar(pontoMar.latitude, pontoMar.longitude, opcoes), {
       alturaMaxDiaM: "altura de onda", temperaturaMarC: "temperatura do mar",
@@ -223,11 +236,18 @@ async function executarVerificacao({
   // aos portais do governo.
   const porBase = [];
   for (const cidade of cidades) {
-    const [inmet, clima] = await Promise.all([
+    const opcoesCidade = { ...opcoes, fuso: cidade.fusoHorario || "America/Sao_Paulo" };
+    const [openMeteo, inmet, observacao, clima] = await Promise.all([
+      verificar("Open-Meteo Weather", cidade.nome, () => f.openMeteo(cidade.latitude, cidade.longitude, opcoesCidade), {
+        tempMin: "temperatura mínima", tempMax: "temperatura máxima",
+        umidadeMin: "umidade mínima", umidadeMax: "umidade máxima",
+        precipitacaoTotalMm: "precipitação prevista", rajadaMaxKmh: "rajada prevista",
+      }),
       verificar("INMET Previsão", cidade.nome, () => f.previsaoInmet(cidade.codigoIbge, opcoes), CAMPOS_INMET),
+      verificar("INMET Observação", cidade.nome, () => f.observacaoInmet(cidade, opcoes), CAMPOS_INMET_OBSERVACAO),
       verificarClimaSaude(cidade, f.climaSaude).catch((erro) => item("Clima e Saúde", cidade.nome, situacaoDoErro(erro), erro.message)),
     ]);
-    porBase.push(inmet, clima);
+    porBase.push(openMeteo, inmet, observacao, clima);
   }
 
   const itens = [...gerais.flat(), ...porBase, ...verificarConfiguracoes(env)];

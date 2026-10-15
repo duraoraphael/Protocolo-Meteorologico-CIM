@@ -7,6 +7,7 @@ const {
   normalizarAviso,
   extrairAvisos,
   consolidarAvisosInmet,
+  selecionarAvisosInmet,
   fenomenoAvisoInmet,
   grauAvisoInmet,
   INMET_TIMEOUT_MS,
@@ -109,6 +110,35 @@ test("avisos equivalentes são consolidados e preservam o mais grave", () => {
   assert.equal(grauAvisoInmet(tempestade.severidade), "EMERGÊNCIA");
 });
 
+test("superfície operacional mantém somente o aviso mais grave sem misturar textos", () => {
+  const avisos = selecionarAvisosInmet([
+    {
+      idAviso: "100", descricao: "Tempestade", severidade: "Perigo Potencial",
+      inicio: "14/10/2026 00:01", fim: "14/10/2026 23:59",
+      riscos: ["Risco do aviso amarelo."], instrucoes: ["Orientação amarela."],
+    },
+    {
+      idAviso: "101", descricao: "Tempestade", severidade: "Perigo",
+      inicio: "14/10/2026 00:01", fim: "14/10/2026 23:59",
+      riscos: ["Risco do aviso laranja."], instrucoes: ["Orientação laranja."],
+    },
+  ], { agora: new Date("2026-10-14T12:00:00-03:00") });
+
+  assert.equal(avisos.length, 1);
+  assert.equal(avisos[0].idAviso, "101");
+  assert.deepEqual(avisos[0].riscos, ["Risco do aviso laranja."]);
+  assert.deepEqual(avisos[0].instrucoes, ["Orientação laranja."]);
+});
+
+test("avisos do mesmo fenômeno em horários separados continuam distintos", () => {
+  const avisos = selecionarAvisosInmet([
+    { idAviso: "100", descricao: "Tempestade", severidade: "Perigo", inicio: "14/10/2026 00:01", fim: "14/10/2026 11:59" },
+    { idAviso: "101", descricao: "Tempestade", severidade: "Perigo Potencial", inicio: "14/10/2026 12:00", fim: "14/10/2026 23:59" },
+  ], { agora: new Date("2026-10-14T08:00:00-03:00") });
+
+  assert.deepEqual(avisos.map((aviso) => aviso.idAviso), ["100", "101"]);
+});
+
 test("empate de severidade prioriza vigência, início recente e término distante", () => {
   const agora = new Date("2026-09-30T12:00:00-03:00");
   const [vigente] = consolidarAvisosInmet([
@@ -146,7 +176,12 @@ test("previsão INMET usa 15 segundos e recupera após falhas transitórias", as
         json: async () => ({
           [codigo]: {
             "01/01/2099": {
-              manha: { resumo: "Nublado", temp_max: 28, temp_min: 20 },
+              manha: {
+                resumo: "Nublado", temp_max: "28 °C", temp_min: "20", umidade_max: "90", umidade_min: 55,
+                dir_vento: "NE", int_vento: "Moderado", vento_velocidade_media: "18 km/h",
+                rajada_max: "42 km/h", precipitacao_mm: "7,5 mm",
+                precipitacao_horaria_max_mm: "3 mm", probabilidade_chuva: "65%",
+              },
               tarde: { resumo: "Chuva" },
               noite: { resumo: "Nublado" },
             },
@@ -162,7 +197,42 @@ test("previsão INMET usa 15 segundos e recupera após falhas transitórias", as
   assert.equal(chamadas, 3);
   assert.deepEqual(esperas, [2000, 4000]);
   assert.equal(resultado.periodos.manha.resumo, "Nublado");
+  assert.deepEqual(
+    [resultado.periodos.manha.tempMin, resultado.periodos.manha.tempMax, resultado.periodos.manha.umidadeMin, resultado.periodos.manha.umidadeMax],
+    [20, 28, 55, 90]
+  );
+  assert.deepEqual(
+    [
+      resultado.periodos.manha.velocidadeMediaKmh,
+      resultado.periodos.manha.rajadaMaxKmh,
+      resultado.periodos.manha.precipitacaoMm,
+      resultado.periodos.manha.precipitacaoHorariaMaxMm,
+      resultado.periodos.manha.probabilidadeChuva,
+    ],
+    [18, 42, 7.5, 3, 65]
+  );
   assert.equal(resultado.data, "01/01/2099");
+  assert.equal(resultado.dias[0].resumo, "Nublado");
+  assert.doesNotMatch(resultado.dias[0].resumo, /Manhã:|Tarde:|Noite:/);
+});
+
+test("previsão INMET consolida condições por período em uma descrição diária representativa", async () => {
+  const codigo = "3304557";
+  const resultado = await buscarPrevisaoInmet(codigo, {
+    agora: new Date("2099-01-01T12:00:00-03:00"),
+    fetchImpl: async () => ({ ok: true, json: async () => ({
+      [codigo]: {
+        "01/01/2099": {
+          manha: { resumo: "Muitas nuvens com pancadas de chuva e trovoadas isoladas" },
+          tarde: { resumo: "Muitas nuvens com pancadas de chuva e trovoadas" },
+          noite: { resumo: "Muitas nuvens com pancadas de chuva e trovoadas isoladas" },
+        },
+      },
+    }) }),
+  });
+
+  assert.equal(resultado.dias[0].resumo, "Muitas nuvens com pancadas de chuva e trovoadas isoladas");
+  assert.doesNotMatch(resultado.dias[0].resumo, /Manhã:|Tarde:|Noite:/);
 });
 
 test("previsão INMET não usa outro dia quando a data solicitada está ausente", async () => {

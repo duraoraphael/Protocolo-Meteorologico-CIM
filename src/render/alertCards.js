@@ -56,6 +56,27 @@ function unidade(valor, sufixo) {
   return valor === null || valor === undefined ? "indisponível" : `${valor} ${sufixo}`;
 }
 
+function fonteEventoComPrioridade(evento) {
+  const fonte = evento.fonteDados || "Indisponível";
+  const fenomenoInmetPrioritario = ["vento", "chuva"].includes(evento.assinatura)
+    || /vento|chuva/i.test(String(evento.tipo || ""));
+  if (!fenomenoInmetPrioritario || !/Open-Meteo/i.test(fonte) || /INMET/i.test(fonte)) return fonte;
+  const complemento = /previs[aã]o complementar/i.test(fonte)
+    ? fonte
+    : `${fonte} — previsão complementar`;
+  return `INMET — fonte prioritária consultada | ${complemento}`;
+}
+
+function fontePrevisaoComPrincipalInmet(fonte) {
+  const complementos = [...new Set(String(fonte || "")
+    .split(/\s+\/\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item && !/^INMET\b/i.test(item) && !/^Dado meteorol[oó]gico integrado$/i.test(item)))];
+  return complementos.length
+    ? `INMET — previsão principal | ${complementos.join(" / ")}`
+    : "INMET — previsão principal";
+}
+
 // NORMAL não recebe recomendações — mesma regra que já valia nos dois formatos.
 function recomendacoesDoCard(grau, resolver) {
   if (!alertaExibivel(grau)) return null;
@@ -77,15 +98,16 @@ function eventosDoRelatorio(r, tipoDocumento) {
 
 function cardEvento(evento, r) {
   const nivel = nivelCanonico(evento.grau || AlertTitle.normalizarGrau(evento.titulo) || r.severidade?.grau);
+  const observado = /observa[cç][aã]o oficial/i.test(evento.naturezaDado || "");
   return {
-    origem: "previsao",
+    origem: observado ? "observacao" : "previsao",
     nivel,
     titulo: AlertTitle.tituloEvento(evento, nivel),
     rotuloOrigem: evento.naturezaDado || "Classificação interna baseada na previsão",
     linhas: [
       linha(null, evento.descricao),
-      linha("Janela prevista", evento.janela),
-      linha("Fonte de dados", evento.fonteDados || "Indisponível"),
+      linha(observado ? "Janela observada" : "Janela prevista", evento.janela),
+      linha("Fonte de dados", fonteEventoComPrioridade(evento)),
     ].filter(Boolean),
     recomendacoes: recomendacoesDoCard(nivel, () => resolverRecomendacoesAlerta({ evento, avisosInmet: r.avisosInmet })),
   };
@@ -161,7 +183,7 @@ function cardAvisoInmet(aviso, eventosLocais, r) {
       linha("Fonte de dados", "INMET"),
       previsao ? linha("Previsão complementar", previsao.detalhe) : null,
       previsao?.janela ? linha("Período da previsão", previsao.janela) : null,
-      previsao?.fonteDados ? linha("Fonte da previsão", previsao.fonteDados) : null,
+      previsao?.fonteDados ? linha("Fonte da previsão", fontePrevisaoComPrincipalInmet(previsao.fonteDados)) : null,
     ].filter(Boolean),
     recomendacoes,
   };

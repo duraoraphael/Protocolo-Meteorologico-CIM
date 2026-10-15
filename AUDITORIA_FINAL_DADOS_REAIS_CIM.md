@@ -1,31 +1,60 @@
 # Auditoria final de dados reais — CIM
 
-**Data da auditoria:** 13/10/2026  
-**Escopo:** fontes meteorológicas, normalização, caches, painel, PDF, e-mail, agendadores, alertas, artefatos de teste e remoção Windy.  
+**Data da auditoria:** 15/10/2026
+
+**Escopo:** fontes meteorológicas, normalização, caches, painel, PDF, e-mail, agendadores, alertas, identidade visual e remoção Windy.
 **Regra de execução:** nenhuma mensagem real foi enviada, nenhum upload ao GED foi realizado e nenhuma implantação foi feita.
 
 ## Resumo executivo
 
-A integração Windy foi removida do código executável. Os geradores manuais e artefatos estáticos que continham cenários simulados foram removidos. Os mocks restantes estão limitados a `tests/`.
+A integração Windy permanece removida do código executável. A imagem Petrobras foi mantida fora do site e do corpo dos e-mails e restaurada exclusivamente no cabeçalho interno do PDF, reutilizando o asset oficial `Logo/Petrobras_horizontal_logo.svg.png`.
 
-Foi criada uma barreira de procedência no backend. Um documento só pode ser publicado, salvo ou enviado quando possui registro interno, ambiente operacional, fontes, localidade, data, rastreabilidade dos campos críticos e assinatura de integridade. Objetos simulados, clonados, adulterados ou sem campos críticos são rejeitados. Simulações renderizadas localmente recebem a faixa visível **SIMULAÇÃO — NÃO ENVIAR**.
+Foi mantida a barreira de procedência no backend. Um campo crítico ausente só é aceito quando aparece como `Indisponível` e possui metadados padronizados com fonte, data, localidade, natureza e estado; ausência sem justificativa continua bloqueando a publicação. Isso permite informar a falta legítima de umidade sem fabricar valor.
 
-As consultas reais de 13/10/2026 responderam para Open-Meteo Weather, Air Quality/CAMS, Marine, INMET Previsão, INMET Avisos, Clima e Saúde, COR-Rio e ANA. As 12 bases cadastradas foram consultadas na edição das 15h e passaram pela validação estrita de procedência. Oceanop não foi consultada porque não há identificador de área confirmado.
+Na consulta real de 15/10/2026 para o Rio de Janeiro, a previsão municipal do INMET retornou 22–29 °C, 70–100%, condições distintas para manhã/tarde/noite e direção/intensidade textual do vento. O produto não publicou rajada numérica, velocidade média numérica, probabilidade de chuva nem volume previsto. Pela política vigente, esses números permanecem **indisponíveis**: chuva, vento e rajada previstos não recebem complemento de outro provedor.
 
-Existe, porém, uma pendência impeditiva para produção: o código anterior utilizava os endpoints gratuitos da Open-Meteo, cujo uso é limitado a finalidades não comerciais. O sistema agora exige `OPEN_METEO_API_KEY` quando `NODE_ENV=production`, troca automaticamente para os hosts `customer-*` e não persiste nem devolve a chave. Enquanto a organização não contratar/confirmar a licença e configurar a chave, o sistema fica deliberadamente bloqueado em produção.
+Temperatura, umidade, condição, chuva, vento e rajada permanecem prioritariamente no INMET e podem receber complemento numérico identificado da Open-Meteo quando o produto oficial não publicar o campo. Medições da estação automática permanecem separadas dos campos previstos. O Clima e Saúde fornece EHF e risco térmico. O índice UV vem de `uv_index` do Open-Meteo Air Quality/CAMS e a condição do mar vem do Open-Meteo Marine.
 
-**Parecer final:** as proteções técnicas e a rastreabilidade ficaram substancialmente mais fortes, mas o sistema **ainda não está apto para publicação operacional** até a regularização da licença Open-Meteo, a validação corporativa das coordenadas e a homologação das integrações sem contrato técnico público.
+**Parecer final:** a matriz de fontes foi ajustada para impedir atribuição cruzada. Ausência numérica no produto municipal do INMET aparece como `Dado indisponível`, sem converter texto qualitativo em número e sem utilizar previsão Open-Meteo para chuva, vento ou rajada. A publicação operacional continua condicionada à licença comercial Open-Meteo para UV/mar e à homologação geográfica/contratual.
+
+### Implementação validada nesta revisão
+
+- `src/logic/reportBuilder.js` consulta INMET, Open-Meteo Weather, Air Quality/CAMS, Marine, Clima e Saúde e avisos; o objeto consolidado alimenta painel, PDF e e-mail.
+- `src/logic/weatherSourcePolicy.js` aplica exclusividade INMET para chuva, vento e rajada, registra a origem e explica a indisponibilidade quando o valor oficial não foi publicado.
+- `src/sources/airQuality.js` consulta e normaliza `uv_index`, máximo e horário do pico.
+- `src/logic/verificacaoFontes.js` passou a verificar Weather e UV e deixou de exigir umidade do Clima e Saúde, campo que o portal não publica.
+- `src/sources/previsaoProximosDias.js` e `src/pipeline.js` priorizam chuva/rajada D+3 do INMET e usam complemento identificado da Open-Meteo, além da Open-Meteo para UV.
+- `src/logic/weatherSourceMetadata.js`, `sourceProvenance.js`, `scheduledReport.js` e `src/render/pdfTemplate.js` registram natureza, fonte, período e textos coerentes.
+- `artifacts/verify-live-weather.cjs` executa as edições 05h/15h sem enviar e-mail e confere a presença dos valores no HTML das duas superfícies.
+
+Resultado real no Rio, em 15/10/2026: INMET 22–29 °C e 70–100%; direção/intensidade do vento pelo INMET; rajada e chuva numéricas indisponíveis no produto municipal; UV 8,4 pelo CAMS/Open-Meteo; mar máximo de 0,5 m pelo Open-Meteo Marine; Clima e Saúde EHF `Sem excesso`.
+
+A verificação ao vivo final percorreu as 12 localidades configuradas. Open-Meteo Weather, INMET Previsão e Clima e Saúde responderam corretamente em todas elas. As observações do INMET também responderam, mas a estação selecionada para Santos não publicou chuva horária, velocidade/direção do vento nem rajada no momento da consulta; esses campos observados permanecem indisponíveis e não são substituídos silenciosamente por previsão.
+
+No D+3, temperatura, umidade, condição, rajada e chuva permanecem prioritariamente no INMET; valores numéricos ausentes podem ser complementados pela Open-Meteo com fonte explícita. O índice UV vem da Open-Meteo.
+
+### Correção complementar — tipografia, chuva e condição por base
+
+- O corpo do e-mail passou a reutilizar o mesmo estilo inline para `Hora da consulta` e `Previsão até as 00h`: Arial, 16 px, peso normal no texto, negrito nos rótulos, `line-height: 1.4`, cor `#222222` e o mesmo espaçamento. A implementação permanece compatível com Gmail e Outlook por usar tabela e estilos inline.
+- O corpo do e-mail mantém somente a grade resumida de oito indicadores. As tabelas `Temperatura e umidade`, `Vento por período` e `Chuva por período` ficam restritas ao PDF técnico.
+- A grade dos oito indicadores usa uma tabela Outlook-safe de seis colunas lógicas: os seis primeiros cards ocupam `colspan="2"` e os cards `MAR` e `CONDIÇÃO GERAL` ocupam `colspan="3"`, garantindo a divisão 50/50, a mesma altura e bordas contínuas. Valores ausentes aparecem como `Dado indisponível`.
+- O indicador diário foi renomeado para `Chuva acumulada/dia`. Seu período adotado é o dia civil local (00h–24h), composto somente pelas leituras horárias oficiais armazenadas cuja hora de referência pertence à data local; cobertura incompleta continua explícita.
+- No PDF, `Chuva por período` foi restaurada com manhã, tarde e noite. O resumo textual vem da previsão municipal INMET; probabilidade e volume ficam `Não disponível` quando ausentes. `Chuva acumulada/Hora` continua em bloco observacional separado, com a hora oficial de referência.
+- A condição geral deixou de selecionar sempre o período da tarde. Cada relatório cria um contexto meteorológico próprio, vinculado a `cidade.chave`, código IBGE, coordenadas e data da previsão, e usa uma única condição oficial predominante do dia para o respectivo município. Ausência resulta em `Condição indisponível`, sem herdar a condição de outra base.
+- A validação real após reiniciar o servidor confirmou contextos separados: Rio de Janeiro (`3304557`), Macaé (`3302403`), Manaus (`1302603`) e Santos (`3548500`) retornaram seus próprios resumos. Cabiúnas e Macaé podem permanecer iguais legitimamente porque compartilham o município/código IBGE de Macaé.
 
 ## A. APIs ativas
 
 | API | Variáveis utilizadas | Endpoint | Origem | Última validação | Status |
 |---|---|---|---|---|---|
-| Open-Meteo Weather | previsão de temperatura, umidade, chuva, probabilidade, vento, rajada, direção e código WMO | desenvolvimento: `https://api.open-meteo.com/v1/forecast`; produção: `https://customer-api.open-meteo.com/v1/forecast` | OpenMeteo GmbH e modelos meteorológicos listados pela fonte | 13/10/2026 20:30 BRT, HTTP 200 | **Consulta real verificada; produção bloqueada sem licença/chave comercial** |
-| Open-Meteo Air Quality / CAMS | PM2,5, PM10, European AQI PM2,5, UV e poeira | desenvolvimento: `https://air-quality-api.open-meteo.com/v1/air-quality`; produção: `https://customer-air-quality-api.open-meteo.com/v1/air-quality` | CAMS distribuído pela Open-Meteo | 13/10/2026 20:30 BRT, HTTP 200 | **Consulta real verificada; mesma pendência comercial** |
-| Open-Meteo Marine | altura, período e direção de ondas; marulho; temperatura da superfície do mar | desenvolvimento: `https://marine-api.open-meteo.com/v1/marine`; produção: `https://customer-marine-api.open-meteo.com/v1/marine` | modelos oceânicos distribuídos pela Open-Meteo | 13/10/2026 20:30 BRT, HTTP 200 | **Consulta real verificada; mesma pendência comercial** |
-| INMET Previsão | previsão municipal textual e valores publicados pela fonte | `https://apiprevmet3.inmet.gov.br/previsao/{codigoIbge}` | Instituto Nacional de Meteorologia | 13/10/2026, HTTP 200 | **Operacional na consulta; contrato/licença do endpoint não verificados publicamente** |
-| INMET Avisos | identificador, fenômeno, severidade, emissão/vigência, área, riscos e instruções | `https://apiprevmet3.inmet.gov.br/avisos/ativos` | Instituto Nacional de Meteorologia | 13/10/2026, HTTP 200 | **Operacional na consulta; filtragem municipal e temporal testada** |
-| Clima e Saúde | EHF, classe EHF, risco combinado, GeoSES e temperatura prevista | `https://clima.saude.gov.br/{uf}/{municipio}?modo=ehf&data=AAAA-MM-DD` | Ministério da Saúde | 13/10/2026, HTTP 200 | **Página oficial verificada; é HTML SSR, não API pública contratada** |
+| Open-Meteo Weather | complemento identificado de temperatura/umidade e condição; não alimenta chuva, vento ou rajada | desenvolvimento: `https://api.open-meteo.com/v1/forecast`; produção: `https://customer-api.open-meteo.com/v1/forecast` | OpenMeteo GmbH e modelos meteorológicos listados pela fonte | 15/10/2026, HTTP 200 | **Operacional como complemento identificado; pendência comercial em produção** |
+| Open-Meteo Air Quality / CAMS | PM2,5, PM10, European AQI PM2,5, poeira e UV | desenvolvimento: `https://air-quality-api.open-meteo.com/v1/air-quality`; produção: `https://customer-air-quality-api.open-meteo.com/v1/air-quality` | CAMS distribuído pela Open-Meteo | 15/10/2026, HTTP 200 | **Consulta real verificada, inclusive UV; mesma pendência comercial** |
+| Open-Meteo Marine | altura, período e direção de ondas; marulho; temperatura da superfície do mar | desenvolvimento: `https://marine-api.open-meteo.com/v1/marine`; produção: `https://customer-marine-api.open-meteo.com/v1/marine` | modelos oceânicos distribuídos pela Open-Meteo | 15/10/2026, HTTP 200 | **Consulta real verificada; mesma pendência comercial** |
+| INMET Previsão | condição, temperatura e umidade previstas; direção/intensidade textual do vento; campos numéricos opcionais de rajada/chuva | `https://apiprevmet3.inmet.gov.br/previsao/{codigoIbge}` | Instituto Nacional de Meteorologia | 15/10/2026, HTTP 200 | **Operacional; Rio: 22–29 °C e 70–100%; sem rajada/chuva numérica** |
+| INMET Avisos | identificador, fenômeno, severidade, emissão/vigência, área, riscos e instruções | `https://apiprevmet3.inmet.gov.br/avisos/ativos` | Instituto Nacional de Meteorologia | 15/10/2026, HTTP 200 | **Operacional; 2 avisos retornados antes do filtro municipal/temporal** |
+| INMET Observação | temperatura/umidade atuais, extremos horários parciais, chuva horária/acumulada e medições de vento/rajada | `https://apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}` | Instituto Nacional de Meteorologia | 15/10/2026, HTTP 200 | **A636/Jacarepaguá; 23,8 km da base; uso observacional separado** |
+| INMET Catálogo | validação de estação automática/operante e coordenadas | `https://apitempo.inmet.gov.br/estacoes/T` | Instituto Nacional de Meteorologia | 14/10/2026, HTTP 200 | **Usado para validar representatividade da estação** |
+| Clima e Saúde | EHF, classe EHF, risco combinado e GeoSES | `https://clima.saude.gov.br/{uf}/{municipio}?modo=ehf&data=AAAA-MM-DD` | Ministério da Saúde | 15/10/2026, HTTP 200 | **EHF 0,5 / Sem excesso / risco Normal** |
 | COR-Rio | estágio da cidade, nível de calor e comunicados | `https://appcor.cor-rio.work/estagio_cidade`, `/calor_api` e `https://cor.rio/wp-json/wp/v2/posts` | Prefeitura do Rio / COR-Rio | 13/10/2026, HTTP 200 | **Dados reais verificados; contrato dos dois endpoints appcor não documentado publicamente** |
 | ANA Monitor de Secas | competência mensal, mapa, elaboração e descrições por UF | `https://apimsbr.ana.gov.br/rest/cms-msne/mapa-monitor` | Agência Nacional de Águas e Saneamento Básico | competência 2026-08, consulta em 13/10/2026, HTTP 200 | **Produto oficial mensal verificado; não é previsão diária** |
 | Oceanop | previsão por área Petrobras | `https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoAreaAsync` | Petrobras | não executada | **NÃO CONFIGURADA / NÃO VERIFICADA** |
@@ -34,8 +63,8 @@ Existe, porém, uma pendência impeditiva para produção: o código anterior ut
 
 - **Open-Meteo:** documentação em <https://open-meteo.com/en/docs>, <https://open-meteo.com/en/docs/air-quality-api> e <https://open-meteo.com/en/docs/marine-weather-api>. A página <https://open-meteo.com/en/pricing> informa que a assinatura concede licença comercial, chave e endpoint dedicado; <https://open-meteo.com/en/terms> restringe a API gratuita ao uso não comercial. Atribuição é obrigatória. A fonte fornece resultados de modelos, não observações de estação. O Marine alerta que o produto não substitui navegação costeira.
 - **Air Quality:** CAMS europeu tem resolução aproximada de 11 km e atualização diária; o domínio global é mais grosseiro. `european_aqi_pm2_5` permanece identificado como índice europeu, nunca como índice brasileiro.
-- **INMET:** o domínio e as respostas reais foram confirmados. Não foi localizada documentação técnica pública que estabilize o contrato de `apiprevmet3` nem termos específicos desse endpoint; por isso a validação jurídica/contratual permanece pendente.
-- **Clima e Saúde:** metodologia consultada em <https://clima.saude.gov.br/perguntas-frequentes>. O parser usa somente o HTML semântico do município e rejeita data diferente. EHF não é reconstruído localmente.
+- **INMET:** o domínio e as respostas reais foram confirmados. O endpoint legado `https://apitempo.inmet.gov.br/estacao/{inicio}/{fim}/{estacao}` retornou HTTP 204 sem série, e o endpoint interno usado pelo portal exige reCAPTCHA. O sistema não contorna essa proteção. O histórico é acumulado somente com observações oficiais recebidas pelo endpoint `estacao/proxima`, com cobertura parcial explícita. Não foi localizada documentação técnica pública que estabilize o contrato de `apiprevmet3`; a homologação contratual permanece pendente.
+- **Clima e Saúde:** metodologia consultada em <https://clima.saude.gov.br/perguntas-frequentes>. Não foi localizada API/Swagger pública; o parser usa somente o HTML semântico oficial, valida município/UF/data e não reconstrói EHF. O portal não é usado para UV; esse indicador vem do CAMS/Open-Meteo com fonte própria.
 - **ANA:** fonte oficial em <https://monitordesecas.ana.gov.br/dados-sig>. É monitoramento mensal da seca, não previsão meteorológica diária.
 - **COR-Rio:** portal oficial em <https://cor.rio/>. Os dados têm validade exclusiva para o município do Rio de Janeiro.
 - **Oceanop:** sem `oceanopLocalId`, unidade, fuso, autenticação e contrato confirmados; seus valores não entram nos campos operacionais.
@@ -102,7 +131,9 @@ O fluxo diário validado é:
 
 Não existe banco meteorológico neste projeto. Clima e Saúde, Marine, COR-Rio e ANA podem usar arquivos de cache com carimbo de consulta e estado degradado. Dado armazenado é identificado como tal e não se torna “atual” silenciosamente.
 
-### Amostra real identificável — Rio de Janeiro, 13/10/2026
+### Amostra histórica identificável — Rio de Janeiro, 13/10/2026
+
+Esta tabela preserva a evidência da auditoria anterior. Na política vigente, chuva, vento e rajada previstos priorizam o INMET; valores da Open-Meteo alimentam apenas campos numéricos não publicados pelo INMET e permanecem identificados como complemento.
 
 | Variável | Fonte / natureza | Valor original | Transformação | Valor final verificado | Resultado |
 |---|---|---|---|---|---|
@@ -121,7 +152,7 @@ Não existe banco meteorológico neste projeto. Clima e Saúde, Marine, COR-Rio 
 | Ondas | Open-Meteo Marine, **modelo oceânico** | amostras em m/s/graus; amostra específica de Linhares abaixo | máximo por período e direção circular | Rio 0,5 m na validação das bases | **RASTREÁVEL; não é boia observada** |
 | Excesso de calor | Clima e Saúde, classificação oficial | EHF 5,09; badge “Sem excesso”; risco combinado “Normal” | classe EHF preservada; protocolo CIM separado | Sem excesso / NORMAL | **RASTREÁVEL; EHF não inferido localmente** |
 | Aviso meteorológico | INMET, **alerta oficial** | `urn:oid:2.49.0.0.76.0.2026.28482.1`, Tempestade, Perigo Potencial, 08:57–23:59 | filtro por município, vigência e deduplicação | 1 aviso aplicável ao Rio | **RASTREÁVEL** |
-| Alerta CIM | regra interna | chuva, vento, UV, ar, mar e códigos válidos | limites documentados em `riskEngine.js`/`cimProtocol.js` | rótulo “Classificação interna baseada na previsão” | **NÃO É APRESENTADO COMO AVISO OFICIAL** |
+| Alerta CIM | regra interna | chuva, vento, UV, ar, mar e códigos válidos | limites documentados em `riskEngine.js`/`cimProtocol.js` | chuva/vento atuais usam o rótulo “Classificação interna baseada em observação oficial” | **NÃO É APRESENTADO COMO AVISO OFICIAL** |
 
 ### Amostra marítima real
 
@@ -146,25 +177,27 @@ Para Linhares foi utilizado o ponto marítimo cadastrado de referência, -19,648
 | Araucária/PR | 15,5 / 23,8 | 64 / 97 | 31,8 | 33 | n/a | 2 | Aprovada |
 | Salvador/BA | 22,0 / 30,9 | 55 / 70 | 0,0 | 52 | 0,9 | 0 | Aprovada |
 
-As temperaturas vieram do Clima e Saúde; umidade, chuva e rajada vieram da Open-Meteo porque o INMET/Clima e Saúde não publicaram os campos numéricos equivalentes necessários. O fallback é individual e fica registrado em `fontesPorCampo` e `diagnosticosFallback`.
+Os valores acima registram a coleta histórica de 13/10/2026. Hoje, a tabela de previsão prioriza o produto municipal INMET; medições da estação ficam em indicadores observacionais separados e campos numéricos ausentes podem usar Open-Meteo com metadados e diagnóstico explícitos.
 
 ## E. Resultados dos testes
 
 ### Aprovados
 
-- Suíte antes da remoção: **313 aprovados, 0 falhas**.
-- Suíte final: **301 aprovados, 0 falhas**.
-- Sintaxe/“build” aplicável ao projeto Node sem etapa de compilação: **83 arquivos JavaScript validados com `node --check`**.
+- Suíte final em 15/10/2026: **328 aprovados, 0 falhas**.
+- Sintaxe/“build” aplicável ao projeto Node sem etapa de compilação: **todos os arquivos JavaScript de `src/` e `public/` validados com `node --check`**.
 - Consultas reais: Weather, Air, Marine, INMET Previsão/Avisos, Clima e Saúde, COR-Rio e ANA responderam.
-- As edições 05h e 15h do Rio foram montadas com dados reais, validadas estritamente e renderizadas em HTML de e-mail e PDF em memória. Nenhum SMTP foi chamado.
+- Um relatório real do Rio, edição 15h, foi montado com Clima e Saúde + INMET e o PDF final de 8 páginas foi gravado e inspecionado visualmente (**951.173 bytes**). Nenhum SMTP foi chamado.
+- Painel validado em Chromium a **1920 × 1080**: previsão 21–33 °C / 50–100%, condição diária própria da base, `Chuva acumulada/dia` e `Chuva acumulada/Hora` com referência 15:00–16:00. O cabeçalho do site permanece sem Petrobras.
+- PDF validado visualmente: logo Petrobras nítida e proporcional somente no documento; e-mail e site sem a marca.
 - As 12 bases foram consultadas e validadas na edição 15h.
 - Segurança exercitada: mock não registrado, simulação com marca removida, clone de objeto operacional, mutação posterior de valor, fonte ausente, campo crítico ausente, cache antigo, API indisponível, unidade/fuso inválidos, aviso vencido, isolamento de fonte secundária e transporte SMTP substituído.
 - Busca operacional confirmou ausência de chamadas Windy.
+- O HTML do e-mail foi renderizado em Chromium a **390 px** e **900 px**. Após a correção responsiva do valor de rajada indisponível, `scrollWidth === clientWidth` nos dois tamanhos, sem estouro horizontal.
 
 ### Reprovados
 
 - Nenhum teste automatizado reprovado.
-- A aptidão operacional foi reprovada por pendências externas/contratuais listadas na seção F.
+- A aptidão operacional permanece condicionada às pendências externas/contratuais listadas na seção F.
 
 ### Não executados por decisão de segurança ou falta de configuração
 
@@ -184,7 +217,7 @@ As temperaturas vieram do Clima e Saúde; umidade, chuva e rajada vieram da Open
 5. Homologar as coordenadas das 12 bases e os pontos marítimos contra cadastro corporativo oficial. Código IBGE municipal não confirma o ponto físico da instalação.
 6. Obter contrato Oceanop com IDs de área, unidades, fuso, atualização, autenticação e limites; manter desativada até isso ocorrer.
 7. Homologar GED/SharePoint e SMTP em ambiente próprio, com destinatários de teste autorizados. Esta auditoria não enviou nada.
-8. Avaliar operacionalmente divergências relevantes entre modelos. Exemplo real: Clima e Saúde previu máxima de 37,3 °C para o Rio, enquanto Open-Meteo retornou 27,7 °C. O sistema preserva a prioridade e a fonte, mas não há ainda regra institucional de bloqueio por divergência entre modelos.
+8. Avaliar operacionalmente divergências relevantes entre produtos. Exemplo real: Clima e Saúde indicou máxima de 37,8 °C para seu produto de calor, enquanto a previsão municipal do INMET publicou 33 °C. O sistema preserva cada valor no seu contexto e fonte.
 9. Revogar qualquer chave Windy antiga no provedor.
 10. Os logs históricos `tmp/*.err.log` ainda citam Windy. Não são executáveis e foram preservados para não apagar histórico; definir política de retenção antes de removê-los.
 
@@ -195,10 +228,55 @@ As temperaturas vieram do Clima e Saúde; umidade, chuva e rajada vieram da Open
 3. **O Windy foi removido? — Sim, do runtime, configuração, UI, testes e documentação ativa.** Restam apenas menções em logs históricos sem capacidade de execução. A credencial remota ainda precisa ser revogada pelo responsável.
 4. **Todas as APIs restantes foram validadas? — Não.** Oceanop não está configurada; contratos/licenças de endpoints auxiliares não foram plenamente comprovados; Open-Meteo exige regularização comercial.
 5. **Todos os dados meteorológicos exibidos são rastreáveis? — Os campos operacionais exercitados, sim.** Cada campo crítico possui fonte, localidade, data e transformação; a assinatura detecta adulteração. Não há comprovação ponta a ponta do Oceanop porque ele não alimenta o relatório.
-6. **Existem previsões sendo apresentadas como medições? — Não nos caminhos auditados.** Open-Meteo, CAMS, Marine e Clima e Saúde são rotulados como previsão/modelo; o bloco `current` da Open-Meteo é explicitamente “Previsão próxima ao horário atual”.
-7. **Existem alertas internos sendo apresentados como oficiais? — Não nos caminhos auditados.** Aviso oficial exige objeto INMET/COR; regras CIM recebem o rótulo “Classificação interna baseada na previsão”.
-8. **Existem informações críticas sem fonte validada? — Existe pendência de autorização/licença, não de origem numérica, na Open-Meteo; existe também divergência intermodelo sem política institucional.** Em produção sem chave, a publicação falha com segurança.
+6. **Existem previsões sendo apresentadas como medições? — Não nos caminhos auditados.** A previsão municipal e os extremos horários observados do INMET aparecem em linhas distintas; a leitura atual informa estação e horário.
+7. **Existem alertas internos sendo apresentados como oficiais? — Não nos caminhos auditados.** Aviso oficial exige objeto INMET/COR; regras CIM derivadas de chuva/vento recebem o rótulo “Classificação interna baseada em observação oficial”.
+8. **Existem informações críticas sem fonte validada? — O índice UV está legitimamente indisponível.** O portal Clima e Saúde não publica o indicador nem documenta serviço público de UV, e o sistema não troca de fornecedor nem inventa valor.
 9. **O sistema está apto à publicação operacional? — Não ainda.** O código passou nos testes e nas consultas reais, mas licença/chave comercial, coordenadas e contratos pendentes impedem uma declaração de conformidade total.
+
+## H. Relatório da atualização definitiva — 15/10/2026
+
+### Arquivos alterados neste ciclo
+
+- Fontes e política meteorológica: `src/sources/inmet.js`, `src/logic/weatherSourcePolicy.js`, `src/logic/weatherSourceMetadata.js`, `src/logic/sourceProvenance.js`, `src/logic/verificacaoFontes.js` e `src/logic/weeklyBuilder.js`.
+- Construção e contexto: `src/logic/reportBuilder.js`, `src/logic/sectorWeatherContext.js`, `src/logic/forecastAlertContext.js`, `src/logic/alertWatcher.js`, `src/logic/inmetAlertRules.js`, `src/logic/ocorrenciasPainel.js` e `src/logic/scheduledReport.js`.
+- PDF, e-mail e painel: `src/render/pdfTemplate.js`, `src/render/emailTemplate.js`, `src/render/emailComponents.js`, `src/render/alertEmailTemplate.js`, `src/render/weeklyPdfTemplate.js` e `public/dashboard-components.js`.
+- Documentação: `README.md` e `AUDITORIA_FINAL_DADOS_REAIS_CIM.md`.
+- Testes atualizados ou adicionados: `tests/alertasInmet.test.js`, `tests/climaSaudeService.test.js`, `tests/emailInformativoCompleto.test.js`, `tests/pdfInformativoCards.test.js`, `tests/previsaoProximosDias.test.js`, `tests/relatorioAgendado.test.js`, `tests/sectorWeatherContext.test.js`, `tests/verificacaoFontes.test.js` e `tests/weatherSourcePolicy.test.js`.
+
+### Endpoints efetivamente exercitados
+
+| Serviço | Endpoint/consulta | Resultado em 15/10/2026 |
+|---|---|---|
+| INMET — previsão municipal | `https://apiprevmet3.inmet.gov.br/previsao/3304557` | HTTP 200; manhã, tarde e noite presentes; 22–29 °C; 70–100%; sem rajada, velocidade média, probabilidade ou chuva numérica |
+| INMET — estação próxima | `https://apiprevmet3.inmet.gov.br/estacao/proxima/3304557` | HTTP 200; A636/Jacarepaguá; observações mantidas fora dos campos previstos |
+| INMET — avisos | `https://apiprevmet3.inmet.gov.br/avisos/ativos` | HTTP 200; aviso municipal filtrado e exibido com severidade oficial |
+| Clima e Saúde | `https://clima.saude.gov.br/rj/rio-de-janeiro?modo=ehf&data=2026-10-15` | HTTP 200; EHF 0,5; Sem excesso; risco Normal; UV não publicado |
+| Open-Meteo Marine | `https://marine-api.open-meteo.com/v1/marine` para o ponto cadastrado do Rio | HTTP 200; 0,5 m no relatório validado |
+| Open-Meteo Air Quality/CAMS | `https://air-quality-api.open-meteo.com/v1/air-quality` | integração preservada; valores de PM2,5, PM10 e AQI exibidos com identificação CAMS/Open-Meteo |
+| COR-Rio | `https://appcor.cor-rio.work/estagio_cidade`, `/calor_api` e API pública do portal | estágio, calor e comunicados consultados para o PDF real |
+
+### Confirmações funcionais
+
+1. Chuva, vento, rajada, temperatura, umidade e condição previstos priorizam a previsão municipal do INMET. Campos numéricos ausentes podem receber complemento identificado da Open-Meteo; observações da estação são campos separados e nunca preenchem previsão ausente.
+2. Excesso de calor usa EHF, classificação e risco do Clima e Saúde. Índice UV usa Open-Meteo Air Quality/CAMS.
+3. Qualidade do ar continua na integração Open-Meteo Air Quality/CAMS; ondas e condições do mar usam Open-Meteo Marine enquanto OCEANOP não possui áreas, unidades, fuso e acesso corporativo homologados.
+4. No PDF, a tabela `Temperatura e umidade` voltou a ter quatro colunas horizontais; `Vento por período` mostra direção, velocidade média, rajada prevista e referência oficial; `Chuva por período` mostra probabilidade, acumulado do período e resumo INMET. Essas tabelas não são repetidas no corpo do e-mail.
+5. `Rajada observada` foi removida das superfícies de previsão. Quando o INMET não fornece máximo numérico previsto, o campo fica `Não disponível`; a rajada medida permanece identificada apenas em contexto observacional.
+6. A seção indevida `Acumulados de precipitação opservção` e variantes não existe no PDF. O bloco válido `Chuva acumulada/Hora (observada)` foi preservado com horas de referência explícitas.
+7. A condição geral é produzida por contexto de base/setor e exibe uma única condição oficial predominante do dia, sem repetir os rótulos `Manhã`, `Tarde` e `Noite`; o detalhamento por período permanece nas tabelas próprias.
+8. O PDF usa o mesmo relatório validado do e-mail, preserva a marca Petrobras somente no documento e não apresenta cortes ou sobreposições nas oito páginas inspecionadas.
+9. O e-mail usa Arial 16 px e `line-height: 1.4` tanto em `Hora da consulta` quanto em `Previsão até as 00h`. A renderização a 390 px e 900 px não apresenta rolagem horizontal.
+10. A suíte automatizada encerrou com **335/335 testes aprovados**; a checagem de sintaxe dos arquivos alterados também passou.
+11. Foi gerado `output/pdf/Informativo_Meteorologico_CIM_Rio_2026-10-15_validado.pdf`, com dados reais da edição das 15h. Nenhum e-mail, upload GED ou implantação foi executado.
+
+### Limitações oficiais preservadas
+
+- O produto municipal INMET consultado não forneceu valores numéricos de rajada prevista, velocidade média, probabilidade ou volume de chuva. A intensidade `Fraco/Moderado com Rajadas` foi preservada como texto e não convertida para km/h; esses números permanecem `Não disponível` e não recebem complemento de outro provedor.
+- O Clima e Saúde não publicou índice UV no produto acessível. O sistema usa CAMS/Open-Meteo para UV e não atribui esse dado ao Ministério da Saúde.
+- INMET e Clima e Saúde não oferecem, nos produtos utilizados, granularidade específica por instalação dentro do mesmo município. Instalações do mesmo município podem ter condições iguais legitimamente.
+- Air Quality e Marine continuam sujeitos à licença e às condições comerciais da Open-Meteo para uso em produção.
+- A verificação preventiva real aprovou Weather, Air Quality/UV, Marine, INMET Previsão, Clima e Saúde, COR-Rio e ANA. A observação INMET de Santos respondeu sem chuva, vento, direção e rajada; esses campos observados permanecem indisponíveis e são reportados como limitação da estação/resposta, não preenchidos por previsão.
+- OCEANOP continua bloqueado por ausência de `oceanopLocalId`, unidades, fuso, autenticação e acesso/VPN homologados. Open-Meteo Marine permanece explicitamente identificado; não é apresentado como OCEANOP.
 
 ## Plano de reversão e implantação
 

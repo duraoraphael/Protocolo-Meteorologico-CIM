@@ -59,7 +59,7 @@ function compararComManha(anterior, atual) {
     const rotulo = { NORMAL: "NORMAL", P1: "ATENÇÃO P1", P2: "ALERTA P2", P3: "EMERGÊNCIA P3" };
     mudancas.push(`Calor / risco à saúde (EHF): ${rotulo[anterior.calor]} → ${rotulo[atual.calor]}.`);
   }
-  for (const [campo, nome, unidade] of [["rajadaMaxKmh", "Rajada prevista", "km/h"], ["precipitacaoTotalMm", "Chuva acumulada prevista", "mm"]]) {
+  for (const [campo, nome, unidade] of [["rajadaMaxKmh", "Rajada prevista", "km/h"], ["precipitacaoTotalMm", "Chuva prevista", "mm"]]) {
     if (Number.isFinite(anterior[campo]) && Number.isFinite(atual[campo]) && anterior[campo] !== atual[campo]) {
       mudancas.push(`${nome} (previsão das 05:00 → previsão das 15:00): ${anterior[campo]} ${unidade} → ${atual[campo]} ${unidade}.`);
     }

@@ -1,5 +1,6 @@
 // Integração exclusivamente server-side com as páginas públicas municipais.
-// O portal entrega os dados de "Comparar" e GeoSES no HTML inicial (SSR).
+// O portal não expõe contrato público de API; entrega temperatura, "Comparar"
+// e GeoSES no HTML inicial (SSR). Umidade não é publicada nessa resposta.
 const fs = require('node:fs');
 const path = require('node:path');
 const tls = require('node:tls');
@@ -11,6 +12,23 @@ const { recomendacoesPorProtocolo } = require('../logic/healthProtection');
 
 const ARQUIVO = path.join(__dirname, '..', '..', 'data', 'clima-saude.json');
 const FONTE = 'Clima e Saúde — Ministério da Saúde';
+const MOTIVO_UV_INDISPONIVEL = 'O portal Clima e Saúde não publica índice UV nem documenta um serviço público de UV para consumo automatizado.';
+
+function indiceUvIndisponivel(cidade, consultadoEm = new Date().toISOString()) {
+  return {
+    status: 'indisponivel',
+    valorAtual: null,
+    maximoPrevisto: null,
+    classificacao: null,
+    fonte: FONTE,
+    municipio: cidade?.nome || null,
+    uf: cidade?.uf || null,
+    referenciaEm: null,
+    periodo: null,
+    consultadoEm,
+    motivo: MOTIVO_UV_INDISPONIVEL,
+  };
+}
 // Escopo exclusivo desta fonte: confia nas CAs corporativas do Windows sem
 // desligar a validação TLS nem alterar SMTP ou as outras integrações.
 let agenteSistema;
@@ -120,8 +138,18 @@ function interpretarHtml(html, { url, consultadoEm = new Date().toISOString(), d
       maxima: numero(linhaTemperatura.match(/(?:Hoje|Máx)\s+(-?\d+(?:[.,]\d+)?)/i)?.[1]),
       minima: numero(linhaTemperatura.match(/mín\s+(-?\d+(?:[.,]\d+)?)/i)?.[1]),
     },
+    umidade: { minima: null, maxima: null, status: 'nao_publicada' },
     geoses: { valor: numero(geosesTexto), classificacao: geosesTexto.match(/\(([^)]+)\)/)?.[1] || null },
     previsaoDias, consultadoEm, urlFonte: url || null,
+    metadados: {
+      fonte: FONTE,
+      instanteMedicao: dataConsulta,
+      ultimaAtualizacao: consultadoEm,
+      localidade: `${municipio}/${uf}`,
+      estacao: null,
+      natureza: 'previsto',
+      status: 'operacional',
+    },
     nivel, recomendacoes: recomendacoesCalor(nivel),
   };
 }
@@ -144,7 +172,8 @@ function gravarCache(estado) {
   fs.renameSync(tmp, ARQUIVO);
 }
 function lerArmazenado(cidade, { carregar = lerCache } = {}) {
-  if (!cidade.climaSaudeUrl) return { status: 'nao_configurada', mensagem: 'Clima e Saúde: não configurado para esta base.', dados: null };
+  const indiceUv = indiceUvIndisponivel(cidade);
+  if (!cidade.climaSaudeUrl) return { status: 'nao_configurada', mensagem: 'Clima e Saúde: não configurado para esta base.', dados: null, indiceUv };
   let dados = null;
   try { dados = carregar()[cidade.chave] || null; }
   catch (erro) { console.error(`[CLIMA-SAÚDE][ERRO] cache: ${erro.message}`); }
@@ -153,9 +182,10 @@ function lerArmazenado(cidade, { carregar = lerCache } = {}) {
       status: 'armazenado',
       mensagem: `Última coleta válida: ${formatarDataBrasilia(dados.consultadoEm) || 'horário indisponível'}.`,
       dados,
+      indiceUv,
       lastSuccessAt: dados.consultadoEm || null,
     }
-    : { status: 'indisponivel', mensagem: 'Clima e Saúde: dados indisponíveis nesta atualização.', dados: null };
+    : { status: 'indisponivel', mensagem: 'Clima e Saúde: dados indisponíveis nesta atualização.', dados: null, indiceUv };
 }
 async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar = gravarCache, tentativas = 2, timeoutMs = 8000, agora = () => new Date() } = {}) {
   if (!cidade.climaSaudeUrl) return lerArmazenado(cidade, { carregar });
@@ -171,7 +201,7 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
     urlValidada.searchParams.set('data', dataReferencia);
     url = urlValidada.href;
   }
-  catch (erro) { return { status: 'indisponivel', mensagem: erro.message, dados: null }; }
+  catch (erro) { return { status: 'indisponivel', mensagem: erro.message, dados: null, indiceUv: indiceUvIndisponivel(cidade) }; }
   console.log(`[CLIMA-SAÚDE] Consultando ${cidade.nome}/${cidade.uf}`);
   let ultimoErro = null;
   for (let i = 0; i < tentativas; i++) {
@@ -192,7 +222,7 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
       estado[cidade.chave] = dados;
       salvar(estado);
       console.log(`[CLIMA-SAÚDE] EHF=${dados.ehf.classificacao}; Risco=${dados.riscoCombinado ?? 'indisponível'}; dados armazenados.`);
-      return { status: 'operacional', mensagem: 'Dados atualizados.', dados };
+      return { status: 'operacional', mensagem: 'Dados atualizados.', dados, indiceUv: indiceUvIndisponivel(cidade, consultadoEm) };
     } catch (erro) {
       ultimoErro = erro;
       registrarFalha(`CLIMA-SAÚDE:${cidade.chave}`, erro);
@@ -207,6 +237,7 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
       status: 'degradado',
       mensagem: `Consulta atual indisponível. Utilizando última coleta válida de ${formatarDataBrasilia(ultimoValido.consultadoEm) || 'horário indisponível'}.`,
       dados: ultimoValido,
+      indiceUv: indiceUvIndisponivel(cidade, consultadoEm),
       ultimoValido,
       lastSuccessAt: ultimoValido.consultadoEm || null,
       tipoFalha,
@@ -216,9 +247,10 @@ async function consultar(cidade, { fetchFn = fetch, carregar = lerCache, salvar 
     status: 'indisponivel',
     mensagem: 'Clima e Saúde: dados indisponíveis nesta atualização.',
     dados: null,
+    indiceUv: indiceUvIndisponivel(cidade, consultadoEm),
     ultimoValido: null,
     tipoFalha,
   };
 }
 
-module.exports = { interpretarHtml, nivelEhf, recomendacoesCalor, riscoCombinadoCanonico, consultar, lerArmazenado, validarUrl, dataIsoPainel, ARQUIVO };
+module.exports = { interpretarHtml, nivelEhf, recomendacoesCalor, riscoCombinadoCanonico, consultar, lerArmazenado, validarUrl, dataIsoPainel, indiceUvIndisponivel, MOTIVO_UV_INDISPONIVEL, ARQUIVO };

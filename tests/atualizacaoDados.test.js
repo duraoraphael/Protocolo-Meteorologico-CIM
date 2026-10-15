@@ -98,6 +98,21 @@ test("ciclo não se sobrepõe e consultas da mesma base são compartilhadas", as
   assert.equal(chamadas, 2);
 });
 
+test("cache mantém condição vinculada à base e não reutiliza dado ausente", async () => {
+  const condicoes = { rio_de_janeiro: "Nublado", macae: "Chuva moderada" };
+  const atualizador = criarAtualizadorDados({
+    logger: silencioso,
+    montar: async (cidade) => relatorio(cidade, "2026-10-14T15:00:00.000Z", {
+      condicaoGeral: condicoes[cidade.chave] || "Condição indisponível",
+    }),
+  });
+  const SEM_DADO = { chave: "setor_sem_dado", nome: "Setor sem dado" };
+  await atualizador.atualizarTodas([RIO, MACAE, SEM_DADO]);
+  assert.equal((await atualizador.obter(RIO)).report.condicaoGeral, "Nublado");
+  assert.equal((await atualizador.obter(MACAE)).report.condicaoGeral, "Chuva moderada");
+  assert.equal((await atualizador.obter(SEM_DADO)).report.condicaoGeral, "Condição indisponível");
+});
+
 test("agendador usa o intervalo configurado e executa só a coleta", async () => {
   const agendados = [];
   const ciclos = [];

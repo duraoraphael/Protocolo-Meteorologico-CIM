@@ -93,15 +93,30 @@ test("mesmo aviso repetido vira um só; cópia sem identificador é comparada po
   assert.equal(unicos[0].copiasNaFonte, 5);
 });
 
-test("avisos distintos do mesmo fenômeno permanecem em cards separados", () => {
+test("avisos sobrepostos do mesmo fenômeno deixam somente o oficial mais grave", () => {
   const a = normalizarAviso(avisoBruto());
   const b = normalizarAviso(avisoBruto({ id_aviso: 28383, codigo: "urn:oid:2.49.0.0.76.0.2026.28383.1", severidade: "Perigo", inicio: "2099-10-01 00:01", riscos: ["Chuva entre 30 e 60 mm/h."] }));
   const avisos = deduplicarAvisosInmet([a, b]);
   assert.equal(avisos.length, 2);
   const r = report({ avisosInmet: avisos });
   const { tela } = renderizar(r);
-  assert.deepEqual(r.ocorrencias.map((o) => `${o.grau}/${o.rotulo}`), ["ALERTA/Tempestade", "ATENÇÃO/Tempestade"]);
-  assert.equal((tela.match(/class="ocorrencia /g) || []).length, 2);
+  assert.deepEqual(r.ocorrencias.map((o) => `${o.grau}/${o.rotulo}`), ["ALERTA/Tempestade"]);
+  assert.equal(r.ocorrencias[0].blocos[0].identificador, "Aviso nº 28383");
+  assert.equal((tela.match(/class="ocorrencia /g) || []).length, 1);
+});
+
+test("chuva e vento derivados do mesmo aviso viram somente o card do fenômeno oficial", () => {
+  const aviso = normalizarAviso(avisoBruto({ severidade: "Perigo" }));
+  const derivados = [
+    { tipo: "chuvaIntensa", assinatura: "chuva", grau: "ALERTA", fonteDados: "INMET — aviso oficial", avisoInmet: aviso, descricao: aviso.riscos[0] },
+    { tipo: "ventoForte", assinatura: "vento", grau: "ALERTA", fonteDados: "INMET — aviso oficial", avisoInmet: aviso, descricao: aviso.riscos[0] },
+  ];
+  const r = report({ avisosInmet: [aviso], severidade: { grau: "ALERTA", eventos: derivados } });
+  const { tela } = renderizar(r);
+
+  assert.deepEqual(r.ocorrencias.map((o) => `${o.grau}/${o.rotulo}`), ["ALERTA/Tempestade"]);
+  assert.equal((tela.match(/class="ocorrencia /g) || []).length, 1);
+  assert.equal(r.ocorrencias[0].blocos.filter((b) => b.origem === "inmet").length, 1);
 });
 
 test("aviso INMET que repete evento de outra fonte vira um card com as duas fontes e a diferença explícita", () => {

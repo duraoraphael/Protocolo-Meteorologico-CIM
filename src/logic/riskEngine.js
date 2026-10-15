@@ -111,9 +111,8 @@ function avaliarRiscos(consolidado) {
   const candidatos = [];
 
   // Avisos oficiais sempre prevalecem. Quando não há aviso aplicável ao
-  // fenômeno, os valores numéricos confiáveis podem gerar uma classificação
-  // interna, identificada explicitamente como previsão e sem atribuição ao
-  // INMET.
+  // fenômeno, observações numéricas oficiais podem gerar uma classificação
+  // interna do protocolo, sem alterar a severidade publicada pelo INMET.
   const avisosCobertos = new Set();
   const contextosOficiais = avisosInmet.map((aviso) => {
     const fenomeno = fenomenoAvisoInmet(aviso.descricao);
@@ -193,15 +192,20 @@ function avaliarRiscos(consolidado) {
     const fontes = evento.assinatura === "vento"
       ? [fontesPorCampo.rajadaMaxKmh]
       : [fontesPorCampo.precipitacaoHorariaMaxMm, fontesPorCampo.precipitacaoTotalMm];
+    const observadoInmet = fontes.some((fonte) => /INMET.+esta[cç][aã]o autom[aá]tica/i.test(fonte || ""));
+    const detalhe = evento.assinatura === "vento" && !observadoInmet && Number.isFinite(evento.valores?.rajadaKmh)
+      ? `Rajada prevista: ${evento.valores.rajadaKmh} km/h`
+      : evento.detalhe;
     candidatos.push({
       ...evento,
       tipo,
       nivel: NIVEL_POR_GRAU[evento.grau],
       janela: janelaDoEvento(periodos, evento.assinatura),
-      descricao: evento.detalhe,
+      detalhe,
+      descricao: detalhe,
       fonteDados: [...new Set(fontes.filter((fonte) => fonte && fonte !== "Indisponível"))].join(" / ")
-        || "Previsão meteorológica integrada",
-      naturezaDado: "Classificação interna baseada na previsão",
+        || "Dado meteorológico indisponível",
+      naturezaDado: observadoInmet ? "Classificação interna baseada em observação oficial" : "Classificação interna baseada em dado meteorológico",
     });
   }
 

@@ -94,3 +94,51 @@ test("ausência de variável crítica bloqueia documento operacional completo", 
     (erro) => erro.code === "CRITICAL_DATA_UNAVAILABLE"
   );
 });
+
+test("ausência crítica explicitamente indisponível e rastreada não força fallback inventado", () => {
+  const documento = documentoBase();
+  documento.umidadeMin = null;
+  documento.umidadeMax = null;
+  documento.fontesPorCampo.umidadeMin = "Indisponível";
+  documento.fontesPorCampo.umidadeMax = "Indisponível";
+  documento.metadadosMeteorologicos = {
+    umidade: {
+      fonte: "Clima e Saúde — Ministério da Saúde",
+      instanteMedicao: "2026-10-13",
+      ultimaAtualizacao: "2026-10-13T12:00:00.000Z",
+      localidade: "Rio de Janeiro/RJ",
+      estacao: null,
+      natureza: "previsto",
+      status: "indisponivel",
+      detalhe: "O portal não publica umidade.",
+    },
+  };
+  registrarDocumentoOperacional(documento, { fontes: ["Clima e Saúde — Ministério da Saúde"] });
+  assert.doesNotThrow(() => validarDocumentoOperacional(documento, "publicação", { exigirCamposCriticos: true }));
+});
+
+test("rajada e chuva numéricas ausentes usam metadados próprios, separados dos resumos textuais", () => {
+  const documento = documentoBase();
+  documento.rajadaMaxKmh = null;
+  documento.precipitacaoTotalMm = null;
+  documento.fontesPorCampo.rajadaMaxKmh = "Indisponível";
+  documento.fontesPorCampo.precipitacaoTotalMm = "Indisponível";
+  documento.metadadosMeteorologicos = {
+    vento: { fonte: "INMET — previsão oficial", status: "operacional" },
+    chuva: { fonte: "INMET — previsão oficial", status: "operacional" },
+    rajadaPrevista: {
+      fonte: "INMET — previsão oficial",
+      natureza: "previsto",
+      status: "indisponivel",
+      detalhe: "O produto municipal não publicou rajada máxima numérica.",
+    },
+    chuvaPrevista: {
+      fonte: "INMET — previsão oficial",
+      natureza: "previsto",
+      status: "indisponivel",
+      detalhe: "O produto municipal não publicou acumulado numérico.",
+    },
+  };
+  registrarDocumentoOperacional(documento, { fontes: ["INMET — previsão oficial"] });
+  assert.doesNotThrow(() => validarDocumentoOperacional(documento, "publicação", { exigirCamposCriticos: true }));
+});

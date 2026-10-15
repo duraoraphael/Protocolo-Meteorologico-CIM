@@ -210,6 +210,7 @@ async function buscarOpenMeteo(latitude, longitude, {
   fetchImpl = fetch,
   timeoutMs = OPEN_METEO_TIMEOUT_MS,
   esperarFn,
+  logger,
 } = {}) {
   const params = new URLSearchParams({
     latitude: String(latitude),
@@ -231,6 +232,8 @@ async function buscarOpenMeteo(latitude, longitude, {
     timeoutMs,
     tentativas: OPEN_METEO_TENTATIVAS,
     esperarFn,
+    logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger,
+    prefixoLog: "OPEN-METEO-WEATHER",
   });
   validarResposta(json, fuso);
   const horas = json.hourly;

@@ -52,17 +52,9 @@ function identidadeCimHtml() {
   </tr></table>`;
 }
 
-function petrobrasHtml() {
-  // Wordmark propositalmente em texto HTML: permanece visível quando o
-  // cliente bloqueia imagens e não cria dependência de anexo ou URL externa.
-  return `<table data-email-header-petrobras-box="true" class="cim-header-petrobras-box" role="presentation" width="150" cellpadding="0" cellspacing="0" bgcolor="#FFFFFF" style="width:150px;margin-left:auto;background:#FFFFFF;background-color:#FFFFFF;border-collapse:separate;border-radius:8px;">
-    <tr><td height="44" valign="middle" align="center" bgcolor="#FFFFFF" style="height:44px;padding:0 12px;background:#FFFFFF;background-color:#FFFFFF;border-radius:8px;color:${EMAIL_HEADER_VERDE};font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:bold;line-height:44px;letter-spacing:0.8px;text-align:center;white-space:nowrap;mso-line-height-rule:exactly;">PETROBRAS</td></tr>
-  </table>`;
-}
-
 // Os estilos essenciais permanecem inline. A media query é apenas a melhoria
-// progressiva que empilha as três áreas em telas estreitas; clientes antigos
-// continuam recebendo a composição horizontal de três colunas.
+// progressiva que empilha as duas áreas em telas estreitas; clientes antigos
+// continuam recebendo a composição horizontal de duas colunas.
 function renderEmailHeaderStyles() {
   return `<style type="text/css">
     @media only screen and (max-width:640px) {
@@ -71,8 +63,11 @@ function renderEmailHeaderStyles() {
       .cim-header-cim { padding:0 0 10px !important; text-align:center !important; }
       .cim-header-title { padding:8px 0 10px !important; text-align:center !important; }
       .cim-header-heading { font-size:18px !important; line-height:22px !important; }
-      .cim-header-petrobras { padding:6px 0 0 !important; text-align:center !important; }
-      .cim-header-brand, .cim-header-petrobras-box { margin-left:auto !important; margin-right:auto !important; }
+      .cim-header-brand { margin-left:auto !important; margin-right:auto !important; }
+      .email-period-table th, .email-period-table td { font-size:10px !important; line-height:13px !important; padding:7px 4px !important; }
+      .email-period-title { font-size:17px !important; line-height:21px !important; }
+      .email-period-source { font-size:11px !important; line-height:15px !important; }
+      .email-metric-value { font-size:18px !important; line-height:22px !important; overflow-wrap:anywhere !important; word-break:break-word !important; }
     }
   </style>`;
 }
@@ -86,12 +81,11 @@ function linhaLocal({ cidade, uf, data, contexto }) {
 function renderEmailHeader({ titulo, cidade, uf, data, contexto }) {
   return `<tr data-email-header="true"><td bgcolor="${EMAIL_HEADER_VERDE}" style="background:${EMAIL_HEADER_VERDE};padding:16px 22px;">
     <table class="cim-header-layout" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;"><tr>
-      <td data-email-header-cim="true" class="cim-header-cell cim-header-cim" width="31%" valign="middle" align="left" style="width:31%;color:#ffffff;">${identidadeCimHtml()}</td>
-      <td data-email-header-title="true" class="cim-header-cell cim-header-title" width="47%" valign="middle" align="center" style="width:47%;color:#ffffff;padding:0 10px;text-align:center;">
+      <td data-email-header-cim="true" class="cim-header-cell cim-header-cim" width="36%" valign="middle" align="left" style="width:36%;color:#ffffff;">${identidadeCimHtml()}</td>
+      <td data-email-header-title="true" class="cim-header-cell cim-header-title" width="64%" valign="middle" align="center" style="width:64%;color:#ffffff;padding:0 18px 0 10px;text-align:center;">
         <div class="cim-header-heading" style="color:#ffffff;font-family:Arial,sans-serif;font-size:21px;font-weight:bold;line-height:25px;letter-spacing:0.3px;text-align:center;">${esc(titulo)}</div>
         <div data-email-header-local="true" style="color:#ffffff;font-family:Arial,sans-serif;font-size:13px;line-height:18px;margin-top:6px;text-align:center;">${linhaLocal({ cidade, uf, data, contexto })}</div>
       </td>
-      <td data-email-header-petrobras="true" class="cim-header-cell cim-header-petrobras" width="22%" valign="middle" align="right" style="width:22%;text-align:right;line-height:0;">${petrobrasHtml()}</td>
     </tr></table>
   </td></tr>
   <tr data-email-header-stripe="true"><td bgcolor="${EMAIL_HEADER_AMARELO}" style="height:4px;background:${EMAIL_HEADER_AMARELO};font-size:0;line-height:4px;mso-line-height-rule:exactly;">&nbsp;</td></tr>`;

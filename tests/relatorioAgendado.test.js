@@ -7,7 +7,7 @@ const {
 } = require("../src/sources/openMeteo");
 const { renderPdfHtml } = require("../src/render/pdfTemplate");
 const { renderEmailHtml } = require("../src/render/emailTemplate");
-const { montarVentoPorPeriodo } = require("../src/logic/reportBuilder");
+const { montarVentoPorPeriodo, probabilidadeChuvaDaEdicao } = require("../src/logic/reportBuilder");
 const { mapearFontesDoRelatorio } = require("../src/logic/sourceProvenance");
 
 function dadosOpenMeteo() {
@@ -39,6 +39,37 @@ function dadosOpenMeteo() {
     },
   };
 }
+
+test("probabilidade da edição usa o máximo horário de 05h–15h e 15h–00h", () => {
+  const chuvaHoraria = Array.from({ length: 19 }, (_, indice) => {
+    const hora = indice + 5;
+    return { horario: `${String(hora).padStart(2, "0")}:00`, probabilidade: hora === 14 ? 85 : hora === 20 ? 92 : 20 };
+  });
+  const openMeteo = { chuvaHoraria };
+
+  assert.deepEqual(probabilidadeChuvaDaEdicao({ horarioAgendado: "05:00", openMeteo }), {
+    valor: 85,
+    fonte: "Open-Meteo — previsão complementar",
+    janela: "05h–15h",
+    regra: "probabilidade máxima prevista no período",
+  });
+  assert.deepEqual(probabilidadeChuvaDaEdicao({ horarioAgendado: "15:00", openMeteo }), {
+    valor: 92,
+    fonte: "Open-Meteo — previsão complementar",
+    janela: "15h–00h",
+    regra: "probabilidade máxima prevista no período",
+  });
+  assert.deepEqual(probabilidadeChuvaDaEdicao({
+    horarioAgendado: "05:00",
+    inmetPrevisao: { periodos: { manha: { probabilidadeChuva: 95 } } },
+    openMeteo,
+  }), {
+    valor: 95,
+    fonte: "INMET — previsão oficial",
+    janela: "05h–15h",
+    regra: "probabilidade máxima prevista no período",
+  });
+});
 
 test("edições usam janelas efetivas 05h–00h e 15h–00h", { concurrency: false }, async () => {
   const anterior = global.fetch;
@@ -112,15 +143,14 @@ test("vento por período cobre 05h–00h nas edições das 05h e 15h", () => {
     { manha: { disponivel: false }, tarde: periodo("Tarde", "15h–18h", 37), noite: periodosDiaCompleto.noite },
   ]) {
     const vento = montarVentoPorPeriodo({
-      base: { periodos: periodosDaEdicao },
-      openMeteo: { periodosDiaCompleto },
-      inmetPrevisao,
+      base: { periodos: periodosDiaCompleto },
+      inmetObservacao: { observacao: { estacao: { nome: "Estação teste", codigo: "A000", distanciaKm: 10 } } },
     });
     assert.deepEqual(vento.map(({ periodo, janela }) => [periodo, janela]), [
       ["Manhã", "05h–12h"], ["Tarde", "12h–18h"], ["Noite", "18h–00h"],
     ]);
     assert.deepEqual(vento.map(({ rajadaMaxKmh }) => rajadaMaxKmh), [31, 37, 42]);
-    assert.deepEqual(vento.map(({ direcao }) => direcao), ["E", "SE", "S"]);
+    assert.deepEqual(vento.map(({ direcao }) => direcao), ["SE", "SE", "SE"]);
   }
 });
 
@@ -234,24 +264,25 @@ test("PDF e e-mail exibem a referência da edição sem perder a comparação", 
     previsaoDias: [
       { periodo: "Hoje (15h–00h)", data: "2026-09-28", condicao: "Chuva", tempMin: 20, tempMax: 28, chuvaMm: 12, rajadaKmh: null },
     ],
-    mudancasDia: ["Grau geral: ATENÇÃO → ALERTA.", "Rajada máxima prevista: 35 km/h → 48 km/h."],
+    mudancasDia: ["Grau geral: ATENÇÃO → ALERTA.", "Rajada prevista: 35 km/h → 48 km/h."],
     condicaoGeral: "Chuva", tabelaTemperaturaUmidade: [], ventoPorPeriodo: [], chuvaPorPeriodo: [],
+    fontesPorCampo: { tempMin: "INMET — previsão oficial", tempMax: "INMET — previsão oficial", rajadaMaxKmh: "INMET — previsão oficial" },
     severidade: { grau: "NORMAL", eventos: [] }, avisosInmet: [], divergencias: [], avisosColeta: [],
     fontesAutomatizadas: [], fontesManuais: [], deslocamento: { pedestres: [], transporte: [], condutores: [] }, edificacao: [],
   };
   const pdf = renderPdfHtml(report);
   const email = renderEmailHtml(report);
   assert.doesNotMatch(pdf, /Previsão por dia/);
-  assert.match(pdf, /Hora da consulta:<\/strong> 15:00 \(Horário de Brasília\).*Previsão até 00h/);
-  assert.match(pdf, /<th>Chuva na janela<\/th>/);
+  assert.match(pdf, /Hora da consulta:<\/strong> 15h \(Horário de Brasília\).*Previsão até 00h/);
+  assert.match(pdf, /<th>Chuva prevista\/dia<\/th>/);
   assert.match(pdf, /12,0 mm/);
   assert.match(pdf, /<th>Calor<\/th>/);
-  assert.match(pdf, /Fontes por campo: condição e estimativa de chuva — Open-Meteo/);
+  assert.match(pdf, /O INMET é prioritário e qualquer complemento permanece identificado por campo/);
   assert.match(pdf, /class="calor-nd">Indisponível</);
   assert.doesNotMatch(pdf, /Amanhã|Dia \+\d|dias seguintes usam/);
   assert.doesNotMatch(email, /Previsão para os próximos dias/);
-  assert.match(email, /Previsão até as 00h/);
-  assert.ok(email.indexOf("Previsão até as 00h") < email.indexOf("RAJADA PREVISTA"));
+  assert.match(email, /Previsão até 00h/);
+  assert.ok(email.indexOf("Previsão até 00h") < email.indexOf("RAJADA PREVISTA"));
   assert.doesNotMatch(email, /\| Previsão até/);
   assert.doesNotMatch(email, /Amanhã|Nublado/);
   for (const saida of [pdf, email]) {

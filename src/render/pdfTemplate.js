@@ -1,5 +1,5 @@
 const brand = require("./brand");
-const { HEADER_AMARELO, HEADER_VERDE, LOGOS_HEADER, logoHeaderDataUri } = require("../config/headerAssets");
+const { HEADER_AMARELO, HEADER_VERDE, LOGOS_HEADER, PETROBRAS_PDF, logoHeaderDataUri, logoPetrobrasPdfDataUri } = require("../config/headerAssets");
 const { montarCardsAlerta, visualNivel } = require("./alertCards");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const monitorSecas = require("../sources/monitorSecas");
@@ -14,6 +14,11 @@ function esc(valor) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function horaConsultaPdf(valor) {
+  const horaCheia = /^(\d{2}):00$/.exec(String(valor || "").trim());
+  return horaCheia ? `${horaCheia[1]}h` : valor;
 }
 
 function escAtributo(valor) {
@@ -286,27 +291,20 @@ function blocoCorRio(r, { somenteDoDia = false } = {}) {
   }).join("") + outrosHtml;
 }
 
-// Quatro colunas iguais, sem coluna "Fonte": a origem de cada valor fica só
-// na nota abaixo da tabela. Decimal com vírgula, sem casas fixas (38°C).
 function valorTemperaturaUmidade(valor, unidade) {
   return Number.isFinite(valor) ? `${esc(String(valor).replace(".", ","))}${unidade}` : `<span class="nd">Não disponível</span>`;
 }
 
 function tabelaTemperatura(linhas) {
   if (!linhas?.length) return "";
+  const l = linhas[0];
   return `<table class="tabela-temp-umidade">
     <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
     <thead><tr><th>Temp. Mínima</th><th>Temp. Máxima</th><th>Umidade Mínima</th><th>Umidade Máxima</th></tr></thead>
-    <tbody>
-      ${linhas
-        .map(
-          (l) => `<tr>
-            <td>${valorTemperaturaUmidade(l.tempMin, "°C")}</td><td>${valorTemperaturaUmidade(l.tempMax, "°C")}</td>
-            <td>${valorTemperaturaUmidade(l.umidadeMin, "%")}</td><td>${valorTemperaturaUmidade(l.umidadeMax, "%")}</td>
-          </tr>`
-        )
-        .join("")}
-    </tbody>
+    <tbody><tr>
+      <td>${valorTemperaturaUmidade(l.tempMin, "°C")}</td><td>${valorTemperaturaUmidade(l.tempMax, "°C")}</td>
+      <td>${valorTemperaturaUmidade(l.umidadeMin, "%")}</td><td>${valorTemperaturaUmidade(l.umidadeMax, "%")}</td>
+    </tr></tbody>
   </table>`;
 }
 
@@ -314,16 +312,23 @@ function celulaPeriodo(p) {
   return `${esc(p.periodo)}${p.janela ? `<br/><small>${esc(p.janela)}</small>` : ""}`;
 }
 
+function textoOuIndisponivel(valor) {
+  return valor === null || valor === undefined || valor === "" || valor === "—"
+    ? "Não disponível"
+    : esc(valor);
+}
+
 function tabelaVento(periodos) {
   if (!periodos?.length) return "";
-  return `<table>
+  return `<table class="tabela-periodo tabela-vento-periodo">
+    <colgroup><col style="width:14%"><col style="width:12%"><col style="width:19%"><col style="width:19%"><col style="width:36%"></colgroup>
     <thead><tr><th>Período</th><th>Direção</th><th>Vento (velocidade média)</th><th>Rajada prevista (máx.)</th><th>Referência INMET</th></tr></thead>
     <tbody>
       ${periodos
         .map(
           (p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
-            <td>${celulaPeriodo(p)}</td><td>${esc(p.direcao)}</td><td>${esc(p.intensidade)}</td>
-            <td>${p.rajadaMaxKmh == null ? "—" : p.rajadaMaxKmh + " km/h"}</td><td>${esc(p.referenciaInmet)}</td>
+            <td><strong>${celulaPeriodo(p)}</strong></td><td>${textoOuIndisponivel(p.direcao)}</td><td>${Number.isFinite(p.velocidadeMediaKmh) ? `${numeroBr(p.velocidadeMediaKmh, 1)} km/h` : "Não disponível"}</td>
+            <td>${Number.isFinite(p.rajadaMaxKmh) ? `${numeroBr(p.rajadaMaxKmh, 1)} km/h` : "Não disponível"}</td><td>${textoOuIndisponivel(p.referenciaInmet)}</td>
           </tr>`
         )
         .join("")}
@@ -331,22 +336,17 @@ function tabelaVento(periodos) {
   </table>`;
 }
 
-function tabelaChuva(periodos) {
+function tabelaChuvaPorPeriodo(periodos) {
   if (!periodos?.length) return "";
-  return `<table>
-    <thead><tr><th>Período</th><th>Probabilidade</th><th>Chuva acumulada/hora</th><th>Resumo INMET</th></tr></thead>
-    <tbody>
-      ${periodos
-        .map(
-          (p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
-            <td><strong>${esc(String(p.periodo || "").toUpperCase())}</strong>${p.janela ? `<br/><small>${esc(p.janela)}</small>` : ""}</td>
-            <td>${p.probabilidade == null ? "Não disponível" : p.probabilidade + "%"}</td>
-            <td>${p.precipitacaoMm == null ? "Não disponível" : numeroBr(p.precipitacaoMm, 1) + " mm"}</td>
-            <td>${esc(p.resumoInmet)}</td>
-          </tr>`
-        )
-        .join("")}
-    </tbody>
+  return `<table class="tabela-periodo tabela-chuva-periodo">
+    <colgroup><col style="width:16%"><col style="width:18%"><col style="width:25%"><col style="width:41%"></colgroup>
+    <thead><tr><th>Período</th><th>Probabilidade máxima</th><th>Acumulado no período (mm)</th><th>Resumo INMET</th></tr></thead>
+    <tbody>${periodos.map((p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
+      <td><strong>${celulaPeriodo(p)}</strong></td>
+      <td>${Number.isFinite(p.probabilidade) ? `${numeroBr(p.probabilidade, 0)}%` : "Não disponível"}</td>
+      <td>${Number.isFinite(p.precipitacaoMm) ? `${numeroBr(p.precipitacaoMm, 1)} mm` : "Não disponível"}</td>
+      <td>${textoOuIndisponivel(p.resumoInmet)}</td>
+    </tr>`).join("")}</tbody>
   </table>`;
 }
 
@@ -354,14 +354,10 @@ function tabelaCalor(r) {
   const dadosBrutos = r.climaSaude?.dados || null;
   const diaDado = dadosBrutos?.consultadoEm ? formatarDataBrasilia(dadosBrutos.consultadoEm)?.slice(0, 10) : null;
   const dados = dadosBrutos && diaDado === r.dataFormatadaCurta ? dadosBrutos : null;
-  const t = dados?.temperatura || {};
-  const temperatura = Number.isFinite(t.minima) || Number.isFinite(t.maxima)
-    ? `${Number.isFinite(t.minima) ? `${t.minima} °C` : "Não disponível"} / ${Number.isFinite(t.maxima) ? `${t.maxima} °C` : "Não disponível"}`
-    : "Não disponível";
   return blocoTabela({
-    titulo: `<h4 class="subsecao">Condições de Calor — Indicadores e Previsões</h4>`,
-    tabela: `<table class="tabela-calor"><colgroup><col style="width:17%"><col style="width:35%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>Período</th><th>Temperatura prevista (mín./máx.)</th><th>Indicador de calor</th><th>Classificação</th></tr></thead><tbody><tr><td>Dia</td><td>${temperatura}</td><td>${Number.isFinite(dados?.ehf?.valor) ? `EHF ${esc(dados.ehf.valor)}` : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td></tr></tbody></table>`,
-    fonte: `Fonte: Clima e Saúde — Ministério da Saúde. A interface pública consultada fornece temperatura e EHF em base diária; não publicou previsão por período para esta localidade nesta emissão.`,
+    titulo: `<h4 class="subsecao">Excesso de calor</h4>`,
+    tabela: `<table class="tabela-calor"><colgroup><col style="width:18%"><col style="width:22%"><col style="width:30%"><col style="width:30%"></colgroup><thead><tr><th>Período</th><th>EHF</th><th>Classificação</th><th>Risco combinado</th></tr></thead><tbody><tr><td>Dia</td><td>${Number.isFinite(dados?.ehf?.valor) ? esc(dados.ehf.valor) : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td><td>${esc(dados?.riscoCombinado || "Não disponível")}</td></tr></tbody></table>`,
+    fonte: dados ? "Fonte de dados: Clima e Saúde." : "Fonte prioritária consultada: Clima e Saúde. Dados indisponíveis nesta emissão.",
   });
 }
 
@@ -412,8 +408,8 @@ function tabelaMar(mar, fontesPorCampo = {}) {
   });
 }
 
-function tabelaQualidadeAr(qa, fontesPorCampo = {}) {
-  if (!qa) return "";
+function tabelaQualidadeAr(qa, indiceUv, fontesPorCampo = {}) {
+  qa ||= {};
   const fontePm = fontesPorCampo["ar.pm25Medio"] && fontesPorCampo["ar.pm25Medio"] !== "Indisponível" ? fontesPorCampo["ar.pm25Medio"] : "Open-Meteo Air Quality";
   const linhasParticulado = [
     qa.pm25Medio == null ? "" : `<tr class="zebra">
@@ -429,9 +425,15 @@ function tabelaQualidadeAr(qa, fontesPorCampo = {}) {
       <td>Diretriz OMS 2021: até 45 µg/m³</td>
     </tr>`,
   ].join("");
+  const uvDisponivel = Number.isFinite(indiceUv?.valorAtual) && Boolean(indiceUv?.classificacao);
+  const uvValor = uvDisponivel ? indiceUv.valorAtual : "Índice UV indisponível";
+  const uvClassificacao = uvDisponivel ? indiceUv.classificacao : "Não disponível";
+  const uvReferencia = uvDisponivel
+    ? "Previsão e classificação calculada a partir do índice publicado pela Open-Meteo/CAMS."
+    : "A fonte integrada de índice UV não retornou um valor válido nesta atualização.";
   return blocoTabela({
     titulo: `<h4 class="subsecao">Qualidade do Ar e Índice UV</h4>`,
-    fonte: `Fonte de dados: ${esc(fontePm)} (material particulado); Open-Meteo Air Quality (índice UV).`,
+    fonte: `Fonte de dados: ${esc(fontePm)} / CAMS (material particulado e índice UV). ${uvDisponivel ? "Indicador UV previsto disponível." : "Indicador UV indisponível nesta atualização."}`,
     tabela: `<table>
     <thead><tr><th>Indicador</th><th>Valor</th><th>Classificação</th><th>Referência</th></tr></thead>
     <tbody>
@@ -443,10 +445,10 @@ function tabelaQualidadeAr(qa, fontesPorCampo = {}) {
       </tr>
       ${linhasParticulado}
       <tr class="zebra">
-        <td>Índice UV (máximo do dia)</td>
-        <td>${qa.uvMax ?? "—"}${qa.horaPicoUv ? ` (pico ~${esc(qa.horaPicoUv)})` : ""}</td>
-        <td>${esc(qa.uvClassificacao?.nivel)}</td>
-        <td>Faixas OMS: 8+ muito alto, 11+ extremo</td>
+        <td>Índice UV</td>
+        <td>${esc(uvValor)}</td>
+        <td>${esc(uvClassificacao)}</td>
+        <td>${esc(uvReferencia)}</td>
       </tr>
     </tbody>
   </table>`,
@@ -627,18 +629,28 @@ const grausC = (valor) => (Number.isFinite(valor) ? `${Math.round(valor)}°C` : 
 // seguintes têm seção própria no fim do informativo.
 function blocoPrevisaoAgendada(r, tituloSecao = "") {
   if (!r.previsaoDias?.length) return "";
+  const fonteAgrupada = (campos, padrao) => {
+    const fontes = [...new Set(campos
+      .map((campo) => r.fontesPorCampo?.[campo])
+      .filter((fonte) => fonte && fonte !== "Indisponível"))];
+    return esc(fontes.join(" / ") || padrao);
+  };
   const linhas = r.previsaoDias.map((dia, i) => `<tr class="${i % 2 ? "zebra" : ""}">
     <td>${esc(dia.periodo)}<br/><small>${esc(dataCurta(dia.data))}</small></td>
-    <td>${esc(dia.condicao)}</td>
+    <td class="previsao-condicao">${esc(r.condicaoGeral || "Condição indisponível")}</td>
     <td>${grausC(dia.tempMin)} / ${grausC(dia.tempMax)}</td>
-    <td>${Number.isFinite(dia.chuvaMm) ? `${numeroBr(dia.chuvaMm, 1)} mm` : "—"}</td>
+    <td>${Number.isFinite(dia.umidadeMin) || Number.isFinite(dia.umidadeMax) ? `${celulaNumero(dia.umidadeMin)}% / ${celulaNumero(dia.umidadeMax)}%` : "—"}</td>
+    <td class="previsao-chuva">
+      <span>${Number.isFinite(dia.chuvaMm) ? `${numeroBr(dia.chuvaMm, 1)} mm` : "—"}</span>
+      <small><strong>Probabilidade de chuva:</strong> ${Number.isFinite(r.probabilidadeChuvaPrevista) ? `${numeroBr(r.probabilidadeChuvaPrevista, 0)}%` : "Indisponível"}</small>
+    </td>
     <td>${Number.isFinite(dia.rajadaKmh) ? `${numeroBr(dia.rajadaKmh, 0)} km/h` : "—"}</td>
     <td>${celulaCalor(r.climaSaude, dia.data)}</td>
   </tr>`).join("");
   return blocoTabela({
     titulo: tituloSecao,
-    tabela: `<table class="previsao-hoje"><thead><tr><th>Período</th><th>Condição</th><th>Temperatura mín./máx.</th><th>Chuva na janela</th><th>Rajada prevista</th><th>Calor</th></tr></thead><tbody>${linhas}</tbody></table>`,
-    fonte: `Fontes por campo: condição e estimativa de chuva — Open-Meteo; temperatura — ${esc([...new Set([r.fontesPorCampo?.tempMin, r.fontesPorCampo?.tempMax].filter(Boolean))].join(" / ") || "indisponível")}; calor — ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))}; rajada numérica — ${esc(r.fontesPorCampo?.rajadaMaxKmh || "indisponível")}. A chuva desta linha corresponde à janela da edição; o card principal usa o agregado diário 00h–24h.`,
+    tabela: `<table class="previsao-hoje"><thead><tr><th>Período</th><th>Condição</th><th>Temperatura mín./máx.</th><th>Umidade mín./máx.</th><th>Chuva prevista/dia</th><th>Rajada prevista</th><th>Calor</th></tr></thead><tbody>${linhas}</tbody></table>`,
+    fonte: `Fontes por campo: condição — ${fonteAgrupada(["condicaoGeral"], "INMET — previsão oficial")}; temperatura — ${fonteAgrupada(["tempMin", "tempMax"], "INMET — previsão oficial")}; umidade — ${fonteAgrupada(["umidadeMin", "umidadeMax"], "INMET — previsão oficial")}; chuva — ${fonteAgrupada(["precipitacaoTotalMm"], "Dado indisponível")}; probabilidade de chuva — ${fonteAgrupada(["probabilidadeChuvaPrevista"], "Dado indisponível")}; rajada — ${fonteAgrupada(["rajadaMaxKmh"], "Dado indisponível")}; calor — ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))}. O INMET é prioritário e qualquer complemento permanece identificado por campo.`,
   });
 }
 
@@ -684,6 +696,7 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
     return `<tr class="${i % 2 === 1 ? "zebra" : ""}">
       <td class="p3d-data"><strong>${esc(d.dataFormatada)}</strong><span>${esc(d.diaSemana)}</span></td>
       <td class="p3d-num">${temperatura}</td>
+      <td class="p3d-num">${Number.isFinite(d.umidadeMinPct) || Number.isFinite(d.umidadeMaxPct) ? `${celulaNumero(d.umidadeMinPct)} / ${celulaNumero(d.umidadeMaxPct)}` : NAO_DISPONIVEL}</td>
       <td class="p3d-num">${celulaNumero(d.rajadaMaxKmh)}</td>
       <td class="p3d-num">${celulaNumero(d.chuvaMm, 1)}</td>
       <td class="p3d-num">${celulaNumero(d.uvMax, 1)}</td>
@@ -707,21 +720,22 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
     <p class="p3d-sub">${local} · três dias seguintes à data de geração deste informativo (hoje não incluído).</p>
     ${situacao}
     <table class="p3d">
-      <colgroup><col style="width:14%"><col style="width:15%"><col style="width:12%"><col style="width:12%"><col style="width:11%"><col style="width:13%"><col style="width:23%"></colgroup>
+      <colgroup><col style="width:12%"><col style="width:14%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:12%"><col style="width:19%"></colgroup>
       <thead><tr>
         <th>Data</th>
         <th class="p3d-num">Temperatura Máx./Mín. (°C)</th>
+        <th class="p3d-num">Umidade Mín./Máx. (%)</th>
         <th class="p3d-num">Rajada prevista (km/h)</th>
-        <th class="p3d-num">Chuva acumulada/dia (mm)</th>
+        <th class="p3d-num">Chuva prevista/dia (mm)</th>
         <th class="p3d-num">Índice UV (máx.)</th>
         <th class="p3d-num">Calor</th>
         <th>Condição geral</th>
       </tr></thead>
       <tbody>${linhas}</tbody>
     </table>
-    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "Clima e Saúde")}; rajada — ${esc(p.fontesCampo?.rajada || "INMET")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
+    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "INMET")}; umidade — ${esc(p.fontesCampo?.umidade || "INMET")}; rajada — ${esc(p.fontesCampo?.rajada || "INMET")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
       ${p.status === "indisponivel" ? "Tentativa de consulta" : "Atualização (horário da consulta à fonte)"}: ${esc(consulta || "horário indisponível")}, horário local.
-      Chuva = volume total estimado para o dia civil local (00h–24h, ${esc(p.fuso)}), não probabilidade nem aviso oficial; índice UV = máximo previsto no dia. Campos não publicados pela fonte obrigatória aparecem como “Não disponível”.
+      INMET é prioritário para chuva, vento e rajada; quando não publica um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita na linha de fontes. O índice UV usa Open-Meteo.
       Fonte de dados de calor: ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))} — ${DESCRICAO_CALOR}.</p>
   </div>`;
 }
@@ -741,29 +755,40 @@ function fontesPeriodos(r, campo) {
 
 function referenciaConsulta(r) {
   const fuso = r.cidade?.fuso || "America/Sao_Paulo";
-  return `consulta em ${esc(r.dataFormatadaCurta)} às ${esc(r.horaConsulta)} (horário de Brasília); janelas no horário local (${esc(fuso)})`;
+  return `consulta em ${esc(r.dataFormatadaCurta)} às ${esc(horaConsultaPdf(r.horaConsulta))} (horário de Brasília); janelas no horário local (${esc(fuso)})`;
 }
 
 function blocosPrevisao(r) {
   const tituloSecao = `<h3 class="secao">1. Previsão</h3>`;
   const previsao = blocoPrevisaoAgendada(r, tituloSecao);
   const fontesTemperatura = [...new Set((r.tabelaTemperaturaUmidade || []).map((l) => l.fonte).filter((f) => f && f !== "Indisponível"))].join(" / ");
+  const fontesCampos = (sufixos) => [...new Set(Object.entries(r.fontesPorCampo || {})
+    .filter(([campo, fonte]) => sufixos.some((sufixo) => campo.endsWith(sufixo)) && fonte && fonte !== "Indisponível")
+    .map(([, fonte]) => fonte))].join(" / ") || "Dado indisponível";
+  const fonteVento = fontesCampos([".direcao", ".intensidadeVento", ".velocidadeMediaKmh", ".rajadaMaxKmh"]);
+  const fonteChuva = fontesCampos([".precipitacaoMm", ".probabilidadeChuva"]);
   const temperatura = blocoTabela({
-    titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao">Temperatura e umidade</h4><p class="subtitulo-tabela">Indicadores consolidados do período consultado.</p>`,
+    titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao secao-modelo">Temperatura e umidade</h4><p class="subtitulo-tabela">Indicadores consolidados do período consultado.</p>`,
     tabela: tabelaTemperatura(r.tabelaTemperaturaUmidade),
-    fonte: `Fonte de dados: ${esc(fontesTemperatura || "indisponível")}. Clima e Saúde é prioritário; campos indisponíveis utilizam Open-Meteo como alternativa.`,
+    fonte: fontesTemperatura === "INMET — previsão oficial"
+      ? "Fonte de dados: INMET — previsão oficial."
+      : `Fonte de dados: ${fontesTemperatura || "Dado indisponível"}. INMET é prioritário; complementos são identificados por campo.`,
   });
   const vento = blocoTabela({
-    titulo: `<h4 class="subsecao">Vento por período</h4>`,
+    titulo: `<h4 class="subsecao secao-modelo">Vento por período</h4>`,
     tabela: tabelaVento(r.ventoPorPeriodo),
-    fonte: `Fonte de dados: INMET para direção e intensidade oficiais; ${esc(fontesPeriodos(r, "rajadaMaxKmh"))} para rajada numérica. Quando o INMET não publica rajada numérica, o valor máximo da janela vem do Open-Meteo. ${referenciaConsulta(r)}.`,
+    fonte: fonteVento === "Dado indisponível" || fonteVento === "INMET — previsão oficial"
+      ? "Fonte de dados: INMET. A intensidade qualitativa oficial não é convertida em velocidade numérica; campos não publicados aparecem como Não disponível."
+      : `Fonte de dados: ${fonteVento}. A intensidade qualitativa oficial não é convertida em velocidade numérica; o Open-Meteo apenas completa campos não publicados pelo INMET.`,
   });
-  const chuva = blocoTabela({
-    titulo: `<h4 class="subsecao">Chuva por período</h4>`,
-    tabela: tabelaChuva(r.chuvaPorPeriodo),
-    fonte: `Fonte de dados: ${esc(fontesPeriodos(r, "precipitacaoMm"))}. Organização original por MANHÃ, TARDE e NOITE, com os respectivos intervalos. O Open-Meteo é usado quando o INMET não publica volume numérico compatível; esta estimativa não cria nem altera avisos oficiais de chuva intensa. ${referenciaConsulta(r)}.`,
+  const chuvaPeriodo = blocoTabela({
+    titulo: `<h4 class="subsecao secao-modelo">Chuva por período</h4>`,
+    tabela: tabelaChuvaPorPeriodo(r.chuvaPorPeriodo),
+    fonte: fonteChuva === "Dado indisponível" || fonteChuva === "INMET — previsão oficial"
+      ? `Fonte de dados: INMET. Probabilidade e acumulado previsto permanecem “Não disponível” quando ausentes no produto municipal; o resumo textual oficial é preservado por período e nenhum total diário é distribuído artificialmente. ${referenciaConsulta(r)}.`
+      : `Fonte de dados: ${fonteChuva}. O resumo textual do INMET é preservado; campos numéricos ausentes podem usar Open-Meteo identificado, sem distribuição artificial de totais. ${referenciaConsulta(r)}.`,
   });
-  return `${previsao}${temperatura || (previsao ? "" : tituloSecao)}${vento}${chuva}`;
+  return `${previsao}${temperatura || (previsao ? "" : tituloSecao)}${vento}${chuvaPeriodo}`;
 }
 
 // Compatibilidade com relatórios antigos; a tabela de calor agora sempre
@@ -774,10 +799,8 @@ function blocoClimaSaudeIndisponivel(r) {
   return `<p class="clima-indisponivel">${esc(integracao.mensagem || "Dados do Clima e Saúde indisponíveis nesta atualização.")}</p>`;
 }
 
-// Cabeçalho institucional dos PDFs (diário e semanal): CIM à esquerda,
-// título/local/data/horário centralizados e Petrobras à direita, sobre o
-// mesmo verde do e-mail. A logo do CIM já tem esse verde como fundo; a da
-// Petrobras vem num cartão branco embutido na imagem (src/assets/header/).
+// Cabeçalho institucional exclusivo dos PDFs: CIM à esquerda, título ao centro
+// e a marca Petrobras original à direita. O e-mail e a aplicação não usam esta imagem.
 function cabecalhoPdfCss(margemLateral) {
   return `
   .header {
@@ -796,10 +819,10 @@ function cabecalhoPdfCss(margemLateral) {
   .header-tabela td.header-col-centro { padding: 16px 12px; text-align: center; }
   .header-tabela td.header-col-petrobras { width: 186px; padding: 18px 26px 18px 0; text-align: right; }
   .header-logo-cim img { display: block; width: 210px; height: auto; }
-  .header-logo-petrobras img { display: block; width: 160px; height: auto; margin-left: auto; }
+  .header-logo-petrobras { display: inline-block; width: 160px; padding: 10px 12px; border-radius: 8px; background: #ffffff; line-height: 0; }
+  .header-logo-petrobras img { display: block; width: 100%; height: auto; }
   .header-logo-cim-fallback { color: #ffffff; font: 900 30pt/1 'Arial Black', Arial, sans-serif; letter-spacing: -1px; white-space: nowrap; }
   .header-logo-cim-fallback span.i { color: #FEBF0A; }
-  .header-logo-petrobras-fallback { color: #ffffff; font: italic bold 16pt/1.2 Arial, sans-serif; }
   .header h1 {
     font-size: 18pt;
     font-weight: bold;
@@ -828,13 +851,11 @@ function cabecalhoPdfCss(margemLateral) {
 
 function cabecalhoPdfHtml({ titulo, linhaLocal }) {
   const cim = logoHeaderDataUri("cim");
-  const petrobras = logoHeaderDataUri("petrobras");
+  const petrobras = logoPetrobrasPdfDataUri();
   const logoCimHtml = cim
     ? `<div class="header-logo-cim"><img src="${cim}" alt="${escAtributo(LOGOS_HEADER.cim.alt)}" /></div>`
     : `<div class="header-logo-cim"><div class="header-logo-cim-fallback">C<span class="i">I</span>M</div></div>`;
-  const logoPetrobrasHtml = petrobras
-    ? `<div class="header-logo-petrobras"><img src="${petrobras}" alt="Petrobras" /></div>`
-    : `<div class="header-logo-petrobras"><div class="header-logo-petrobras-fallback">PETROBRAS</div></div>`;
+  if (!petrobras) throw new Error(`Asset oficial Petrobras ausente: ${PETROBRAS_PDF.arquivo}`);
   return `<div class="header">
     <table class="header-tabela" role="presentation"><tr>
       <td class="header-col-cim">${logoCimHtml}</td>
@@ -842,7 +863,7 @@ function cabecalhoPdfHtml({ titulo, linhaLocal }) {
         <h1>${esc(titulo)}</h1>
         <div class="header-local">${linhaLocal}</div>
       </td>
-      <td class="header-col-petrobras">${logoPetrobrasHtml}</td>
+      <td class="header-col-petrobras"><div class="header-logo-petrobras"><img src="${petrobras}" alt="${escAtributo(PETROBRAS_PDF.alt)}" /></div></td>
     </tr></table>
   </div>
   <div class="divisor-amarelo"></div>`;
@@ -894,6 +915,7 @@ function renderPdfHtml(r, opcoes = {}) {
     margin-bottom: 6px;
     margin-top: 15px;
   }
+  h4.subsecao.secao-modelo { color: ${brand.verde}; }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -924,13 +946,26 @@ function renderPdfHtml(r, opcoes = {}) {
   .rotulo-tabela { font-size: 10pt; margin: 10px 0 4px 0; }
   /* Calor: cabeçalho numa linha só, na mesma altura das demais tabelas. */
   .tabela-calor th { white-space: nowrap; }
-  /* Temperatura e umidade: subtítulo discreto e quatro colunas iguais,
-     centralizadas, com valores em destaque. */
+  /* Temperatura e umidade: quatro colunas da previsão diária oficial. */
   h4.subsecao + .subtitulo-tabela { margin: -3px 0 0 0; font-size: 9pt; color: #666; }
   .tabela-temp-umidade { table-layout: fixed; }
   .tabela-temp-umidade th { text-align: center; }
   .tabela-temp-umidade td { text-align: center; font-weight: bold; font-size: 11.5pt; background: #ffffff; border: 1px solid ${brand.cinzaBorda}; }
   .tabela-temp-umidade td .nd { font-weight: normal; font-size: 9.5pt; color: #666; }
+  .previsao-hoje .previsao-condicao { text-align: center; overflow-wrap: anywhere; word-break: normal; }
+  .previsao-hoje .previsao-chuva { text-align: center; }
+  .previsao-hoje .previsao-chuva > span { display: block; font-weight: bold; }
+  .previsao-hoje .previsao-chuva > small { display: block; margin-top: 3px; color: #555; font-size: 8pt; line-height: 1.25; }
+  /* Tabelas aprovadas de vento e chuva: proporções fixas, cabeçalhos e
+     números centralizados; somente a identificação do período fica à esquerda. */
+  .tabela-periodo { table-layout: fixed; }
+  .tabela-periodo th, .tabela-periodo td {
+    border: 1px solid ${brand.cinzaBorda};
+    text-align: center;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .tabela-periodo th:first-child, .tabela-periodo td:first-child { text-align: left; }
   /* Card de alerta único (alerta + recomendações na mesma borda). Inteiro
      na próxima página quando cabe nela; maior que uma página, continua com
      a borda repetida, sem cortar linhas e sem título isolado. */
@@ -1066,13 +1101,13 @@ function renderPdfHtml(r, opcoes = {}) {
     linhaLocal: `${esc(r.cidade.nome)} — ${esc(r.cidade.uf)} — ${esc(r.dataFormatadaLonga)}`,
   })}
 
-  <p class="referencia-edicao"><strong>Data da previsão:</strong> ${esc(r.dataFormatadaCurta)} &nbsp;|&nbsp; <strong>Hora da consulta:</strong> ${esc(r.horaConsulta)} (Horário de Brasília)${r.previsaoAte ? ` <strong class="previsao-ate">| Previsão até ${esc(r.previsaoAte)}</strong>` : ""}</p>
+  <p class="referencia-edicao"><strong>Data da previsão:</strong> ${esc(r.dataFormatadaCurta)} &nbsp;|&nbsp; <strong>Hora da consulta:</strong> ${esc(horaConsultaPdf(r.horaConsulta))} (Horário de Brasília)${r.previsaoAte ? ` <strong class="previsao-ate">| Previsão até ${esc(r.previsaoAte)}</strong>` : ""}</p>
   ${blocoMudancasDia(r)}
 
   ${blocosPrevisao(r)}
 
   ${tabelaCalor(r)}
-  ${tabelaQualidadeAr(r.qualidadeAr, r.fontesPorCampo)}
+  ${tabelaQualidadeAr(r.qualidadeAr, r.indiceUv, r.fontesPorCampo)}
   ${tabelaMar(r.mar, r.fontesPorCampo)}
   ${tabelaAvisosInmet(r)}
   ${opcoes.incluirCorRio === false ? "" : blocoCorRio(r, { somenteDoDia: opcoes.corRioSomenteDoDia })}
@@ -1099,7 +1134,7 @@ function footerTemplate(r) {
     .join(", ");
   return `<div style="width:100%;font-family:Arial,sans-serif;font-size:7.5pt;color:#666;padding:0 36px;">
     <div style="border-top:2px solid ${brand.amarelo};padding-top:4px;display:flex;justify-content:space-between;">
-      <span>Documento gerado automaticamente por ferramenta de geração assistida por IA em ${esc(r.dataFormatadaCurta)} às ${esc(r.horaConsulta)}. Sujeito a revisão humana antes de uso operacional. Fontes: ${esc(fontesResumo)} e outras listadas no corpo do documento.</span>
+      <span>Documento gerado automaticamente por ferramenta de geração assistida por IA em ${esc(r.dataFormatadaCurta)} às ${esc(horaConsultaPdf(r.horaConsulta))}. Sujeito a revisão humana antes de uso operacional. Fontes: ${esc(fontesResumo)} e outras listadas no corpo do documento.</span>
       <span style="white-space:nowrap;margin-left:12px;"><span class="pageNumber"></span>/<span class="totalPages"></span></span>
     </div>
   </div>`;

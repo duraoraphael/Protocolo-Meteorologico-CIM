@@ -1,7 +1,7 @@
 // Critérios operacionais de chuva intensa e vento solicitados com referência
 // INMET. A fonte do dado numérico continua registrada separadamente, pois o
-// endpoint de previsão do INMET usado pelo projeto não fornece chuva horária
-// nem rajada numérica.
+// endpoint municipal de previsão do INMET não fornece chuva horária nem
+// rajada numérica; esses gatilhos recebem apenas observações de estação INMET.
 const { formatarTitulo } = require("../../public/alert-title");
 const { fenomenoAvisoInmet, grauAvisoInmet, normalizarComparacao } = require("../sources/inmet");
 
@@ -139,7 +139,7 @@ function classificarCondicoesMeteorologicas({
   const eventos = [];
 
   if (grauVento !== "NORMAL") {
-    const detalhe = `Rajada prevista: ${rajadaKmh} km/h`;
+    const detalhe = `Rajada medida pela estação INMET: ${rajadaKmh} km/h`;
     eventos.push({
       assinatura: "vento",
       fenomeno: "vento",
@@ -157,10 +157,10 @@ function classificarCondicoesMeteorologicas({
   if (classificacaoChuva.grau !== "NORMAL") {
     const detalhes = [];
     if (Number.isFinite(chuvaHorariaMmH)) {
-      detalhes.push(`Intensidade horária máxima prevista: ${chuvaHorariaMmH} mm/h`);
+      detalhes.push(`Intensidade horária máxima observada: ${chuvaHorariaMmH} mm/h`);
     }
     if (Number.isFinite(chuvaDiariaMm)) {
-      detalhes.push(`Acumulado diário previsto: ${chuvaDiariaMm} mm`);
+      detalhes.push(`Acumulado observado no histórico disponível do dia: ${chuvaDiariaMm} mm`);
     }
     const detalhe = detalhes.join(" · ");
     eventos.push({

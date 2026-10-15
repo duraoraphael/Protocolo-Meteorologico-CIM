@@ -59,6 +59,56 @@ test("três dias seguintes, sem o dia atual, no fuso da localidade", () => {
   assert.equal(p3d.fusoDaCidade(CIDADES.macae), "America/Sao_Paulo");
 });
 
+test("produto operacional usa previsão oficial INMET e não fabrica rajada, chuva ou UV", () => {
+  const previsao = p3d.montarPrevisaoProximosDiasInmet(CIDADES.macae, {
+    dias: [
+      { data: "2026-10-01", tempMin: 20, tempMax: 30, umidadeMin: 50, umidadeMax: 90 },
+      { data: "2026-10-02", tempMin: 21, tempMax: 29, umidadeMin: 55, umidadeMax: 95, resumo: "Muitas nuvens", direcaoVento: "NE", intensidadeVento: "Fracos" },
+      { data: "2026-10-03", tempMin: 19, tempMax: 26, umidadeMin: 60, umidadeMax: 100, resumo: "Chuva" },
+      { data: "2026-10-04", tempMin: 18, tempMax: 25, umidadeMin: 65, umidadeMax: 100, resumo: "Nublado" },
+    ],
+  }, { agora: AGORA });
+
+  assert.equal(previsao.fonte, "INMET — previsão oficial");
+  assert.deepEqual(previsao.dias.map((dia) => dia.data), DATAS_MACAE);
+  assert.deepEqual(
+    [previsao.dias[0].tempMinC, previsao.dias[0].tempMaxC, previsao.dias[0].umidadeMinPct, previsao.dias[0].umidadeMaxPct],
+    [21, 29, 55, 95]
+  );
+  assert.equal(previsao.dias[0].condicao, "Muitas nuvens");
+  assert.ok(previsao.dias.every((dia) => dia.rajadaMaxKmh === null && dia.chuvaMm === null && dia.uvMax === null));
+});
+
+test("produto operacional prioriza INMET e complementa rajada/chuva/UV com Open-Meteo", () => {
+  const oficial = p3d.montarPrevisaoProximosDiasInmet(CIDADES.macae, {
+    dias: DATAS_MACAE.map((data, indice) => ({
+      data, tempMin: 20 + indice, tempMax: 29 + indice,
+      umidadeMin: 50, umidadeMax: 90, resumo: `Resumo INMET ${indice + 1}`,
+      rajadaMaxKmh: indice === 0 ? 42 : null,
+      precipitacaoMm: indice === 0 ? 3.5 : null,
+    })),
+  }, { agora: AGORA });
+  const complementar = {
+    fonte: "Open-Meteo", status: "ok", consultadoEm: "2026-10-01T17:30:00.000Z",
+    dias: DATAS_MACAE.map((data, indice) => ({
+      data, tempMinC: 1, tempMaxC: 99, rajadaMaxKmh: 30 + indice,
+      chuvaMm: indice, uvMax: 8 + indice, condicao: "Condição complementar",
+    })),
+  };
+  const previsao = p3d.mesclarPrevisaoProximosDias(oficial, complementar);
+  assert.equal(previsao.dias[0].tempMaxC, 29);
+  assert.equal(previsao.dias[0].condicao, "Resumo INMET 1");
+  assert.equal(previsao.dias[0].rajadaMaxKmh, 42);
+  assert.equal(previsao.dias[0].chuvaMm, 3.5);
+  assert.equal(previsao.dias[1].rajadaMaxKmh, 31, "rajada Open-Meteo complementa ausência numérica do INMET");
+  assert.equal(previsao.dias[1].chuvaMm, 1, "chuva Open-Meteo complementa ausência numérica do INMET");
+  assert.equal(previsao.dias[0].uvMax, 8);
+  assert.equal(previsao.fontesCampo.temperatura, "INMET — previsão oficial");
+  assert.equal(previsao.fontesCampo.rajada, "INMET — previsão oficial / Open-Meteo — previsão complementar");
+  assert.equal(previsao.fontesCampo.chuva, "INMET — previsão oficial / Open-Meteo — previsão complementar");
+  assert.equal(previsao.fontesCampo.uv, "Open-Meteo — previsão complementar");
+});
+
 test("consulta a mesma localidade do informativo, no fuso dela e só nas três datas", async () => {
   const fetchImpl = fetchFalso(respostaOpenMeteo({ time: DATAS_MACAE }));
   const r = await p3d.obterPrevisaoProximosDias(CIDADES.macae, { agora: AGORA, fetchImpl });
@@ -150,7 +200,7 @@ test("PDF: seção técnica com unidades nos títulos e 'Não disponível' em ve
   const titulo = html.indexOf("2. Previsão para os próximos 3 dias");
   assert.ok(titulo > 0);
   const secao = html.slice(titulo);
-  const cabecalhos = ["Data", "Temperatura Máx./Mín. (°C)", "Rajada prevista (km/h)", "Chuva acumulada/dia (mm)", "Índice UV (máx.)", "Calor", "Condição geral"];
+  const cabecalhos = ["Data", "Temperatura Máx./Mín. (°C)", "Umidade Mín./Máx. (%)", "Rajada prevista (km/h)", "Chuva prevista/dia (mm)", "Índice UV (máx.)", "Calor", "Condição geral"];
   const posicoes = cabecalhos.map((cabecalho) => secao.indexOf(`${cabecalho}</th>`));
   assert.ok(posicoes.every((p) => p >= 0), "todas as colunas presentes");
   assert.deepEqual([...posicoes].sort((a, b) => a - b), posicoes, "ordem: Data, Temperatura, Rajada, Chuva, UV, Calor, Condição");
@@ -160,8 +210,8 @@ test("PDF: seção técnica com unidades nos títulos e 'Não disponível' em ve
   assert.ok(secao.includes(">55,3<"));
   assert.ok(secao.includes(">0,0<"), "zero real exibido como zero");
   assert.ok(secao.includes(">4,6<") && secao.includes(">8,6<"), "UV real de cada data");
-  assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 1, "só o UV ausente");
-  assert.ok(secao.includes("índice UV = máximo previsto no dia"));
+  assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 4, "umidade legada e um UV ausente");
+  assert.ok(secao.includes("INMET é prioritário para chuva, vento e rajada"));
   assert.equal((secao.match(/class="calor-nd">Indisponível</g) || []).length, 3, "sem fonte de calor: indisponível, não Normal");
   assert.ok(secao.includes('<p class="fonte-tabela">Fontes por campo:'));
   assert.ok(secao.includes("Fonte de dados de calor:"));
@@ -196,6 +246,6 @@ test("PDF: fonte indisponível mantém a seção com as datas", async (t) => {
   const secao = html.slice(html.indexOf("2. Previsão para os próximos 3 dias"));
   assert.ok(secao.includes("Fonte indisponível nesta emissão"));
   assert.equal((secao.match(/<strong>0[234]\/10\/2026<\/strong>/g) || []).length, 3);
-  assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 15);
+  assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 18);
   assert.equal((secao.match(/class="calor-nd">Indisponível</g) || []).length, 3);
 });

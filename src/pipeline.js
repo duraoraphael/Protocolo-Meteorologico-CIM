@@ -7,7 +7,11 @@ const { enviarRelatorioPorEmail, enviarAvisoCorRioPorEmail } = require("./email/
 const ged = require("./integrations/sharepointGed");
 const { resumo, compararComManha } = require("./logic/scheduledReport");
 const { obterMonitorSecas } = require("./sources/monitorSecas");
-const { obterPrevisaoProximosDias } = require("./sources/previsaoProximosDias");
+const {
+  montarPrevisaoProximosDiasInmet,
+  obterPrevisaoProximosDias,
+  mesclarPrevisaoProximosDias,
+} = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
 const { validadeInformativo } = require("./logic/informativoValidity");
 const { TIPOS_DOCUMENTO } = require("./logic/alertPresentation");
@@ -183,40 +187,12 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // Previsão dos 3 dias seguintes (seção final do PDF), no fuso da própria
   // localidade e a partir do instante de geração do informativo. Nunca lança
   // — falha da fonte vira "Não disponível" na tabela e aviso de coleta.
-  report.previsaoProximosDias = await obterPrevisaoProximosDias(cidade, {
-    agora: new Date(report.geradoEmISO || Date.now()),
-  });
-  // Fallback individual na previsão estendida: máxima do Clima Saúde quando
-  // publicada; os demais campos permanecem na previsão diária Open-Meteo.
-  const diaBrasilia = (valor) => Number.isFinite(Date.parse(valor || ""))
-    ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(valor))
-    : null;
-  const climaSaudeAtual = report.climaSaude?.dados
-    && diaBrasilia(report.climaSaude.dados.consultadoEm) === diaBrasilia(report.geradoEmISO);
-  const climaDias = new Map((climaSaudeAtual ? report.climaSaude.dados?.previsaoDias : [])?.map((dia) => [dia.data, dia]) || []);
-  for (const dia of report.previsaoProximosDias.dias || []) {
-    const maximaClimaSaude = climaDias.get(dia.data)?.tempMax;
-    if (Number.isFinite(maximaClimaSaude)) dia.tempMaxC = maximaClimaSaude;
-  }
-  report.previsaoProximosDias.fontesCampo = {
-    temperatura: "Clima e Saúde — Ministério da Saúde (máxima, quando publicada); Open-Meteo nos campos sem cobertura",
-    rajada: "Open-Meteo — fallback porque a previsão municipal do INMET não publica rajada numérica para os dias seguintes",
-    chuva: "Open-Meteo — estimativa diária; não constitui aviso oficial de chuva intensa",
-    uv: "Open-Meteo Air Quality",
-    condicao: "Open-Meteo",
-  };
-  if ((report.previsaoProximosDias.dias || []).some((dia) => Number.isFinite(dia.rajadaMaxKmh))) {
-    report.diagnosticosFallback = report.diagnosticosFallback || [];
-    report.diagnosticosFallback.push({
-      indicador: "rajada prevista — próximos 3 dias",
-      fontePrioritaria: "INMET — previsão oficial",
-      fonteUtilizada: "Open-Meteo",
-      motivo: "INMET não disponibilizou previsão numérica de rajada para os dias seguintes.",
-    });
-    console.log("[FALLBACK] rajada prevista — próximos 3 dias: INMET não disponibilizou previsão numérica; fonte utilizada: Open-Meteo.");
-  }
+  const instantePrevisao = new Date(report.geradoEmISO || Date.now());
+  const previsaoInmet3d = montarPrevisaoProximosDiasInmet(cidade, report.inmetPrevisao, { agora: instantePrevisao });
+  const previsaoComplementar3d = await obterPrevisaoProximosDias(cidade, { agora: instantePrevisao });
+  report.previsaoProximosDias = mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d);
   if (report.previsaoProximosDias.status === "indisponivel") {
-    report.avisosColeta.push("Open-Meteo (previsão dos próximos 3 dias): não foi possível atualizar esta fonte.");
+    report.avisosColeta.push("INMET (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
   }
 
   // COR-Rio (só município do Rio): mesmo serviço/cache do painel, então site,

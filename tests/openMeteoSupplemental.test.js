@@ -85,6 +85,8 @@ test("Air Quality usa 15 segundos e recupera após falhas transitórias", async 
   assert.equal(resultado.fonte, "Open-Meteo Air Quality / CAMS");
   assert.equal(resultado.uvMax, 9);
   assert.equal(resultado.horaPicoUv, "12:00");
+  assert.equal(resultado.uvClassificacao.nivel, "Muito alto");
+  assert.ok(chamadas.every(({ url }) => String(url).includes("uv_index")), "UV deve ser solicitado à fonte que o publica");
   assert.equal(resultado.pm25Medio, 12);
   assert.equal(resultado.aqiPm25, 18);
   assert.equal(resultado.pm25Classificacao.nivel, "Boa");

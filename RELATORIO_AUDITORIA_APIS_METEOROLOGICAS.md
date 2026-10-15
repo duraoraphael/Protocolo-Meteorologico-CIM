@@ -1,5 +1,7 @@
 # Relatório de auditoria das APIs meteorológicas
 
+> **Registro histórico de 13/10/2026.** Este documento preserva o estado anterior para rastreabilidade e não descreve a política vigente. A configuração atual está em `AUDITORIA_FINAL_DADOS_REAIS_CIM.md`: INMET é prioritário; Open-Meteo complementa somente campos de previsão ausentes e fornece UV com identificação própria; observações INMET permanecem separadas; EHF/risco térmico usam Clima e Saúde; Windy e a rota `/api/logos` foram removidos.
+
 **Projeto:** Protocolo Meteorológico CIM  
 **Data da auditoria:** 13/10/2026  
 **Escopo:** backend, painel, rotas HTTP, agendadores, fontes externas, caches, regras de risco, PDF, e-mail, configurações e testes.  
@@ -45,7 +47,7 @@ Locais de chamada: `src/sources/openMeteo.js`, `airQuality.js`, `marine.js`, `in
 
 ### B.2 Rotas internas
 
-Foram localizadas 15 rotas: `GET /api/preview`, `GET /api/cor-rio`, `GET /relatorios/:arquivo`, `POST /api/gerar-relatorio`, `GET /api/logos`, `GET /api/cidades`, `POST /api/verificar-senha`, cinco rotas de responsáveis (`GET`, consulta, criação, alteração e exclusão), `GET /api/windy/map-config`, `GET /api/oceanop/areas` e `GET /api/oceanop/previsao`.
+Na versão histórica foram localizadas 15 rotas, incluindo `/api/logos` e `/api/windy/map-config`. Ambas foram removidas posteriormente. Consulte `server.js` e a auditoria final de 14/10/2026 para o inventário vigente.
 
 ### B.3 Contratos, frequência, fuso e unidades
 

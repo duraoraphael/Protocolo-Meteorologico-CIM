@@ -30,11 +30,43 @@ function hojeDDMMAAAA(instante = new Date()) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function dataIsoDeBr(dataBr) {
+  const partes = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dataBr || ""));
+  return partes ? `${partes[3]}-${partes[2]}-${partes[1]}` : null;
+}
+
+function prioridadeCondicao(texto) {
+  const normalizado = String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/tempestad|trovoad|granizo/.test(normalizado)) return 6;
+  if (/chuva|pancad|garoa/.test(normalizado)) return 5;
+  if (/nevoeiro|neblina/.test(normalizado)) return 4;
+  if (/nublad|nuvens/.test(normalizado)) return 3;
+  if (/parcial|poucas/.test(normalizado)) return 2;
+  if (/ceu claro|ensolarad|sol/.test(normalizado)) return 1;
+  return 0;
+}
+
+function consolidarCondicaoDiaria(valores) {
+  const grupos = new Map();
+  for (const [indice, valor] of valores.entries()) {
+    const texto = textoOficial(valor);
+    const chave = String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+    if (!chave) continue;
+    const grupo = grupos.get(chave) || { texto, ocorrencias: 0, prioridade: prioridadeCondicao(texto), indice };
+    grupo.ocorrencias += 1;
+    grupos.set(chave, grupo);
+  }
+  return [...grupos.values()].sort((a, b) =>
+    b.ocorrencias - a.ocorrencias || b.prioridade - a.prioridade || a.indice - b.indice
+  )[0]?.texto || null;
+}
+
 async function buscarPrevisaoInmet(codigoIbge, {
   agora = new Date(),
   fetchImpl = fetch,
   timeoutMs = INMET_TIMEOUT_MS,
   esperarFn,
+  logger,
 } = {}) {
   const url = `https://apiprevmet3.inmet.gov.br/previsao/${codigoIbge}`;
   const json = await buscarJsonComRetentativa(url, {
@@ -44,6 +76,8 @@ async function buscarPrevisaoInmet(codigoIbge, {
     tentativas: INMET_TENTATIVAS,
     esperarFn,
     requestInit: { headers: HEADERS },
+    logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger,
+    prefixoLog: "INMET-PREVISAO",
   });
   const porData = json[codigoIbge];
   if (!porData) {
@@ -61,8 +95,8 @@ async function buscarPrevisaoInmet(codigoIbge, {
   const numeroOficial = (...valores) => {
     for (const valor of valores) {
       if (Number.isFinite(valor)) return valor;
-      if (typeof valor === "string" && /^\s*-?\d+(?:[.,]\d+)?\s*(?:km\/h|mm)?\s*$/i.test(valor)) {
-        const numero = Number(valor.replace(/\s*(?:km\/h|mm)\s*$/i, "").replace(",", "."));
+      if (typeof valor === "string" && /^\s*-?\d+(?:[.,]\d+)?\s*(?:[°º]?\s*c|%|km\/h|mm)?\s*$/i.test(valor)) {
+        const numero = Number(valor.replace(/\s*(?:[°º]?\s*c|%|km\/h|mm)\s*$/i, "").replace(",", "."));
         if (Number.isFinite(numero)) return numero;
       }
     }
@@ -71,22 +105,74 @@ async function buscarPrevisaoInmet(codigoIbge, {
   const limpar = (p) =>
     p && {
       resumo: p.resumo || null,
-      tempMax: p.temp_max ?? null,
-      tempMin: p.temp_min ?? null,
-      umidadeMax: p.umidade_max ?? null,
-      umidadeMin: p.umidade_min ?? null,
+      tempMax: numeroOficial(p.temp_max),
+      tempMin: numeroOficial(p.temp_min),
+      umidadeMax: numeroOficial(p.umidade_max),
+      umidadeMin: numeroOficial(p.umidade_min),
       direcaoVento: p.dir_vento || null,
       intensidadeVento: p.int_vento || null,
       // O endpoint municipal não publica estes campos atualmente, mas a
       // leitura aceita nomes oficiais explícitos caso passem a ser incluídos.
+      velocidadeMediaKmh: numeroOficial(
+        p.vento_velocidade_media,
+        p.velocidade_media_vento,
+        p.vento_medio,
+        p.vel_vento
+      ),
       rajadaMaxKmh: numeroOficial(p.rajada_max, p.rajada_vento, p.vento_rajada, p.rajada),
       precipitacaoMm: numeroOficial(p.precipitacao_mm, p.chuva_mm, p.acumulado_chuva_mm),
+      precipitacaoHorariaMaxMm: numeroOficial(
+        p.precipitacao_horaria_max_mm,
+        p.chuva_horaria_max_mm
+      ),
+      probabilidadeChuva: numeroOficial(
+        p.probabilidade_chuva,
+        p.prob_chuva,
+        p.probabilidade_precipitacao
+      ),
     };
+
+  const consolidarDia = (data, valor) => {
+    const periodosNomeados = valor?.manha || valor?.tarde || valor?.noite
+      ? [["Manhã", valor.manha], ["Tarde", valor.tarde], ["Noite", valor.noite]].filter(([, periodo]) => periodo)
+      : [["Dia", valor]].filter(([, periodo]) => periodo);
+    const periodos = periodosNomeados.map(([, periodo]) => periodo);
+    const valores = (campo) => periodos.map((periodo) => periodo?.[campo]).map((item) => numeroOficial(item)).filter(Number.isFinite);
+    const textos = (campo) => [...new Set(periodos.map((periodo) => textoOficial(periodo?.[campo])).filter(Boolean))];
+    const maximos = valores("temp_max");
+    const minimos = valores("temp_min");
+    const umidadesMax = valores("umidade_max");
+    const umidadesMin = valores("umidade_min");
+    const rajadas = periodos
+      .map((periodo) => numeroOficial(periodo?.rajada_max, periodo?.rajada_vento, periodo?.vento_rajada, periodo?.rajada))
+      .filter(Number.isFinite);
+    const precipitacoesPorPeriodo = periodos.map((periodo) =>
+      numeroOficial(periodo?.precipitacao_mm, periodo?.chuva_mm, periodo?.acumulado_chuva_mm));
+    return {
+      data: dataIsoDeBr(data),
+      dataBr: data,
+      tempMax: maximos.length ? Math.max(...maximos) : null,
+      tempMin: minimos.length ? Math.min(...minimos) : null,
+      umidadeMax: umidadesMax.length ? Math.max(...umidadesMax) : null,
+      umidadeMin: umidadesMin.length ? Math.min(...umidadesMin) : null,
+      resumo: consolidarCondicaoDiaria(periodos.map((periodo) => periodo?.resumo)),
+      direcaoVento: textos("dir_vento").join(" / ") || null,
+      intensidadeVento: textos("int_vento").join(" / ") || null,
+      rajadaMaxKmh: rajadas.length ? Math.max(...rajadas) : null,
+      precipitacaoMm: precipitacoesPorPeriodo.length && precipitacoesPorPeriodo.every(Number.isFinite)
+        ? Math.round(precipitacoesPorPeriodo.reduce((soma, item) => soma + item, 0) * 10) / 10
+        : null,
+    };
+  };
 
   return {
     fonte: "INMET (previsão oficial)",
     url: `https://previsao.inmet.gov.br/${codigoIbge}`,
     data: dataAlvo,
+    dias: Object.entries(porData)
+      .map(([data, valor]) => consolidarDia(data, valor))
+      .filter((dia) => dia.data)
+      .sort((a, b) => a.data.localeCompare(b.data)),
     periodos: {
       manha: limpar(diaEscolhido.manha),
       tarde: limpar(diaEscolhido.tarde),
@@ -230,6 +316,44 @@ function consolidarAvisosInmet(avisos, { agora = new Date() } = {}) {
     }
     return consolidado;
   });
+}
+
+// Para superfícies operacionais, avisos sobrepostos do mesmo fenômeno devem
+// produzir uma única classificação. Mantém integralmente o registro oficial
+// escolhido (sem misturar riscos ou instruções de avisos menos graves).
+function selecionarAvisosInmet(avisos, { agora = new Date() } = {}) {
+  const agoraMs = agora instanceof Date ? agora.getTime() : new Date(agora).getTime();
+  const grupos = [];
+  const sobrepoe = (a, b) => {
+    const inicioA = dataAvisoEmMs(a.inicio ?? a.onset);
+    const fimA = dataAvisoEmMs(a.fim ?? a.expires);
+    const inicioB = dataAvisoEmMs(b.inicio ?? b.onset);
+    const fimB = dataAvisoEmMs(b.fim ?? b.expires);
+    if ([inicioA, fimA, inicioB, fimB].some((valor) => valor === null)) return true;
+    return inicioA <= fimB && inicioB <= fimA;
+  };
+
+  for (const aviso of Array.isArray(avisos) ? avisos.filter(Boolean) : []) {
+    const chave = fenomenoAvisoInmet(aviso.descricao || aviso.event || aviso.evento || aviso.headline);
+    const correspondentes = grupos
+      .map((grupo, indice) => ({ grupo, indice }))
+      .filter(({ grupo }) => grupo.chave === chave && grupo.avisos.some((item) => sobrepoe(item, aviso)));
+    if (!correspondentes.length) {
+      grupos.push({ chave, avisos: [aviso] });
+      continue;
+    }
+
+    const principal = correspondentes[0].grupo;
+    principal.avisos.push(aviso);
+    for (const { grupo, indice } of correspondentes.slice(1).reverse()) {
+      principal.avisos.push(...grupo.avisos);
+      grupos.splice(indice, 1);
+    }
+  }
+
+  return grupos.map(({ avisos: grupo }) => grupo.reduce((melhor, candidato) =>
+    compararAvisos(candidato, melhor, agoraMs) > 0 ? candidato : melhor
+  ));
 }
 
 // Identificador oficial do aviso. `id_aviso` é o mesmo em todas as versões
@@ -431,6 +555,7 @@ module.exports = {
   normalizarAviso,
   extrairAvisos,
   consolidarAvisosInmet,
+  selecionarAvisosInmet,
   deduplicarAvisosInmet,
   avisoAplicavel,
   dataAvisoEmMs,

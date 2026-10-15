@@ -1,7 +1,7 @@
 # Protocolo Meteorológico CIM
 
 Geração automática do **Informativo Meteorológico** do CIM: coleta dados de
-APIs meteorológicas gratuitas (Open-Meteo + INMET oficial), monta um relatório
+fontes oficiais e meteorológicas (Clima e Saúde, INMET e fontes auxiliares), monta um relatório
 com evento climático mais relevante do dia e recomendações de segurança
 adaptadas ao cenário, gera um **PDF corporativo** e envia por **e-mail** (com
 um resumo em HTML no corpo da mensagem). Inclui também um **painel para TV**
@@ -133,11 +133,12 @@ kiosk também ao iniciar a sessão.
 
 | Fonte | Uso | Observação |
 |---|---|---|
-| **Open-Meteo** (`customer-api.open-meteo.com` em produção) | Base numérica: temperatura, umidade, vento, chuva por período | Exige licença comercial e `OPEN_METEO_API_KEY` em produção; a API gratuita fica restrita a desenvolvimento/auditoria não comercial |
-| **INMET** (`apiprevmet3.inmet.gov.br`) | Previsão oficial (validação cruzada) + avisos de perigo ativos (equivalente a alertas de Defesa Civil coordenados nacionalmente) | Gratuita, sem chave, API pública oficial |
+| **Open-Meteo Weather** | Complemento identificado para temperatura, umidade, condição, chuva, vento e rajada quando o INMET não publicar o valor numérico | Nunca é apresentado como dado oficial do INMET; a origem complementar permanece indicada por campo |
+| **INMET — estação automática** (`apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}`) | Temperatura/umidade atuais e extremos horários; `Chuva acumulada/dia`, `Chuva acumulada/Hora`; medições de vento e rajada usadas somente no monitoramento observacional | `Chuva acumulada/dia` soma as leituras cuja hora de referência pertence ao dia civil local; `Chuva acumulada/Hora` usa a última hora oficial disponível e identifica o intervalo. Uma medição de rajada nunca ocupa o campo de rajada prevista |
+| **INMET — previsão e avisos** (`apiprevmet3.inmet.gov.br`) | Fonte prioritária para chuva, vento e rajada previstos; também fornece condição, temperatura, umidade e avisos de perigo ativos | Direção, intensidade e resumo textual são preservados. Se o produto municipal não publicar um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita |
 | **Open-Meteo Marine** (`customer-marine-api.open-meteo.com` em produção) | Altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Mesma licença/chave comercial; atende ao item do protocolo original que pedia dados de mar (OCEANOP) |
-| **Open-Meteo Air Quality / CAMS** (`customer-air-quality-api.open-meteo.com` em produção) | Índice UV, PM2,5/PM10 e European AQI de PM2,5 | Mesma licença/chave comercial; a classificação do ar vem do índice publicado pela fonte |
-| **Clima e Saúde — Ministério da Saúde** ([Excesso de Calor](https://clima.saude.gov.br/)) | EHF, risco combinado à saúde e GeoSES por município | Consulta server-side da página pública oficial, com validação de município, UF e data; não há contrato público de API direta documentado no portal |
+| **Open-Meteo Air Quality / CAMS** (`customer-air-quality-api.open-meteo.com` em produção) | PM2,5/PM10, European AQI de PM2,5 e índice UV previsto | Mesma licença/chave comercial; AQI e UV mantêm identificação CAMS/Open-Meteo |
+| **Clima e Saúde — Ministério da Saúde** ([Excesso de Calor](https://clima.saude.gov.br/)) | EHF, risco combinado e GeoSES | Consulta server-side do HTML oficial, com validação de município, UF e data. Indisponibilidade nunca é convertida em nível Normal |
 | **Monitor de Secas — ANA** ([portal](https://monitordesecas.ana.gov.br/) e [tabela S0–S4](https://monitordesecas.ana.gov.br/tabela-de-classificacao)) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
 | **COR-Rio** ([Centro de Operações e Resiliência](https://cor.rio/), `appcor.cor-rio.work/estagio_cidade` e `cor.rio/wp-json/wp/v2/posts`) | Painel "Comunicados COR-Rio", seção técnica no PDF disponível para consulta e aviso de e-mail exclusivo da base lógica `COR-RIO — RJ` — somente para o município do Rio de Janeiro (`integracaoCorRio`) | Públicas, sem chave. O aviso por e-mail usa apenas os destinatários vinculados a `cor_rio`; responsáveis da base meteorológica `rio_de_janeiro` não o recebem automaticamente. O endpoint de estágio é o mesmo que o widget da página cor.rio consulta; última coleta válida em `data/cor-rio.json` |
 | **Oceanop / Petrobras** | Diagnóstico da integração privada quando uma área é vinculada | Depende de rede/VPN e contrato interno; unidades não documentadas não são convertidas nem misturadas aos campos públicos |
@@ -151,11 +152,26 @@ usada nos modelos de referência):
   Janeiro, veja a tabela acima.)
 - **Climatempo** — sem API pública gratuita.
 
+Limitação conhecida do histórico INMET:
+- o endpoint legado `apitempo.inmet.gov.br/estacao/{inicio}/{fim}/{estacao}`
+  respondeu HTTP 204 sem série horária, e o endpoint usado pelo portal exige
+  reCAPTCHA. O sistema não contorna essa proteção. O histórico e os gráficos
+  são formados progressivamente apenas pelas respostas oficiais recebidas em
+  `apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}`; cobertura parcial é
+  exibida como parcial, nunca preenchida com outro provedor.
+
+Regras de indisponibilidade dos campos restritos:
+- temperatura/umidade atuais e extremos horários observados: somente estação INMET;
+- temperatura/umidade mínimas e máximas diárias: somente previsão municipal INMET;
+- chuva observada: somente estação INMET; chuva prevista prioriza a previsão municipal INMET e usa Open-Meteo identificada quando faltar valor numérico;
+- direção, intensidade e rajada previstas priorizam o INMET e recebem complemento identificado da Open-Meteo somente nos campos ausentes; medições da estação ficam separadas e nunca são rotuladas como previsão;
+- condição geral: resumo diário oficial do município INMET vinculado à chave da base; bases do mesmo município podem legitimamente ter a mesma condição;
+- índice UV: Open-Meteo Air Quality/CAMS;
+- falha atual do INMET usa apenas a última observação INMET válida, com data e
+  estado `armazenado/desatualizado`; sem cache válido, mostra `Indisponível`;
+- todo complemento da Open-Meteo é explícito na fonte do campo; nunca é rotulado como dado oficial do INMET.
+
 Fontes **testadas e descartadas** (registrado para não retestar à toa):
-- **Estações automáticas do INMET** (`apitempo.inmet.gov.br`) — daria dados
-  observados em tempo real (não só previsão), mas o endpoint de observações
-  responde HTTP 204 vazio mesmo para datas passadas. Fonte instável demais
-  para o protocolo depender dela.
 - **Open-Meteo Flood** (vazão de rios) — funciona, mas entrega só a vazão
   absoluta (ex.: 82.984 m³/s em Manaus) sem referência histórica que
   permita dizer se está acima do normal. Sem esse contexto, o número não é
@@ -172,7 +188,7 @@ e vento centralizados em `src/logic/inmetAlertRules.js`. Um aviso oficial
 válido do INMET sempre prevalece para o fenômeno e conserva a severidade
 publicada (Perigo Potencial = Atenção; Perigo = Alerta; Grande Perigo =
 Emergência). Sem aviso oficial correspondente, dados numéricos válidos das
-APIs podem produzir uma **classificação interna baseada na previsão**, sempre
+APIs podem produzir uma **classificação interna baseada em observação oficial**, sempre
 identificada dessa forma no corpo do e-mail. As recomendações são específicas
 por fenômeno e proporcionais ao nível detectado.
 
@@ -181,7 +197,7 @@ por fenômeno e proporcionais ao nível detectado.
 | Chuva — intensidade horária | Atenção de 20 a < 30 mm/h; Alerta de 30 a 60 mm/h; Emergência > 60 mm/h | critérios operacionais centralizados |
 | Chuva — acumulado diário | Atenção de 20 a < 50 mm; Alerta de 50 a 100 mm; Emergência > 100 mm | critérios operacionais centralizados |
 | Vento — rajada | Atenção de 30 a < 40 km/h; Alerta de 40 a 60 km/h; Emergência > 60 km/h | critérios operacionais centralizados |
-| Tempestade prevista sem aviso oficial | Atenção, sem afirmar descarga elétrica confirmada | código meteorológico da fonte numérica |
+| Tempestade | severidade do aviso oficial vigente; sem aviso, não é inferida a partir de chuva/vento de outro provedor | INMET |
 | Calor / risco à saúde | EHF Baixo / Severo / Extremo | Clima e Saúde — Ministério da Saúde; temperatura alta isolada não altera o EHF |
 | Baixa umidade | ≤ 20% | calibração operacional |
 | Índice UV alto | Atenção ≥ 8; Alerta ≥ 11 por padrão, com nível configurável | faixas da OMS |
@@ -253,23 +269,12 @@ Depois rode com `CIDADE=<chave>` no `.env`, ou
 Cores institucionais (`src/render/brand.js`): verde `#00843D`, amarelo
 `#FFCC00`.
 
-### Logos (Petrobras + CIM)
+### Logos do cabeçalho
 
-Ficam na pasta `Logo/`, na raiz do projeto (fora de `public/`, mas dentro do
-projeto — então vão junto se vocês colocarem isso num repositório Git e
-fizerem deploy, ex.: Render). Para trocar a imagem, basta substituir o
-arquivo na pasta; o sistema procura por "petrobras" e "cim" no nome do
-arquivo (`src/config/logos.js`), então qualquer nome que contenha essas
-palavras funciona.
-
-Usados em dois lugares:
-- **Painel** (`public/dashboard.html`): CIM à esquerda do título, Petrobras
-  em um cartão branco no canto superior direito.
-- **PDF** (`src/render/pdfTemplate.js`): mesma posição relativa, embutidos
-  como imagem no cabeçalho verde.
-
-Se a pasta `Logo/` estiver vazia, o painel simplesmente não mostra os logos
-e o PDF volta a exibir o espaço reservado em branco — nada quebra.
+O site exibe somente a identidade CIM no cabeçalho. A imagem oficial
+`Logo/Petrobras_horizontal_logo.svg.png` é incorporada exclusivamente ao
+cabeçalho interno do PDF. O corpo dos e-mails não anexa nem renderiza a marca
+Petrobras, e a antiga rota dinâmica `/api/logos` permanece removida.
 
 ## 8. Estrutura do projeto
 
@@ -280,6 +285,10 @@ src/pipeline.js             orquestra coleta -> PDF -> e-mail
 src/config/cities.js        cadastro de cidades/instalações
 src/sources/openMeteo.js    fonte Open-Meteo
 src/sources/inmet.js        fonte INMET (previsão + avisos)
+src/sources/inmetObservations.js observação oficial INMET + cache/histórico
+src/sources/climaSaudeService.js EHF/risco térmico e disponibilidade de UV do Clima e Saúde
+src/logic/weatherSourcePolicy.js prioridade e complemento campo a campo
+src/logic/weatherSourceMetadata.js metadados padronizados por indicador
 src/logic/riskEngine.js     motor de regras (evento + recomendações)
 src/logic/reportBuilder.js  consolida fontes em um relatório único
 src/render/pdfTemplate.js   HTML do PDF detalhado

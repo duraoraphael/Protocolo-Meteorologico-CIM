@@ -100,6 +100,27 @@ test("monitor cria classificações internas de chuva e vento quando não há av
   assert.equal(chuva.fonteDados, "Open-Meteo");
 });
 
+test("monitor identifica chuva e vento INMET como observações, não previsões", () => {
+  const report = relatorioBase();
+  report.rajadaMaxKmh = null;
+  report.rajadaObservadaMaxKmh = 30;
+  report.fontesPorCampo.rajadaMaxKmh = "Indisponível";
+  report.fontesPorCampo.rajadaObservadaMaxKmh = "INMET — estação automática — observado";
+  report.fontesPorCampo.precipitacaoHorariaMaxMm = "INMET — estação automática — observado";
+  report.fontesPorCampo.precipitacaoTotalMm = "INMET — estação automática — observado";
+  report.severidade = { eventos: [
+    { assinatura: "vento", tipo: "ventoModerado", grau: "ATENÇÃO", descricao: "Rajada medida: 30 km/h", recomendacoes: [] },
+    { assinatura: "chuva", tipo: "chuvaIntensa", grau: "ALERTA", descricao: "Chuva medida: 75 mm", recomendacoes: [] },
+  ] };
+  const alertas = detectarAlertasGraves(report);
+  for (const assinatura of ["vento", "chuva"]) {
+    const alerta = alertas.find((item) => item.assinatura === assinatura);
+    assert.equal(alerta.origem, "Observação");
+    assert.equal(alerta.naturezaDado, "Classificação interna baseada em observação oficial");
+    assert.doesNotMatch(alerta.detalhe, /previst[oa]/i);
+  }
+});
+
 test("deduplicação ignora variação no mesmo grau e reavisa quando agrava", () => {
   const alertaAtencao = {
     assinatura: "vento",

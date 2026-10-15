@@ -44,14 +44,40 @@ test("fronteiras de chuva e vento seguem exatamente as faixas operacionais do CI
   );
 });
 
-test("motor do informativo cria classificações internas de chuva, vento e tempestade com Open-Meteo", () => {
-  const resultado = avaliarRiscos(entrada());
+test("motor cria classificações internas de chuva e vento com observações oficiais do INMET", () => {
+  const resultado = avaliarRiscos(entrada({
+    temTempestadeHoje: false,
+    fontesPorCampo: {
+      rajadaMaxKmh: "INMET — estação automática — observado",
+      precipitacaoHorariaMaxMm: "INMET — estação automática — observado",
+      precipitacaoTotalMm: "INMET — estação automática — observado",
+    },
+  }));
   assert.equal(resultado.severidade.vento.grau, "EMERGÊNCIA");
   assert.equal(resultado.severidade.chuva.grau, "EMERGÊNCIA");
-  assert.equal(resultado.severidade.eventos.some((e) => e.tipo === "tempestadePrevista"), true);
+  assert.equal(resultado.severidade.eventos.some((e) => e.tipo === "tempestadePrevista"), false);
   assert.ok(resultado.severidade.eventos
-    .filter((e) => ["chuva", "vento", "tempestade"].includes(e.assinatura))
-    .every((e) => e.naturezaDado === "Classificação interna baseada na previsão"));
+    .filter((e) => ["chuva", "vento"].includes(e.assinatura))
+    .every((e) => e.naturezaDado === "Classificação interna baseada em observação oficial"));
+});
+
+test("rajada complementar permanece identificada como previsão e não como medição INMET", () => {
+  const resultado = avaliarRiscos(entrada({
+    rajadaMaxKmh: 49,
+    precipitacaoHorariaMaxMm: null,
+    precipitacaoTotalMm: null,
+    temTempestadeHoje: false,
+    periodos: {
+      manha: { periodo: "Manhã", janela: "05h–12h", rajadaMaxKmh: 30 },
+      tarde: { periodo: "Tarde", janela: "12h–18h", rajadaMaxKmh: 49 },
+      noite: { periodo: "Noite", janela: "18h–00h", rajadaMaxKmh: 28 },
+    },
+    fontesPorCampo: { rajadaMaxKmh: "Open-Meteo — previsão complementar" },
+  }));
+  const vento = resultado.severidade.eventos.find((evento) => evento.assinatura === "vento");
+  assert.equal(vento.descricao, "Rajada prevista: 49 km/h");
+  assert.equal(vento.janela, "Tarde (12h–18h)");
+  assert.equal(vento.fonteDados, "Open-Meteo — previsão complementar");
 });
 
 test("temperatura alta sem excesso de EHF não vira alerta de calor", () => {

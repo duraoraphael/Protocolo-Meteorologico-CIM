@@ -22,30 +22,6 @@ const esc = Dashboard.escape;
 
 let cidadeAtivaChave = null; // preenchido após o primeiro /api/preview
 
-async function carregarLogos() {
-  try {
-    const resp = await fetch("/api/logos");
-    const dados = await resp.json();
-    if (!dados.ok) return;
-
-    const logoPetrobrasCard = document.getElementById("logo-petrobras-card");
-    const logoPetrobras = document.getElementById("logo-petrobras");
-    if (dados.petrobras) {
-      // O card só aparece depois que a imagem carrega: caminho inválido não
-      // deixa um quadro branco vazio nem o ícone de imagem quebrada.
-      logoPetrobras.addEventListener("load", () => logoPetrobrasCard.classList.remove("oculto"), { once: true });
-      logoPetrobras.addEventListener("error", () => {
-        logoPetrobrasCard.classList.add("oculto");
-        console.warn(`[CIM] Logo Petrobras não carregou: ${dados.petrobras}`);
-      }, { once: true });
-      logoPetrobras.src = dados.petrobras;
-    }
-  } catch (erro) {
-    // Sem logo cadastrado ainda (pasta Logo/ vazia) — painel segue normal, só sem as imagens.
-  }
-}
-carregarLogos();
-
 function atualizarRelogio() {
   const agora = new Date();
   const data = document.getElementById("data-atual");

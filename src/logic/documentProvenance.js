@@ -27,6 +27,7 @@ function conteudoVerificavel(documento) {
       umidadeMax: documento?.umidadeMax,
       rajadaMaxKmh: documento?.rajadaMaxKmh,
       precipitacaoTotalMm: documento?.precipitacaoTotalMm,
+      probabilidadeChuvaPrevista: documento?.probabilidadeChuvaPrevista,
     },
     fontesPorCampo: documento?.fontesPorCampo || null,
     previsaoDias: documento?.previsaoDias || null,
@@ -143,10 +144,25 @@ function validarFontesDosCampos(documento, { exigirCamposCriticos = false } = {}
     throw new ErroProcedencia("Relatório meteorológico sem rastreabilidade por campo.", "MISSING_FIELD_SOURCES");
   }
   const campos = ["tempMin", "tempMax", "umidadeMin", "umidadeMax", "rajadaMaxKmh", "precipitacaoTotalMm"];
+  const metadadoPorCampo = {
+    tempMin: "temperatura",
+    tempMax: "temperatura",
+    umidadeMin: "umidade",
+    umidadeMax: "umidade",
+    rajadaMaxKmh: "rajadaPrevista",
+    precipitacaoTotalMm: "chuvaPrevista",
+  };
   for (const campo of campos) {
     if (!Number.isFinite(documento[campo])) {
       if (exigirCamposCriticos) {
-        throw new ErroProcedencia(`Campo crítico indisponível: ${campo}.`, "CRITICAL_DATA_UNAVAILABLE");
+        const metadado = documento?.metadadosMeteorologicos?.[metadadoPorCampo[campo]];
+        const ausenciaRastreada = fontes[campo] === "Indisponível"
+          && metadado
+          && typeof metadado.fonte === "string"
+          && ["indisponivel", "degradado", "desatualizado"].includes(metadado.status);
+        if (!ausenciaRastreada) {
+          throw new ErroProcedencia(`Campo crítico indisponível sem justificativa rastreável: ${campo}.`, "CRITICAL_DATA_UNAVAILABLE");
+        }
       }
       continue;
     }

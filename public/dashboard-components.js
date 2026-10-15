@@ -86,18 +86,58 @@ const Dashboard = (() => {
   function metrics(r) {
     const gusts = (r.ventoPorPeriodo || []).map(p => p.rajadaMaxKmh).filter(v => v != null);
     const aq = r.qualidadeAr;
+    const ar = Number.isFinite(aq?.aqiPm25) && aq?.pm25Classificacao?.nivel
+      ? aq.pm25Classificacao.nivel
+      : 'Classificação indisponível';
     const fields = r.fontesPorCampo || {};
-    const sources = (...keys) => [...new Set(keys.map(k=>fields[k]).filter(Boolean))].join(' · ');
+    const sources = (...keys) => {
+      const valores = [...new Set(keys.map(k=>fields[k]).filter(Boolean))];
+      const disponiveis = valores.filter(fonte => fonte !== 'Indisponível');
+      return (disponiveis.length ? disponiveis : valores).join(' · ');
+    };
+    const sourceOrPolicy = (fallback, ...keys) => {
+      const source = sources(...keys);
+      return source && source !== 'Indisponível' ? source : fallback;
+    };
+    const uv = Number.isFinite(r.indiceUv?.maximoPrevisto)
+      ? r.indiceUv.maximoPrevisto
+      : Number.isFinite(aq?.uvMax) ? aq.uvMax : null;
+    const uvClassificacao = r.indiceUv?.classificacao || aq?.uvClassificacao?.nivel;
+    const uvDetail = uv == null
+      ? 'Previsão de índice UV indisponível nesta atualização'
+      : [uvClassificacao, aq?.horaPicoUv ? `Pico previsto às ${aq.horaPicoUv}` : null].filter(Boolean).join(' · ') || 'Máximo previsto para o dia';
+    const uvReportedSource = r.indiceUv?.fonte;
+    const uvSource = uvReportedSource && uvReportedSource !== 'Indisponível'
+      ? uvReportedSource
+      : sourceOrPolicy('Open-Meteo Air Quality / CAMS', 'ar.uvMax');
+    const gustSource = sourceOrPolicy('INMET prioritário · Open-Meteo complementar', 'periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh');
+    const gustDetail = !gusts.length
+      ? 'INMET e Open-Meteo não publicaram máxima numérica válida de rajada'
+      : gustSource.includes('Open-Meteo')
+        ? 'Máxima prevista; Open-Meteo complementa campo numérico não publicado pelo INMET'
+        : 'Máxima prevista no produto municipal do INMET';
     const comMar = marAplicavel(r);
+    const coberturaTemp = r.coberturaTemperaturaObservada || {};
+    const coberturaUmidade = r.coberturaUmidadeObservada || {};
+    const tempObservada = pair(r.temperaturaObservadaMinC, r.temperaturaObservadaMaxC, '°');
+    const umidadeObservada = pair(r.umidadeObservadaMinPct, r.umidadeObservadaMaxPct, '%');
+    const detalheTemp = tempObservada === '—'
+      ? 'Mínima / máxima previstas para o dia · INMET'
+      : `Prevista para o dia · observada parcial ${tempObservada} (${coberturaTemp.amostras || 0}/${coberturaTemp.horasEsperadas || 0} leituras)`;
+    const detalheUmidade = umidadeObservada === '—'
+      ? 'Mínima / máxima previstas para o dia · INMET'
+      : `Prevista para o dia · observada parcial ${umidadeObservada} (${coberturaUmidade.amostras || 0}/${coberturaUmidade.horasEsperadas || 0} leituras)`;
     const cards = [
-      metric('Temperatura', pair(r.tempMin, r.tempMax, '°'), 'Mínima / máxima · °C', 'thermometer', '', sources('tempMin','tempMax')),
-      metric('Umidade relativa', pair(r.umidadeMin, r.umidadeMax, '%'), 'Mínima / máxima prevista', 'drop', '', sources('umidadeMin','umidadeMax')),
-      metric('Rajada prevista', gusts.length ? unit(Math.max(...gusts), ' <small>km/h</small>') : 'Dado indisponível', 'Máxima prevista na janela da edição', 'wind', '', sources('periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh')),
-      metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), 'Estimativa diária · 00h–24h', 'rain', '', sources('precipitacaoDiariaMm')),
-      metric('Índice UV máx.', escape(aq?.uvMax), aq?.uvClassificacao?.nivel || 'Dado indisponível', 'sun', `uv-${['baixo','moderado','alto','muito_alto','extremo'].includes(aq?.uvClassificacao?.categoria) ? aq.uvClassificacao.categoria : 'ausente'}`, sources('ar.uvMax')),
+      metric('Temperatura prevista', pair(r.tempMin, r.tempMax, '°'), detalheTemp, 'thermometer', '', sources('tempMin','tempMax')),
+      metric('Umidade relativa prevista', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
+      metric('Rajada prevista', gusts.length ? unit(Math.max(...gusts), ' <small>km/h</small>') : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
+      metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), r.coberturaObservacoesInmet?.parcial ? `Dia civil local · parcial (${r.coberturaObservacoesInmet.amostras || 0}/${r.coberturaObservacoesInmet.horasEsperadas || 0} leituras)` : 'Dia civil local · cobertura completa', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
+      metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), r.precipitacaoHoraReferencia ? `Hora de referência: ${escape(r.precipitacaoHoraReferencia)} · INMET` : 'Hora de referência indisponível', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
+      metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), r.coberturaChuva24h?.parcial ? `Acumulado incompleto · ${r.coberturaChuva24h.amostras || 0}/24 leituras INMET` : 'Acumulado completo das últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
+      metric('Índice UV', uv == null ? 'Dado indisponível' : unit(uv, ''), uvDetail, 'sun', '', uvSource),
       metric('Condição geral', escape(r.condicaoGeral), 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
-      metric('Qualidade do ar', escape(aq?.pm25Classificacao?.nivel), '', 'leaf', 'air', sources('ar.pm25Medio')),
-      comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.desatualizado ? `Dado armazenado · última atualização válida: ${dateTimeBrasilia(r.mar?.ultimaAtualizacao) || 'horário indisponível'}` : r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sources('mar.alturaMaxDiaM')) : '',
+      metric('Qualidade do ar', escape(ar), '', 'leaf', 'air', sources('ar.pm25Medio')),
+      comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.desatualizado ? `Dado armazenado · última atualização válida: ${dateTimeBrasilia(r.mar?.ultimaAtualizacao) || 'horário indisponível'}` : r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sourceOrPolicy('Open-Meteo Marine', 'mar.alturaMaxDiaM')) : '',
       heatCard(r),
     ];
     const referencia = r.previsaoAte ? `<p class="previsao-referencia"><strong>Hora da consulta:</strong> ${escape(r.horaConsulta)} (Horário de Brasília) <span>| Previsão até ${escape(r.previsaoAte)}</span></p>` : '';
@@ -111,11 +151,20 @@ const Dashboard = (() => {
     return table('Condições de mar por período', 'waves', ['Período', 'Estado do mar', 'Altura máx.', 'Período de onda', 'Direção', 'Marulho'], (r.mar?.periodos || []).map(p => [escape(p.periodo), escape(p.estadoMar), unit(p.alturaMaxM,' m'), unit(p.periodoOndaS,' s'), escape(p.direcaoOnda), unit(p.marulhoMaxM,' m')]), 'mar');
   }
   function windRain(r) {
-    // Mesmas janelas e mesmo cálculo do PDF: vento = velocidade média, rajada = pico.
-    return table('Vento e chuva por período', 'wind', ['Período', 'Vento (velocidade média)', 'Rajada prevista (máx.)', 'Chance de chuva', 'Acumulado'], (r.ventoPorPeriodo || []).map(v => {
-      const c = r.chuvaPorPeriodo?.find(p => p.periodo === v.periodo);
-      return [`${escape(v.periodo)}${v.janela ? ` <small>${escape(v.janela)}</small>` : ''}`, `${escape(v.direcao)} · ${escape(v.intensidade)}`, unit(v.rajadaMaxKmh,' km/h'), unit(c?.probabilidade,'%'), unit(c?.precipitacaoMm,' mm')];
-    }), 'vento');
+    const vento = table('Vento por período', 'wind', ['Período', 'Direção', 'Vento (velocidade média)', 'Rajada prevista (máx.)', 'Referência INMET'], (r.ventoPorPeriodo || []).map(v => [
+      `${escape(v.periodo)}${v.janela ? ` <small>${escape(v.janela)}</small>` : ''}`,
+      escape(v.direcao),
+      v.velocidadeMediaKmh == null ? 'Não disponível' : unit(v.velocidadeMediaKmh, ' km/h'),
+      v.rajadaMaxKmh == null ? 'Não disponível' : unit(v.rajadaMaxKmh, ' km/h'),
+      escape(v.referenciaInmet || 'Previsão municipal INMET'),
+    ]), 'vento');
+    const chuva = table('Chuva por período', 'rain', ['Período', 'Probabilidade', 'Acumulado no período (mm)', 'Resumo INMET'], (r.chuvaPorPeriodo || []).map(item => [
+      `${escape(item.periodo)}${item.janela ? ` <small>${escape(item.janela)}</small>` : ''}`,
+      item.probabilidade == null ? 'Não disponível' : unit(item.probabilidade, '%'),
+      item.precipitacaoMm == null ? 'Não disponível' : unit(item.precipitacaoMm, ' mm'),
+      escape(item.resumoInmet || 'Não disponível'),
+    ]), 'vento');
+    return `${vento}${chuva}`;
   }
 
   // Relatórios sem `ocorrencias` (versões antigas/testes): eventos do
@@ -213,8 +262,9 @@ const Dashboard = (() => {
 
   function currentWeather(r) {
     const a = r.atual;
-    const time = a?.previsao && Number.isFinite(Date.parse(a.horario)) ? new Date(a.horario).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
-    return `<div class="current-location">${escape(r.cidade.nome)} — ${escape(r.cidade.uf)}</div><div class="current-reading">${icon(weatherIcon(a?.codigo, a?.dia))}<div><strong>${unit(a?.temperaturaC, '<small>°C</small>')}</strong><p>${escape(a?.condicao || 'Condição atual indisponível')}</p></div></div><div class="current-source">${a ? escape(`${a.previsao ? 'Previsão próxima ao horário atual' : 'Condição atual'} · ${a.fonte || 'Open-Meteo'}${time ? ' · '+time+' (Brasília)' : ''}`) : 'Aguardando dados da fonte'}</div>`;
+    const time = Number.isFinite(Date.parse(a?.horario)) ? new Date(a.horario).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
+    const umidade = Number.isFinite(a?.umidadePct) ? ` · Umidade ${escape(a.umidadePct)}%` : '';
+    return `<div class="current-location">${escape(r.cidade.nome)} — ${escape(r.cidade.uf)}</div><div class="current-reading">${icon(weatherIcon(a?.codigo, a?.dia))}<div><strong>${unit(a?.temperaturaC, '<small>°C</small>')}</strong><p>${escape(a?.condicao || 'Condição atual indisponível')}${umidade}</p></div></div><div class="current-source">${a ? escape(`Observação INMET${time ? ' · '+time+' (Brasília)' : ''} · ${a.fonte || 'INMET'}`) : 'Aguardando dados da fonte'}</div>`;
   }
   function detailsTitle(r, type) {
     if (String(type).startsWith('ocorrencia:')) {
@@ -224,13 +274,13 @@ const Dashboard = (() => {
     return {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[type] || 'Detalhes';
   }
   function details(r, type) {
-    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: Open-Meteo (previsão numérica, condições atuais, mar, UV e qualidade do ar) e INMET (previsão oficial e avisos de perigo).</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
+    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: INMET prioritário para chuva, vento, rajada, temperatura, umidade, previsão textual e avisos; Open-Meteo Weather como complemento identificado quando o INMET não publica um valor numérico; Clima e Saúde para EHF e risco térmico; Open-Meteo Air Quality/CAMS para índice UV e qualidade do ar; Open-Meteo Marine para condições de mar.</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
     if (!r) return '<p>Os dados desta base ainda não estão disponíveis.</p>';
     if (String(type).startsWith('ocorrencia:')) return occurrenceDetails(r, type.slice(11));
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;
     if (type === 'vento') return `${windRain(r)}<h3>Referências INMET</h3>${(r.ventoPorPeriodo || []).map(p => `<p>${escape(p.periodo)}: ${escape(p.referenciaInmet)}</p>`).join('')}`;
     const fieldLabel = campo => {
-      const labels={condicaoGeral:'Condição geral',atual:'Condições do horário atual',tempMin:'Temperatura mínima',tempMax:'Temperatura máxima',umidadeMin:'Umidade mínima',umidadeMax:'Umidade máxima',rajadaMaxKmh:'Rajada prevista',precipitacaoTotalMm:'Chuva total do dia',direcao:'Direção do vento',intensidadeVento:'Vento',precipitacaoMm:'Chuva acumulada',probabilidadeChuva:'Chance de chuva',alturaMaxDiaM:'Altura máxima de onda',temperaturaMarC:'Temperatura da água',pm25Medio:'PM2,5',uvMax:'Índice UV',aqiUsMax:'Índice de qualidade do ar (US)'};
+      const labels={condicaoGeral:'Condição geral',atual:'Condições do horário atual',tempMin:'Temperatura mínima',tempMax:'Temperatura máxima',umidadeMin:'Umidade mínima',umidadeMax:'Umidade máxima',rajadaMaxKmh:'Rajada prevista',precipitacaoTotalMm:'Chuva acumulada/dia',precipitacaoDiariaMm:'Chuva acumulada/dia',precipitacaoHoraMm:'Chuva acumulada/Hora',direcao:'Direção do vento',intensidadeVento:'Vento',precipitacaoMm:'Chuva prevista no período',probabilidadeChuva:'Probabilidade de chuva',alturaMaxDiaM:'Altura máxima de onda',temperaturaMarC:'Temperatura da água',pm25Medio:'PM2,5',uvMax:'Índice UV',aqiUsMax:'Índice de qualidade do ar (US)'};
       const parts=campo.split('.'), key=parts.at(-1), periods={manha:'Manhã',tarde:'Tarde',noite:'Noite'};
       return labels[key] ? (periods[parts[1]] ? periods[parts[1]]+' · ' : '')+labels[key] : null;
     };

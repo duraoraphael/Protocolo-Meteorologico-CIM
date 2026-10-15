@@ -11,8 +11,8 @@
 // pode dar problema.
 
 const { CIDADES, getCidade } = require("../config/cities");
-const { buscarSemanaEmLote, buscarSemanaMarEmLote } = require("../sources/openMeteoSemanal");
-const { buscarAvisosInmet } = require("../sources/inmet");
+const { buscarSemanaMarEmLote } = require("../sources/openMeteoSemanal");
+const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
 const { LIMIARES } = require("./riskEngine");
 const { registrarDocumentoOperacional } = require("./documentProvenance");
 
@@ -39,7 +39,7 @@ function formatarDia(dataIso) {
   return registrarDocumentoOperacional(relatorio, {
     tipo: "semanal",
     localidade: "multiplas-bases",
-    fontes: ["Open-Meteo", "Open-Meteo Marine", "INMET — avisos oficiais"],
+    fontes: ["INMET — previsão municipal", "Open-Meteo Marine", "INMET — avisos oficiais", "Clima e Saúde — UV indisponível"],
   });
 }
 
@@ -133,7 +133,19 @@ function avaliarDia(dia, mar) {
 }
 
 function montarBase(cidade, semana, semanaMar, avisosInmet, avisos) {
-  const dias = semana.dias.map((dia, i) => {
+  const dias = semana.dias.map((diaOriginal, i) => {
+    // O produto municipal do INMET fornece condição, temperatura e umidade.
+    // Rajada, chuva/probabilidade e UV permanecem indisponíveis quando não
+    // publicados pelas respectivas fontes obrigatórias.
+    const dia = {
+      ...diaOriginal,
+      precipitacaoMm: diaOriginal.precipitacaoMm ?? null,
+      probabilidadeChuva: diaOriginal.probabilidadeChuva ?? null,
+      rajadaMaxKmh: diaOriginal.rajadaMaxKmh ?? null,
+      uvMax: null,
+      codigoTempo: null,
+      temMuitaChuva: false,
+    };
     const mar = semanaMar?.dias?.[i] || null;
     const { riscos, severidade, dadosIncompletos } = avaliarDia(dia, mar);
     return { ...dia, ...formatarDia(dia.data), mar, riscos, severidade, dadosIncompletos };
@@ -190,13 +202,34 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
   const chaves = bases && bases.length ? bases : Object.keys(CIDADES);
   const cidades = chaves.map((c) => getCidade(c));
 
-  // Previsão de todas as bases em poucas requisições agrupadas, em vez de uma
-  // por base — a rajada de chamadas individuais derrubava metade do relatório
-  // com HTTP 429/500 e timeouts.
-  const previsoes = await buscarSemanaEmLote(
-    cidades.map((c) => ({ latitude: c.latitude, longitude: c.longitude })),
-    diasPrevisao
-  );
+  // O semanal obedece à mesma matriz do informativo diário: previsão
+  // meteorológica exclusivamente municipal do INMET. Falhas ficam isoladas
+  // por base e não acionam fallback de outro provedor.
+  const previsoes = [];
+  for (const cidade of cidades) {
+    try {
+      const resposta = await buscarPrevisaoInmet(cidade.codigoIbge);
+      previsoes.push({
+        fonte: "INMET — previsão oficial",
+        dias: (resposta.dias || []).slice(0, diasPrevisao).map((dia) => ({
+          data: dia.data,
+          condicao: dia.resumo,
+          tempMin: dia.tempMin,
+          tempMax: dia.tempMax,
+          umidadeMin: dia.umidadeMin,
+          umidadeMax: dia.umidadeMax,
+          precipitacaoMm: dia.precipitacaoMm ?? null,
+          probabilidadeChuva: null,
+          rajadaMaxKmh: dia.rajadaMaxKmh ?? null,
+          uvMax: null,
+          codigoTempo: null,
+          temMuitaChuva: false,
+        })),
+      });
+    } catch (erro) {
+      previsoes.push({ erro: `Previsão INMET indisponível: ${erro.message}` });
+    }
+  }
 
   // Mar: só as costeiras entram no lote, mas o índice precisa voltar a
   // apontar para a base certa.

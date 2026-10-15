@@ -1,11 +1,8 @@
 // Fonte: Open-Meteo Air Quality (https://open-meteo.com/en/docs/air-quality-api)
-// A produção usa o endpoint comercial customer-* com chave. Fornece material particulado (PM2.5/PM10),
-// índice UV e poeira.
+// A produção usa o endpoint comercial customer-* com chave. Fornece material particulado (PM2.5/PM10)
+// e poeira, além do índice UV previsto pelo CAMS/Open-Meteo.
 //
-// Relevante para o protocolo do CIM por dois motivos operacionais:
-// - Índice UV: exposição de equipes em trabalho externo (queimadura solar em
-//   poucos minutos com UV extremo — item de segurança do colaborador).
-// - PM2.5/PM10: qualidade do ar respirável, especialmente em bases próximas a
+// Relevante para o protocolo do CIM por qualidade do ar respirável, especialmente em bases próximas a
 //   polos industriais/refinarias e em períodos de queimadas.
 
 const {
@@ -15,7 +12,6 @@ const {
 } = require("./httpJsonClient");
 const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
 
-// Faixas do índice UV conforme a Organização Mundial da Saúde (OMS).
 const OPEN_METEO_AIR_TIMEOUT_MS = API_TIMEOUT_MS;
 const OPEN_METEO_AIR_TENTATIVAS = API_TENTATIVAS;
 
@@ -62,11 +58,12 @@ async function buscarQualidadeAr(latitude, longitude, {
   fetchImpl = fetch,
   timeoutMs = OPEN_METEO_AIR_TIMEOUT_MS,
   esperarFn,
+  logger,
 } = {}) {
   const params = new URLSearchParams({
     latitude: String(latitude),
     longitude: String(longitude),
-    hourly: "pm10,pm2_5,uv_index,dust,carbon_monoxide,european_aqi_pm2_5",
+    hourly: "pm10,pm2_5,dust,carbon_monoxide,european_aqi_pm2_5,uv_index",
     timezone: fuso,
     forecast_days: "1",
   });
@@ -79,6 +76,8 @@ async function buscarQualidadeAr(latitude, longitude, {
     timeoutMs,
     tentativas: OPEN_METEO_AIR_TENTATIVAS,
     esperarFn,
+    logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger,
+    prefixoLog: "OPEN-METEO-AIR",
   });
   if (json.timezone && json.timezone !== fuso) {
     const erro = new Error(`Open-Meteo Air Quality retornou fuso divergente (${json.timezone}).`);
@@ -92,35 +91,26 @@ async function buscarQualidadeAr(latitude, longitude, {
     throw erro;
   }
 
-  // O pico de UV interessa mais que a média: é o momento de maior risco de
-  // exposição para quem está em trabalho externo.
-  const uvMax = maximo(horas.uv_index);
   const pm25Medio = media(horas.pm2_5);
   const aqiPm25 = maximo(horas.european_aqi_pm2_5);
   const pm10Medio = media(horas.pm10);
   const poeiraMax = maximo(horas.dust);
-
-  // Hora prevista do pico de UV, para orientar a janela crítica de exposição.
-  let horaPicoUv = null;
-  if (uvMax !== null && horas.uv_index) {
-    const idx = horas.uv_index.indexOf(uvMax);
-    if (idx >= 0 && horas.time?.[idx]) {
-      const correspondencia = String(horas.time[idx]).match(/T(\d{2}:\d{2})/);
-      horaPicoUv = correspondencia?.[1] || null;
-    }
-  }
+  const uvMax = maximo(horas.uv_index);
+  const indicePicoUv = Array.isArray(horas.uv_index) && Number.isFinite(uvMax)
+    ? horas.uv_index.findIndex((valor) => valor === uvMax)
+    : -1;
 
   return {
     fonte: "Open-Meteo Air Quality / CAMS",
     url: removerCredenciaisOpenMeteo(url),
-    uvMax: arredondar(uvMax),
-    uvClassificacao: classificarUv(uvMax),
-    horaPicoUv,
     pm25Medio: arredondar(pm25Medio),
     aqiPm25: arredondar(aqiPm25),
     pm25Classificacao: classificarAqiEuropeu(aqiPm25),
     pm10Medio: arredondar(pm10Medio),
     poeiraMax: arredondar(poeiraMax),
+    uvMax: arredondar(uvMax),
+    horaPicoUv: indicePicoUv >= 0 ? String(horas.time[indicePicoUv]).slice(11, 16) : null,
+    uvClassificacao: classificarUv(uvMax),
   };
 }
 

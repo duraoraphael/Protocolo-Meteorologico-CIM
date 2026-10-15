@@ -24,7 +24,6 @@ const {
 } = require("./src/scheduler");
 const responsaveis = require("./src/config/recipients");
 const { BASES_DISTRIBUICAO, getBaseDistribuicao } = require("./src/config/distributionBases");
-const { arquivosLogos } = require("./src/config/logos");
 const { problemaSenhaConfigurada, criarComparadorSenha } = require("./src/security/senha");
 const { cabecalhosSeguranca } = require("./src/security/cabecalhos");
 const { tratadorDeErros, naoEncontrado } = require("./src/security/erros");
@@ -64,8 +63,7 @@ function criarApp({
   app.use(express.json({ limit: "100kb" }));
   app.use("/api/oceanop", require("./src/integrations/oceanopRoutes"));
   app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
-  // Logos (Petrobras + CIM) ficam em Logo/, na raiz do projeto, fora de
-  // public/ — servidos em /logo/<arquivo> para uso no painel e no PDF.
+  // Ativos visuais do CIM ficam em Logo/, na raiz do projeto.
   app.use("/logo", express.static(path.join(__dirname, "Logo")));
 
   const CIDADE_ATIVA = cidadeAtiva; // usada como base padrão do seletor
@@ -264,17 +262,6 @@ function criarApp({
     } finally {
       geracaoEmAndamento = false;
     }
-  });
-
-  app.get("/api/logos", (req, res) => {
-    const { petrobras, cim } = arquivosLogos();
-    res.json({
-      ok: true,
-      // Nome codificado: arquivos com espaço/acentos (ex.: "CIM logo.png")
-      // continuam resolvendo.
-      petrobras: petrobras ? `/logo/${encodeURIComponent(petrobras)}` : null,
-      cim: cim ? `/logo/${encodeURIComponent(cim)}` : null,
-    });
   });
 
   app.get("/api/cidades", (req, res) => {

@@ -16,7 +16,6 @@ test("Dashboard.escape neutraliza os 5 caracteres especiais", () => {
   const esc = painel.executar("Dashboard.escape");
   assert.equal(esc(`<a href="x" title='y'>&</a>`), "&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;");
 });
-
 test("chips de destinatários escapam nome e e-mail", () => {
   const painel = carregarPainel();
   painel.contexto.renderListaDestinatariosPainel([{ nome: NOME_XSS, email: EMAIL_XSS }]);
@@ -60,4 +59,59 @@ test("Monitoramento e fontes exibe o estado de todas as APIs", () => {
   assert.match(html, /01\/10\/2026 06:00/);
   assert.match(html, /Oceanop \/ Petrobras/);
   assert.match(html, /Não configurada/);
+});
+
+test("painel distingue chuva diária da última hora oficial", () => {
+  const painel = carregarPainel();
+  const home = painel.executar("Dashboard.home");
+  const html = home({
+    cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
+    precipitacaoDiariaMm: 8.4,
+    precipitacaoHoraMm: 1.2,
+    precipitacaoHoraReferencia: "14:00–15:00",
+    coberturaObservacoesInmet: { amostras: 15, horasEsperadas: 16, parcial: true },
+    chuvaPorHora: [{ intervalo: "14:00–15:00", precipitacaoMm: 1.2 }],
+    ventoPorPeriodo: [],
+    fontesPorCampo: {
+      precipitacaoDiariaMm: "INMET — estação automática — observado",
+      precipitacaoHoraMm: "INMET — estação automática — observado",
+    },
+    monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
+  });
+  assert.match(html, /Chuva acumulada\/dia/);
+  assert.match(html, /Chuva acumulada\/Hora/);
+  assert.match(html, /Hora de referência: 14:00–15:00/);
+  assert.match(html, />8\.4 <small>mm<\/small>/);
+  assert.match(html, />1\.2 <small>mm<\/small>/);
+});
+
+test("painel aplica INMET a chuva/vento/rajada e Open-Meteo a UV/mar", () => {
+  const painel = carregarPainel();
+  const home = painel.executar("Dashboard.home");
+  const html = home({
+    cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
+    ventoPorPeriodo: [{ periodo: "Tarde", direcao: "S-SW", intensidade: "Fraco/Moderado com Rajadas", rajadaMaxKmh: null }],
+    precipitacaoDiariaMm: null,
+    precipitacaoHoraMm: null,
+    precipitacaoUltimas24hMm: null,
+    indiceUv: { maximoPrevisto: 8.4, classificacao: "Muito alto", fonte: "Open-Meteo Air Quality / CAMS" },
+    qualidadeAr: { uvMax: 8.4, horaPicoUv: "12:00", uvClassificacao: { nivel: "Muito alto" } },
+    mar: { alturaMaxDiaM: 0.5, estadoMarDia: "Leve", periodos: [] },
+    fontesPorCampo: {
+      "periodos.tarde.rajadaMaxKmh": "Indisponível",
+      precipitacaoDiariaMm: "Indisponível",
+      precipitacaoHoraMm: "Indisponível",
+      precipitacaoUltimas24hMm: "Indisponível",
+      "ar.uvMax": "Open-Meteo Air Quality / CAMS",
+      "mar.alturaMaxDiaM": "Open-Meteo Marine",
+    },
+    monitoramentoApis: [{ id: "open-meteo-marine", status: "operacional" }],
+    severidade: { eventos: [] }, avisosInmet: [],
+  });
+
+  assert.match(html, /Rajada prevista[\s\S]*Dado indisponível[\s\S]*INMET prioritário · Open-Meteo complementar/);
+  assert.match(html, /Chuva acumulada\/dia[\s\S]*INMET — estação automática/);
+  assert.match(html, /Índice UV[\s\S]*8\.4[\s\S]*Open-Meteo Air Quality \/ CAMS/);
+  assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>[\s\S]*Open-Meteo Marine/);
+  assert.doesNotMatch(html, /O portal Clima e Saúde não publica índice UV/);
 });

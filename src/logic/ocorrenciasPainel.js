@@ -13,7 +13,12 @@
 // preservadas em `blocos` para a tela de detalhes.
 
 const { GRAUS, maiorGrau, LIMITES_ALERTA_INMET } = require("./inmetAlertRules");
-const { grauAvisoInmet, fenomenoAvisoInmet, dataAvisoEmMs } = require("../sources/inmet");
+const {
+  grauAvisoInmet,
+  fenomenoAvisoInmet,
+  dataAvisoEmMs,
+  selecionarAvisosInmet,
+} = require("../sources/inmet");
 const { eventoDeIndiceUv } = require("../render/eventOrdering");
 const { alertaExibivel } = require("./alertPresentation");
 
@@ -83,9 +88,9 @@ function janelaEvento(evento) {
 function valoresEvento(evento) {
   const v = evento.valores || {};
   const lista = [];
-  if (Number.isFinite(v.rajadaKmh)) lista.push({ rotulo: "Rajada prevista", valor: `${v.rajadaKmh} km/h` });
+  if (Number.isFinite(v.rajadaKmh)) lista.push({ rotulo: "Rajada medida pela estação INMET", valor: `${v.rajadaKmh} km/h` });
   if (Number.isFinite(v.intensidadeHorariaMmH)) lista.push({ rotulo: "Intensidade máx.", valor: `${v.intensidadeHorariaMmH} mm/h` });
-  if (Number.isFinite(v.acumuladoDiarioMm)) lista.push({ rotulo: "Acumulado do dia", valor: `${v.acumuladoDiarioMm} mm` });
+  if (Number.isFinite(v.acumuladoDiarioMm)) lista.push({ rotulo: "Acumulado observado", valor: `${v.acumuladoDiarioMm} mm` });
   return lista;
 }
 
@@ -203,7 +208,9 @@ function eventoDerivadoDeAviso(evento) {
  */
 function montarOcorrencias(report) {
   const ocorrencias = [];
-  const avisos = Array.isArray(report.avisosInmet) ? report.avisosInmet.filter(Boolean) : [];
+  const avisos = selecionarAvisosInmet(report.avisosInmet, {
+    agora: report.geradoEmISO ? new Date(report.geradoEmISO) : new Date(),
+  });
   const avisosUsados = new Set();
   const linkOficial = report.linkInmet || null;
 
@@ -211,10 +218,16 @@ function montarOcorrencias(report) {
   //    de risco são substituídos pelos próprios avisos, no passo 2).
   for (const evento of report.severidade?.eventos || []) {
     if (!evento || evento.tipo === "avisoInmet" || !grauRelevante(evento.grau)) continue;
-    const fenomeno = FENOMENO_POR_TIPO[evento.tipo] || evento.assinatura || String(evento.tipo);
-    const ocorrencia = novaOcorrencia(fenomeno);
-    ocorrencia.uv = eventoDeIndiceUv(evento);
     const derivado = eventoDerivadoDeAviso(evento);
+    const fenomeno = derivado && evento.avisoInmet
+      ? fenomenoAvisoInmet(evento.avisoInmet.descricao)
+      : FENOMENO_POR_TIPO[evento.tipo] || evento.assinatura || String(evento.tipo);
+    let ocorrencia = derivado ? ocorrencias.find((o) => o.fenomeno === fenomeno) : null;
+    if (!ocorrencia) {
+      ocorrencia = novaOcorrencia(fenomeno);
+      ocorrencias.push(ocorrencia);
+    }
+    ocorrencia.uv = eventoDeIndiceUv(evento);
     // Evento criado apenas pelo texto de um aviso: o aviso é a fonte real,
     // então o card usa o conteúdo oficial (passo 2), não esta cópia.
     if (!derivado) {
@@ -223,15 +236,17 @@ function montarOcorrencias(report) {
       ocorrencia.valores = valoresEvento(evento);
       ocorrencia.validade = janelaEvento(evento);
     } else {
-      ocorrencia.grauDerivado = evento.grau;
-      ocorrencia.blocoDerivado = blocoProtocolo(evento);
+      const maiorDerivado = maiorGrau(ocorrencia.grauDerivado || "NORMAL", evento.grau);
+      if (maiorDerivado !== ocorrencia.grauDerivado) {
+        ocorrencia.grauDerivado = maiorDerivado;
+        ocorrencia.blocoDerivado = blocoProtocolo(evento);
+      }
     }
-    ocorrencias.push(ocorrencia);
   }
 
-  // 2. Avisos INMET: reunidos ao card do mesmo fenômeno (mesma base e mesmo
-  //    dia — os avisos já chegam filtrados por área e validade); avisos
-  //    distintos do mesmo fenômeno geram cards próprios.
+  // 2. Avisos INMET: reunidos ao card do mesmo fenômeno. Quando há avisos
+  //    sobrepostos, `selecionarAvisosInmet` mantém somente o oficial mais
+  //    grave/vigente/recente.
   for (const aviso of avisos) {
     if (!grauRelevante(grauAvisoInmet(aviso.severidade ?? aviso.severity))) continue;
     const fenomeno = fenomenoAvisoInmet(aviso.descricao);

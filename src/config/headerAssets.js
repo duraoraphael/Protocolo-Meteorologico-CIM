@@ -1,9 +1,7 @@
 // Identidade do cabeçalho institucional compartilhada por e-mails e PDFs.
 //
 // As imagens em src/assets/header/ são geradas por scripts/gerarLogosHeader.js:
-// a do CIM (Logo/Logo_PDF.png) tem o fundo trocado exatamente por
-// HEADER_VERDE; a da Petrobras (Logo/Petrobras_horizontal_logo.svg.png) é a
-// logo colorida num cartão branco de cantos arredondados.
+// a do CIM (Logo/Logo_PDF.png) tem o fundo trocado exatamente por HEADER_VERDE.
 const fs = require("fs");
 const path = require("path");
 
@@ -11,10 +9,13 @@ const HEADER_VERDE = "#047C3E";
 const HEADER_AMARELO = "#FFCC00";
 
 const PASTA = path.join(__dirname, "..", "assets", "header");
+const PETROBRAS_PDF = Object.freeze({
+  arquivo: path.join(__dirname, "..", "..", "Logo", "Petrobras_horizontal_logo.svg.png"),
+  alt: "Petrobras",
+});
 
 const LOGOS_HEADER = Object.freeze({
   cim: Object.freeze({ arquivo: "cim-header.png", cid: "logo-cim-header@cim", alt: "CIM — Centro Integrado de Monitoramento COMPARTILHADO" }),
-  petrobras: Object.freeze({ arquivo: "petrobras-header.png", cid: "logo-petrobras-header@cim", alt: "Petrobras" }),
 });
 
 function caminhoLogoHeader(nome) {
@@ -29,6 +30,13 @@ function logoHeaderDataUri(nome) {
   const caminho = caminhoLogoHeader(nome);
   if (!caminho) return null;
   return `data:image/png;base64,${fs.readFileSync(caminho).toString("base64")}`;
+}
+
+// Uso exclusivo do PDF. Não integra LOGOS_HEADER e, portanto, nunca vira
+// anexo inline do e-mail nem recurso do cabeçalho da aplicação.
+function logoPetrobrasPdfDataUri() {
+  if (!fs.existsSync(PETROBRAS_PDF.arquivo)) return null;
+  return `data:image/png;base64,${fs.readFileSync(PETROBRAS_PDF.arquivo).toString("base64")}`;
 }
 
 // E-mail: as logos seguem como anexos inline (Content-ID) e o HTML as
@@ -67,9 +75,11 @@ module.exports = {
   HEADER_AMARELO,
   HEADER_VERDE,
   LOGOS_HEADER,
+  PETROBRAS_PDF,
   anexosLogosEmail,
   caminhoLogoHeader,
   emailComLogosEmbutidas,
   logoHeaderDataUri,
+  logoPetrobrasPdfDataUri,
   srcLogoEmail,
 };

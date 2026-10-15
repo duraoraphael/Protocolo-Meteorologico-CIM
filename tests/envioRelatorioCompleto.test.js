@@ -20,6 +20,7 @@ function relatorioBase(sobrescritas = {}) {
     umidadeMax: 90,
     precipitacaoTotalMm: 12.4,
     precipitacaoDiariaMm: 12.4,
+    previsaoDias: [{ chuvaMm: 12.4 }],
     ventoPorPeriodo: [],
     qualidadeAr: null,
     mar: { alturaMaxDiaM: 1.1 },
@@ -32,10 +33,10 @@ function relatorioBase(sobrescritas = {}) {
   };
 }
 
-test("informativo do e-mail mostra chuva acumulada e onda em cards distintos", () => {
+test("informativo do e-mail mostra chuva acumulada/dia e onda em cards distintos", () => {
   const html = renderEmailHtml(relatorioBase());
 
-  assert.match(html, /Chuva acumulada/i);
+  assert.match(html, /Chuva acumulada\/dia/i);
   assert.match(html, /12\.4 mm/);
   assert.doesNotMatch(html, /Mar — onda máx\./i);
   assert.match(html, /MAR — ALTURA MÁX\. DE ONDA/);
@@ -43,8 +44,12 @@ test("informativo do e-mail mostra chuva acumulada e onda em cards distintos", (
 });
 
 test("zero milímetro diário é exibido como dado válido", () => {
-  const html = renderEmailHtml(relatorioBase({ precipitacaoDiariaMm: 0 }));
+  const html = renderEmailHtml(relatorioBase({
+    precipitacaoDiariaMm: 8.3,
+    previsaoDias: [{ chuvaMm: 0 }],
+  }));
   assert.match(html, /0 mm/);
+  assert.doesNotMatch(html, /8\.3 mm/);
 });
 
 test("envio reutiliza o PDF completo em memória como anexo SMTP", { concurrency: false }, async () => {
@@ -87,9 +92,7 @@ test("envio reutiliza o PDF completo em memória como anexo SMTP", { concurrency
     // O cabeçalho é 100% HTML e não exige imagens inline por Content-ID.
     const logos = mensagem.attachments.filter((anexo) => anexo.cid);
     assert.deepEqual(logos, []);
-    assert.doesNotMatch(mensagem.html, /cid:logo-petrobras-header@cim|<img\b[^>]*Petrobras/i);
-    assert.match(mensagem.html, /data-email-header-petrobras-box="true"/);
-    assert.match(mensagem.html, />PETROBRAS<\/td>/);
+    assert.doesNotMatch(mensagem.html, /Petrobras|logo-petrobras|data-email-header-petrobras/i);
     assert.match(mensagem.html, /Relatório técnico completo com tabelas/);
     assert.equal(resultado.respostaSmtp, "250 2.0.0 OK");
     assert.equal(resultado.aceitos, 1);
@@ -114,4 +117,6 @@ test("botão informa progresso, evita clique duplo e confirma o envio", () => {
   assert.match(js, /Relatório gerado e enviado com sucesso/);
   assert.match(js, /botaoConfirmar\.disabled = false/);
   assert.match(html, /id="modal-mensagem"[^>]+aria-live="polite"/);
+  assert.doesNotMatch(html, /logo-petrobras|Petrobras_horizontal_logo/, "a marca Petrobras deve existir somente no PDF");
+  assert.doesNotMatch(js, /api\/logos|carregarLogos/);
 });

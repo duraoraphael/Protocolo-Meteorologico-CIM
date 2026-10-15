@@ -19,7 +19,10 @@ function mapearFontesDoRelatorio(base, mar, qualidadeAr, fonteMeteorologica) {
     "umidadeMin",
     "umidadeMax",
     "rajadaMaxKmh",
+    "rajadaObservadaMaxKmh",
     "precipitacaoTotalMm",
+    "precipitacaoDiariaMm",
+    "precipitacaoHoraMm",
     "precipitacaoHorariaMaxMm",
     "probabilidadeChuvaMax",
   ]) {
@@ -32,7 +35,7 @@ function mapearFontesDoRelatorio(base, mar, qualidadeAr, fonteMeteorologica) {
 
   for (const chave of ["manha", "tarde", "noite"]) {
     const periodo = base?.periodos?.[chave];
-    for (const campo of ["direcao", "intensidadeVento", "velocidadeMaxKmh", "rajadaMaxKmh", "precipitacaoMm", "precipitacaoHorariaMaxMm", "probabilidadeChuva"]) {
+    for (const campo of ["direcao", "intensidadeVento", "velocidadeMediaKmh", "rajadaMaxKmh", "rajadaObservadaMaxKmh", "precipitacaoMm", "precipitacaoHorariaMaxMm", "probabilidadeChuva"]) {
       fontesPorCampo[`periodos.${chave}.${campo}`] = fonteDo(periodo?.[campo], fonteMeteorologica);
     }
   }

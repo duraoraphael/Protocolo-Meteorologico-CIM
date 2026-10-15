@@ -1,9 +1,8 @@
 // Seção "Previsão para os próximos 3 dias" do informativo diário.
 //
-// Fonte: Open-Meteo, agregado DIÁRIO. É a única fonte integrada que entrega,
-// para os três dias seguintes, todos os campos da tabela (máx./mín., rajada,
-// chuva acumulada, UV máximo e código de tempo): o INMET
-// não traz rajada nem volume de chuva.
+// Fontes: INMET é prioritário para chuva, vento e rajada; Open-Meteo fornece
+// complemento identificado quando o produto municipal não publica valores
+// numéricos, além do índice UV e de temperatura/condição quando necessário.
 //
 // A Open-Meteo calcula os agregados diários no dia civil (00h–24h) do fuso
 // pedido em `timezone`, então pedimos no fuso da própria localidade e não é
@@ -97,6 +96,117 @@ function diaSemDados(dataIso) {
     uvMax: null,
     codigoTempo: null,
     condicao: null,
+  };
+}
+
+function montarPrevisaoProximosDiasInmet(cidade, previsaoInmet, { agora = new Date() } = {}) {
+  const fuso = fusoDaCidade(cidade);
+  const datas = proximasDatas(agora, fuso);
+  const porData = new Map((previsaoInmet?.dias || []).map((dia) => [dia.data, dia]));
+  const dias = datas.map((data) => {
+    const oficial = porData.get(data);
+    return {
+      ...diaSemDados(data),
+      tempMaxC: Number.isFinite(oficial?.tempMax) ? oficial.tempMax : null,
+      tempMinC: Number.isFinite(oficial?.tempMin) ? oficial.tempMin : null,
+      umidadeMaxPct: Number.isFinite(oficial?.umidadeMax) ? oficial.umidadeMax : null,
+      umidadeMinPct: Number.isFinite(oficial?.umidadeMin) ? oficial.umidadeMin : null,
+      condicao: oficial?.resumo || null,
+      direcaoVento: oficial?.direcaoVento || null,
+      intensidadeVento: oficial?.intensidadeVento || null,
+      rajadaMaxKmh: Number.isFinite(oficial?.rajadaMaxKmh) ? oficial.rajadaMaxKmh : null,
+      chuvaMm: Number.isFinite(oficial?.precipitacaoMm) ? oficial.precipitacaoMm : null,
+    };
+  });
+  const possuiDados = dias.some((dia) => Number.isFinite(dia.tempMaxC) || Number.isFinite(dia.tempMinC) || dia.condicao);
+  return {
+    fonte: "INMET — previsão oficial",
+    status: possuiDados ? "parcial" : "indisponivel",
+    fuso,
+    localidade: { nome: cidade.nome, uf: cidade.uf, latitude: cidade.latitude, longitude: cidade.longitude },
+    datasSolicitadas: datas,
+    consultadoEm: new Date().toISOString(),
+    mensagem: possuiDados ? null : "O INMET não retornou previsão para as datas solicitadas.",
+    dias,
+    fontesCampo: {
+      temperatura: "INMET — previsão oficial",
+      umidade: "INMET — previsão oficial",
+      rajada: dias.some((dia) => Number.isFinite(dia.rajadaMaxKmh))
+        ? "INMET — previsão oficial"
+        : "Indisponível — o produto municipal do INMET não publicou rajada máxima numérica",
+      chuva: dias.some((dia) => Number.isFinite(dia.chuvaMm))
+        ? "INMET — previsão oficial"
+        : "Indisponível — o produto municipal do INMET não publicou volume previsto numérico",
+      uv: "Open-Meteo — previsão complementar",
+      condicao: "INMET — previsão oficial",
+    },
+  };
+}
+
+function mesclarPrevisaoProximosDias(inmet, complementar) {
+  const porDataComplementar = new Map((complementar?.dias || []).map((dia) => [dia.data, dia]));
+  const usarNumero = (prioritario, alternativo) => Number.isFinite(prioritario)
+    ? prioritario
+    : Number.isFinite(alternativo) ? alternativo : null;
+  const dias = (inmet?.dias || []).map((oficial) => {
+    const alternativo = porDataComplementar.get(oficial.data) || {};
+    return {
+      ...oficial,
+      tempMaxC: usarNumero(oficial.tempMaxC, alternativo.tempMaxC),
+      tempMinC: usarNumero(oficial.tempMinC, alternativo.tempMinC),
+      rajadaMaxKmh: usarNumero(oficial.rajadaMaxKmh, alternativo.rajadaMaxKmh),
+      chuvaMm: usarNumero(oficial.chuvaMm, alternativo.chuvaMm),
+      uvMax: usarNumero(oficial.uvMax, alternativo.uvMax),
+      codigoTempo: Number.isInteger(oficial.codigoTempo) ? oficial.codigoTempo : alternativo.codigoTempo ?? null,
+      condicao: oficial.condicao || alternativo.condicao || null,
+    };
+  });
+  const temComplemento = (inmet?.dias || []).some((oficial) => {
+    const alternativo = porDataComplementar.get(oficial.data) || {};
+    return (!Number.isFinite(oficial.tempMaxC) && Number.isFinite(alternativo.tempMaxC)) ||
+      (!Number.isFinite(oficial.tempMinC) && Number.isFinite(alternativo.tempMinC)) ||
+      (!Number.isFinite(oficial.rajadaMaxKmh) && Number.isFinite(alternativo.rajadaMaxKmh)) ||
+      (!Number.isFinite(oficial.chuvaMm) && Number.isFinite(alternativo.chuvaMm)) ||
+      Number.isFinite(alternativo.uvMax) ||
+      (!oficial.condicao && Boolean(alternativo.condicao));
+  });
+  const temperaturaInmet = (inmet?.dias || []).some((dia) => Number.isFinite(dia.tempMaxC) || Number.isFinite(dia.tempMinC));
+  const temperaturaComplementar = (complementar?.dias || []).some((dia) => Number.isFinite(dia.tempMaxC) || Number.isFinite(dia.tempMinC));
+  const condicaoInmet = (inmet?.dias || []).some((dia) => dia.condicao);
+  const condicaoComplementar = (complementar?.dias || []).some((dia) => dia.condicao);
+  const fonteNumerica = (campo) => {
+    let usouInmet = false;
+    let usouComplemento = false;
+    for (const oficial of inmet?.dias || []) {
+      const alternativo = porDataComplementar.get(oficial.data) || {};
+      if (Number.isFinite(oficial[campo])) usouInmet = true;
+      else if (Number.isFinite(alternativo[campo])) usouComplemento = true;
+    }
+    return [
+      usouInmet ? "INMET — previsão oficial" : null,
+      usouComplemento ? "Open-Meteo — previsão complementar" : null,
+    ].filter(Boolean).join(" / ") || "Indisponível";
+  };
+  const temDados = dias.some(campoPreenchido) || dias.some((dia) => Number.isFinite(dia.umidadeMinPct) || Number.isFinite(dia.umidadeMaxPct));
+  return {
+    ...inmet,
+    fonte: temComplemento ? "INMET — previsão oficial / Open-Meteo — previsão complementar" : inmet?.fonte,
+    status: temDados ? (dias.every((dia) => campoPreenchido(dia)) ? "ok" : "parcial") : "indisponivel",
+    mensagem: temDados ? null : inmet?.mensagem || complementar?.mensagem || "Previsão indisponível.",
+    dias,
+    fontesCampo: {
+      temperatura: temperaturaInmet ? "INMET — previsão oficial" : temperaturaComplementar ? "Open-Meteo — previsão complementar" : "Indisponível",
+      umidade: "INMET — previsão oficial",
+      rajada: fonteNumerica("rajadaMaxKmh"),
+      chuva: fonteNumerica("chuvaMm"),
+      uv: dias.some((dia) => Number.isFinite(dia.uvMax)) ? "Open-Meteo — previsão complementar" : "Indisponível",
+      condicao: condicaoInmet ? "INMET — previsão oficial" : condicaoComplementar ? "Open-Meteo — previsão complementar" : "Indisponível",
+    },
+    complemento: {
+      fonte: complementar?.fonte || "Open-Meteo",
+      status: complementar?.status || "indisponivel",
+      consultadoEm: complementar?.consultadoEm || null,
+    },
   };
 }
 
@@ -215,6 +325,8 @@ async function obterPrevisaoProximosDias(cidade, { agora = new Date(), fetchImpl
 
 module.exports = {
   obterPrevisaoProximosDias,
+  montarPrevisaoProximosDiasInmet,
+  mesclarPrevisaoProximosDias,
   interpretarResposta,
   proximasDatas,
   dataLocalIso,

@@ -191,14 +191,14 @@ function detectarAlertasGraves(report) {
     if (!assinatura || !GRAVIDADE_POR_GRAU[grau]) continue;
     const contexto = contextoPrevisao(report, assinatura);
     achados.push({
-      origem: "Previsão",
-      fonteDados: contexto?.fonteDados || evento.fonteDados || fontePorTipo[evento.tipo] || "Previsão meteorológica integrada",
+      origem: contexto?.origem || "Previsão",
+      fonteDados: contexto?.fonteDados || evento.fonteDados || fontePorTipo[evento.tipo] || "Dado meteorológico integrado",
       tipo: tipoExibicao[evento.tipo] || evento.tipo,
       grau,
       gravidade: GRAVIDADE_POR_GRAU[grau],
       detalhe: contexto?.detalhe || evento.descricao || evento.detalhe,
       janela: contexto?.janela || evento.janela,
-      naturezaDado: "Classificação interna baseada na previsão",
+      naturezaDado: contexto?.naturezaDado || evento.naturezaDado || "Classificação interna baseada na previsão",
       recomendacoes: evento.recomendacoes,
       assinatura,
     });
@@ -317,7 +317,7 @@ async function verificarAlertas({ ignorarHistorico = false } = {}) {
       const report = await montarRelatorio(cidade, { atualizarClimaSaude: true });
       const graves = detectarAlertasGraves(report);
       const dadosDisponiveis = (assinatura) => {
-        if (assinatura === "vento") return Number.isFinite(report.rajadaMaxKmh);
+        if (assinatura === "vento") return Number.isFinite(report.rajadaMaxKmh) || Number.isFinite(report.rajadaObservadaMaxKmh);
         if (assinatura === "chuva") return Number.isFinite(report.precipitacaoHorariaMaxMm) || Number.isFinite(report.precipitacaoTotalMm);
         if (assinatura.startsWith("inmet:")) return report.monitoramentoApis?.some((api) => api.id === "inmet-avisos" && api.status === "operacional");
         if (assinatura === "mar") return !report.mar?.desatualizado && Number.isFinite(report.mar?.alturaMaxDiaM);
