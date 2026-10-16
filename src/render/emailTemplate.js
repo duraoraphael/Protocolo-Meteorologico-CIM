@@ -240,8 +240,10 @@ function cartaoAlerta(card) {
   </table>`;
 }
 
+const FONTES_DADOS_EMAIL = "INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)";
+
 function fontesDeDados() {
-  return esc("INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)");
+  return esc(FONTES_DADOS_EMAIL);
 }
 
 const { faixaSimulacaoEmail } = require("./simulationBanner");
@@ -284,4 +286,11 @@ function renderEmailHtml(r, { incluirCorRio = true } = {}) {
 </html>`;
 }
 
-module.exports = { renderEmailHtml };
+module.exports = {
+  renderEmailHtml,
+  // Usados pelo painel para exibir os mesmos valores do e-mail.
+  chuvaPrevistaAcumulada,
+  probabilidadeChuvaPrevista,
+  frasePrevisao,
+  FONTES_DADOS_EMAIL,
+};

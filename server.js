@@ -14,6 +14,7 @@ const fs = require("fs");
 const { getCidade, CIDADES } = require("./src/config/cities");
 const { executarPipeline, PASTA_SAIDA } = require("./src/pipeline");
 const { criarAtualizadorDados } = require("./src/logic/atualizacaoDados");
+const { comConteudoEmail } = require("./src/logic/conteudoEmailPainel");
 const { servicoCorRioPadrao } = require("./src/sources/corRio");
 const {
   iniciarAgendamentoDiario,
@@ -98,7 +99,8 @@ function criarApp({
       // a renovação está pendente (falha nas fontes: dados anteriores mantidos).
       const { report, ...atualizacao } = await atualizadorDados.obter(cidade);
       res.set("Cache-Control", "no-store");
-      res.json({ ok: true, report, atualizacao });
+      // O painel recebe também o conteúdo do e-mail, para exibi-lo nos cards.
+      res.json({ ok: true, report: comConteudoEmail(report), atualizacao });
     } catch (erro) {
       console.error("[CIM] Erro ao montar o preview:", erro);
       res.status(502).json({ ok: false, erro: "Não foi possível obter os dados meteorológicos agora." });

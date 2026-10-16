@@ -127,10 +127,16 @@ const Dashboard = (() => {
     const detalheUmidade = umidadeObservada === '—'
       ? 'Mínima / máxima previstas para o dia · INMET'
       : `Prevista para o dia · observada parcial ${umidadeObservada} (${coberturaUmidade.amostras || 0}/${coberturaUmidade.horasEsperadas || 0} leituras)`;
+    const ce = r.conteudoEmail;
+    const cardsEmail = ce ? [
+      metric('Chuva prevista/dia', ce.chuvaPrevistaMm == null ? 'Dado indisponível' : unit(ce.chuvaPrevistaMm, ' <small>mm</small>'), 'Previsão acumulada para o dia · mesmo valor do e-mail', 'rain', '', ce.fonteChuvaPrevista || ''),
+      metric('Probabilidade de chuva', ce.probabilidadeChuva == null ? 'Dado indisponível' : unit(ce.probabilidadeChuva, '%'), ce.janelaProbabilidade ? `Máxima prevista ${ce.janelaProbabilidade}` : 'Máxima prevista entre os períodos do dia', 'rain', '', ce.fonteProbabilidade || ''),
+    ] : [];
     const cards = [
       metric('Temperatura prevista', pair(r.tempMin, r.tempMax, '°'), detalheTemp, 'thermometer', '', sources('tempMin','tempMax')),
       metric('Umidade relativa prevista', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
       metric('Rajada prevista', gusts.length ? unit(Math.max(...gusts), ' <small>km/h</small>') : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
+      ...cardsEmail,
       metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), r.coberturaObservacoesInmet?.parcial ? `Dia civil local · parcial (${r.coberturaObservacoesInmet.amostras || 0}/${r.coberturaObservacoesInmet.horasEsperadas || 0} leituras)` : 'Dia civil local · cobertura completa', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
       metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), r.precipitacaoHoraReferencia ? `Hora de referência: ${escape(r.precipitacaoHoraReferencia)} · INMET` : 'Hora de referência indisponível', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
       metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), r.coberturaChuva24h?.parcial ? `Acumulado incompleto · ${r.coberturaChuva24h.amostras || 0}/24 leituras INMET` : 'Acumulado completo das últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
@@ -140,8 +146,10 @@ const Dashboard = (() => {
       comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.desatualizado ? `Dado armazenado · última atualização válida: ${dateTimeBrasilia(r.mar?.ultimaAtualizacao) || 'horário indisponível'}` : r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sourceOrPolicy('Open-Meteo Marine', 'mar.alturaMaxDiaM')) : '',
       heatCard(r),
     ];
-    const referencia = r.previsaoAte ? `<p class="previsao-referencia"><strong>Hora da consulta:</strong> ${escape(r.horaConsulta)} (Horário de Brasília) <span>| Previsão até ${escape(r.previsaoAte)}</span></p>` : '';
-    return `<section class="indicadores" aria-labelledby="titulo-indicadores"><h2 id="titulo-indicadores" class="bloco-titulo">Indicadores meteorológicos</h2>${referencia}<div class="grid-cards">${cards.join('')}</div></section>`;
+    const frase = ce?.frasePrevisao || (r.previsaoAte ? `Previsão até ${r.previsaoAte}` : '');
+    const referencia = r.horaConsulta && (ce || r.previsaoAte) ? `<p class="previsao-referencia"><strong>Hora da consulta:</strong> ${escape(r.horaConsulta)} (Horário de Brasília)${frase ? ` <span>| ${escape(frase)}</span>` : ''}</p>` : '';
+    const fontesEmail = ce?.fontes ? `<p class="fontes-email"><strong>Fontes de dados:</strong> ${escape(ce.fontes)}</p>` : '';
+    return `<section class="indicadores" aria-labelledby="titulo-indicadores"><h2 id="titulo-indicadores" class="bloco-titulo">Indicadores meteorológicos</h2>${referencia}<div class="grid-cards">${cards.join('')}</div>${fontesEmail}</section>`;
   }
 
   function table(title, name, headers, rows, detail) {
@@ -178,7 +186,33 @@ const Dashboard = (() => {
       .map((e, i) => ({ id:`oc-${i + 1}`, grau:e.grau, rotulo:TitulosAlerta.nomeParametro(e.fenomeno || e.titulo || e.tipo), icone:'alert', resumo:e.descricao, valores:[], validade:e.janela || 'Hoje', fontes:e.fonteDados ? [e.fonteDados] : [], blocos:[{ origem:'protocolo', titulo:e.titulo, grau:e.grau, descricao:e.detalhe || e.descricao, janela:e.janela, fonte:e.fonteDados, recomendacoes:e.recomendacoes || [] }] }));
   }
 
-  function occurrenceCard(o) {
+  // Linhas e recomendações dos cards de alerta do e-mail (mesmo modelo).
+  function textoLinhaEmail(texto, multilinha) {
+    return multilinha ? String(texto ?? '').split(/\r?\n/).map(escape).join('<br>') : escape(texto);
+  }
+  function conteudoCardEmail(card) {
+    const linhas = (card.linhas || []).map(l => l.lista
+      ? `<div class="oc-email-linha">${l.rotulo ? `<strong>${escape(l.rotulo)}:</strong>` : ''}${list(l.lista)}</div>`
+      : `<p class="oc-email-linha">${l.rotulo ? `<strong>${escape(l.rotulo)}:</strong> ` : ''}${textoLinhaEmail(l.texto, l.multilinha)}</p>`).join('');
+    const rec = card.recomendacoes?.itens?.length
+      ? `<div class="oc-recomendacoes"><h4>Recomendações</h4><p class="oc-rec-origem">${escape(card.recomendacoes.titulo)}</p>${list(card.recomendacoes.itens)}</div>`
+      : '';
+    return `<div class="oc-email"><p class="oc-email-origem">${escape(card.rotuloOrigem)}</p>${linhas}${rec}</div>`;
+  }
+  function cardsEmailDe(r) {
+    return Array.isArray(r.conteudoEmail?.cards) ? r.conteudoEmail.cards : [];
+  }
+  // Card de alerta do e-mail sem ocorrência correspondente no painel.
+  function emailOnlyCard(card) {
+    const n = nivel(card.nivel);
+    return `<article class="ocorrencia nivel-${n.classe}" aria-label="${escape(card.titulo)}">
+      <div class="oc-topo"><span class="nivel-chip">${icon(n.icone)}${escape(card.nivel)}</span></div>
+      <h3 class="oc-titulo">${icon(n.icone)}<span>${escape(card.titulo)}</span></h3>
+      ${conteudoCardEmail(card)}
+    </article>`;
+  }
+
+  function occurrenceCard(o, cardsEmail = []) {
     const n = nivel(o.grau);
     const rotuloNivel = o.grau && NIVEIS[o.grau] ? o.grau : (o.classificacaoOficial || 'Sem classificação');
     const titulo = TitulosAlerta.formatarTitulo(o.rotulo, rotuloNivel);
@@ -192,7 +226,7 @@ const Dashboard = (() => {
     return `<article class="ocorrencia nivel-${n.classe}" aria-label="${escape(titulo)}">
       <div class="oc-topo"><span class="nivel-chip">${icon(n.icone)}${escape(rotuloNivel)}</span>${o.classificacaoOficial && NIVEIS[o.grau] ? `<span class="oc-oficial" title="Classificação oficial do INMET">INMET: ${escape(o.classificacaoOficial)}</span>` : ''}</div>
       <h3 class="oc-titulo">${icon(o.icone)}<span>${escape(titulo)}</span></h3>
-      <p class="oc-resumo">${escape(o.resumo)}</p>
+      ${cardsEmail.length ? cardsEmail.map(conteudoCardEmail).join('') : `<p class="oc-resumo">${escape(o.resumo)}</p>`}
       ${valores}
       ${avisos ? `<div class="oc-flags">${avisos}</div>` : ''}
       <div class="oc-meta"><span>${icon('clock')}<span><span class="sr-only">Validade: </span>${escape(o.validade)}</span></span><span>${icon('globe')}<span>Fonte: ${escape(fontes)}</span></span></div>
@@ -207,14 +241,28 @@ const Dashboard = (() => {
       r.avisosInmetStatus === 'indisponivel' ? 'Avisos oficiais INMET indisponíveis nesta atualização — não é possível confirmar a ausência de avisos.' : '',
       r.avisosColeta?.length ? 'Coleta parcial: algumas fontes não responderam. Veja “Fontes e monitoramento”.' : '',
     ].filter(Boolean).map(t => `<p class="oc-nota">${icon('info')}<span>${escape(t)}</span></p>`).join('');
-    const corpo = lista.length
-      ? `<div class="oc-grid">${lista.map(occurrenceCard).join('')}</div>`
+    // Cada card do e-mail vai para a ocorrência do mesmo fenômeno; os que não
+    // têm correspondente aparecem como cards próprios.
+    const cardsEmail = cardsEmailDe(r);
+    const usados = new Set();
+    const cardsOcorrencias = lista.map(o => {
+      const proprios = cardsEmail.filter(c => c.fenomeno && c.fenomeno === o.fenomeno);
+      proprios.forEach(c => usados.add(c));
+      return occurrenceCard(o, proprios);
+    });
+    const avulsos = cardsEmail.filter(c => !usados.has(c)).map(emailOnlyCard);
+    const todos = [...cardsOcorrencias, ...avulsos];
+    const corpo = todos.length
+      ? `<div class="oc-grid">${todos.join('')}</div>`
       : `<p class="sem-ocorrencias">${icon('check')}<span>Nenhuma ocorrência ativa de Atenção, Alerta ou Emergência para ${escape(r.cidade?.nome)} no momento.</span></p>`;
+    const mudancas = r.conteudoEmail?.mudancasDia?.length
+      ? `<div class="mudancas-dia"><h3>Mudanças do dia</h3>${list(r.conteudoEmail.mudancasDia)}</div>`
+      : '';
     return `<section class="ocorrencias" aria-labelledby="titulo-ocorrencias">
       <div class="bloco-cabecalho"><h2 id="titulo-ocorrencias" class="bloco-titulo">Ocorrências em destaque</h2>
         ${contagem.length ? `<p class="oc-contagem">${contagem.map(([g, n]) => `<span class="contagem-${nivel(g).classe}">${n} ${escape(g)}</span>`).join('')}</p>` : ''}
         <button class="text-link" data-detail="monitoramento">Fontes e monitoramento <span aria-hidden="true">→</span></button></div>
-      ${corpo}${notas}
+      ${corpo}${mudancas}${notas}
     </section>`;
   }
 

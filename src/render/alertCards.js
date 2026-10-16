@@ -6,6 +6,7 @@ const AlertTitle = require("../../public/alert-title");
 const { ordenarEventosParaExibicao } = require("./eventOrdering");
 const { consolidarAvisosInmet, fenomenoAvisoInmet, grauAvisoInmet } = require("../sources/inmet");
 const { contextoPrevisao } = require("../logic/forecastAlertContext");
+const { FENOMENO_POR_TIPO } = require("../logic/ocorrenciasPainel");
 const {
   TIPOS_DOCUMENTO,
   alertaExibivel,
@@ -101,6 +102,8 @@ function cardEvento(evento, r) {
   const observado = /observa[cç][aã]o oficial/i.test(evento.naturezaDado || "");
   return {
     origem: observado ? "observacao" : "previsao",
+    // Mesmo fenômeno usado nas ocorrências do painel (casa card e ocorrência).
+    fenomeno: FENOMENO_POR_TIPO[evento.tipo] || evento.assinatura || String(evento.tipo),
     nivel,
     titulo: AlertTitle.tituloEvento(evento, nivel),
     rotuloOrigem: evento.naturezaDado || "Classificação interna baseada na previsão",
@@ -147,6 +150,7 @@ function cardCalor(r, detalhado) {
     ];
   return {
     origem: "calor",
+    fenomeno: "calor",
     nivel,
     titulo: AlertTitle.formatarTitulo("CALOR / RISCO À SAÚDE", nivel),
     rotuloOrigem: "Clima e Saúde",
@@ -172,6 +176,7 @@ function cardAvisoInmet(aviso, eventosLocais, r) {
   const instrucoes = recomendacoes?.origem === "inmet" ? [] : listaOficial(aviso.instruction || aviso.instrucoes);
   return {
     origem: "inmet",
+    fenomeno,
     nivel,
     titulo: AlertTitle.formatarTitulo(evento || "Aviso oficial INMET", nivel),
     rotuloOrigem: "Aviso oficial INMET",

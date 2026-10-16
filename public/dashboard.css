@@ -428,7 +428,7 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .contagem-alerta { color:var(--nivel-alerta); }
 .contagem-atencao { color:var(--nivel-atencao); }
 
-.oc-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:12px; align-items:stretch; }
+.oc-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:12px; align-items:stretch; }
 .ocorrencia { display:flex; flex-direction:column; gap:8px; min-width:0; padding:14px 16px; border:1px solid color-mix(in srgb,var(--sev) 70%,transparent); border-radius:10px; background:linear-gradient(160deg,color-mix(in srgb,var(--sev) 9%,#04342a) 0%,#03251e 75%); }
 .ocorrencia.nivel-emergencia { background:linear-gradient(160deg,color-mix(in srgb,var(--sev) 16%,#04342a) 0%,#2a1714 90%); }
 .oc-topo { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
@@ -450,6 +450,21 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .oc-meta .icon { width:14px; height:14px; margin-top:1px; color:#8fb0a7; }
 .oc-detalhes { margin-top:auto; align-self:flex-start; display:inline-flex; gap:6px; padding:7px 13px; border-radius:6px; border:1px solid color-mix(in srgb,var(--sev) 65%,transparent); background:transparent; color:var(--text-primary); font-size:12px; font-weight:600; }
 .oc-detalhes:hover { background:color-mix(in srgb,var(--sev) 20%,transparent); }
+/* Conteúdo do card de alerta do e-mail, visível no próprio card. */
+.oc-email { display:grid; gap:5px; padding-top:8px; border-top:1px solid color-mix(in srgb,var(--sev) 35%,transparent); }
+.oc-email + .oc-email { margin-top:4px; }
+.oc-email-origem { margin:0; font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#9fbab2; }
+.oc-email-linha { margin:0; font-size:12.5px; line-height:1.5; color:#d7e3de; overflow-wrap:anywhere; }
+.oc-email-linha strong { color:var(--text-primary); }
+.oc-email-linha ul, .oc-recomendacoes ul { margin:3px 0 0; padding-left:18px; }
+.oc-recomendacoes { margin-top:4px; padding:8px 10px; border-radius:7px; background:color-mix(in srgb,var(--sev) 10%,transparent); }
+.oc-recomendacoes h4 { margin:0; font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:var(--sev); }
+.oc-rec-origem { margin:1px 0 0; font-size:10.5px; color:#9fbab2; }
+.oc-recomendacoes li { font-size:12.5px; line-height:1.45; color:#d7e3de; margin-bottom:2px; }
+.mudancas-dia { margin-top:12px; padding:10px 14px; border:1px solid var(--border-soft); border-left:4px solid var(--yellow-petro); border-radius:8px; background:rgba(4,46,38,.6); }
+.mudancas-dia h3 { margin:0 0 4px; font-size:14px; }
+.mudancas-dia ul { margin:0; padding-left:18px; font-size:13px; line-height:1.5; color:#d7e3de; }
+.fontes-email { margin:10px 0 0; font-size:12px; line-height:1.45; color:#b3c8c1; }
 .sem-ocorrencias { display:flex; align-items:center; gap:10px; margin:0; padding:11px 15px; border:1px solid var(--border-soft); border-radius:9px; background:rgba(4,52,42,.45); color:var(--text-secondary); font-size:13px; }
 .sem-ocorrencias .icon { width:20px; height:20px; color:#64d99b; }
 .oc-nota { display:flex; align-items:flex-start; gap:7px; margin:8px 0 0; font-size:11.5px; color:#d9c98a; }
