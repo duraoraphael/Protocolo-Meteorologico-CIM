@@ -18,7 +18,7 @@ const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
 const { buscarObservacaoInmet } = require("../sources/inmetObservations");
 const { criarServicoCorRio } = require("../sources/corRio");
 const climaSaude = require("../sources/climaSaudeService");
-const { competenciaConfigurada, interpretarApi, urlApi } = require("../sources/monitorSecas");
+const { competenciaConfigurada, descobrirPublicacao } = require("../sources/monitorSecas");
 const { tipoErro } = require("../sources/httpJsonClient");
 const { credenciaisConfiguradas, destinoConfigurado } = require("../integrations/sharepointGed");
 const oceanopAreas = require("../config/oceanopAreas");
@@ -142,32 +142,18 @@ async function verificarCorRio(criarServico) {
 
 async function verificarMonitorSecas(fetchFn) {
   const fonte = "ANA Monitor de Secas";
-  let competencia;
-  try { competencia = competenciaConfigurada(); }
+  let fixa;
+  try { fixa = competenciaConfigurada(); }
   catch (erro) { return item(fonte, "Nacional", SITUACAO.BLOQUEADA, erro.message); }
-  const consultar = async (comp) => {
-    const resposta = await fetchFn(urlApi(comp), {
-      signal: AbortSignal.timeout(15000),
-      headers: { Accept: "application/json", Referer: "https://monitordesecas.ana.gov.br/" },
-    });
-    if (!resposta.ok) throw Object.assign(new Error(`HTTP ${resposta.status}`), { httpStatus: resposta.status });
-    let json;
-    try { json = await resposta.json(); }
-    catch { throw Object.assign(new Error("Resposta não é JSON válido."), { name: "InvalidJsonError" }); }
-    return interpretarApi(json, comp);
-  };
   try {
-    const mapa = await consultar(competencia);
-    // O Monitor é mensal; avisa quando a ANA já publicou um mês mais novo que o configurado.
-    const seguinte = new Date(Date.UTC(competencia.ano, competencia.mes, 1));
-    const proxima = { mes: seguinte.getUTCMonth() + 1, ano: seguinte.getUTCFullYear() };
-    proxima.chave = `${proxima.ano}-${String(proxima.mes).padStart(2, "0")}`;
-    proxima.rotulo = proxima.chave;
-    const novaDisponivel = await consultar(proxima).then(() => true, () => false);
-    return item(fonte, "Nacional", SITUACAO.OK, `Mapa ${mapa.nome || competencia.rotulo} disponível.` +
-      (novaDisponivel ? ` A ANA já publicou ${proxima.chave}; ajuste MONITOR_SECAS_COMPETENCIA=${proxima.chave} para usar o mapa mais recente.` : ""));
+    // Mesma descoberta usada pelo informativo (listagem do bucket + API), sem
+    // gravar nada: a verificação só consulta.
+    const { competencia, meta } = await descobrirPublicacao({ fetchFn, gravar: false });
+    const ufs = Object.keys(meta.mapasUf || {}).length;
+    return item(fonte, "Nacional", SITUACAO.OK, `Publicação mais recente: ${competencia.rotulo} (mapa final na API e ${ufs} mapas estaduais no bucket).` +
+      (fixa && fixa.chave !== competencia.chave ? ` MONITOR_SECAS_COMPETENCIA=${fixa.chave} fixa outra referência; remova a variável para usar a publicação mais recente.` : ""));
   } catch (erro) {
-    const situacao = /não publicou mapa|não é a versão final/i.test(erro.message) ? SITUACAO.CAMPOS_AUSENTES : situacaoDoErro(erro);
+    const situacao = /não publicou mapa|não é a versão final|Nenhuma publicação recente|nenhum mês/i.test(erro.message) ? SITUACAO.CAMPOS_AUSENTES : situacaoDoErro(erro);
     return item(fonte, "Nacional", situacao, erro.message);
   }
 }

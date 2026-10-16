@@ -517,12 +517,13 @@ function blocoFontesMonitorSecas(ms) {
   const linhas = [
     ["Portal do Monitor de Secas", ms.urls.portal || monitorSecas.PORTAL_URL],
     ["Tabela oficial de classificação S0–S4", ms.urls.classificacao || monitorSecas.CLASSIFICACAO_URL],
-    ["Página do mapa (fonte de referência)", ms.urls.pagina],
-    ms.urls.api && ["API pública consumida pela página: resumo oficial por UF e data de elaboração", ms.urls.api],
-    ms.urls.mapa && ["Mapa oficial (imagem reproduzida)", ms.urls.mapa],
+    [`Página do mapa estadual (${ms.uf || "UF"}) no portal`, ms.urls.pagina],
+    ms.urls.listagem && ["Listagem pública do bucket da ANA (meses e mapas estaduais publicados)", ms.urls.listagem],
+    ms.urls.api && ["API pública consumida pelo portal: texto e áreas por categoria da UF", ms.urls.api],
+    ms.urls.mapa && ["Mapa estadual oficial (imagem reproduzida)", ms.urls.mapa],
   ].filter(Boolean);
   return blocoTabela({
-    antes: `<p class="rotulo-tabela"><strong>Monitor de Secas — ANA (${esc(ms.competencia?.rotulo || "competência indisponível")}):</strong></p>`,
+    antes: `<p class="rotulo-tabela"><strong>Monitor de Secas — ANA (${esc(ms.nomeUf || ms.uf || "UF")}, ${esc(ms.competencia?.rotulo || "referência indisponível")}):</strong></p>`,
     tabela: `<table class="ms-fontes">
     <thead><tr><th>Uso</th><th>Endereço</th></tr></thead>
     <tbody>${linhas.map(([uso, url], i) => `<tr class="${i % 2 ? "zebra" : ""}"><td style="width:38%;">${esc(uso)}</td><td class="ms-url"><a href="${escAtributo(url)}">${esc(url)}</a></td></tr>`).join("")}</tbody>
@@ -536,11 +537,36 @@ function dataElaboracaoMs(valor) {
 }
 
 const IMPACTOS_MS = Object.freeze({ C: "Curto prazo (C)", L: "Longo prazo (L)", CL: "Curto e longo prazo (CL)" });
-const VERBOS_EVOLUCAO_MS = /avan[çc]|recu|agrav|surg|desapare|intensific|passou|passando|deixou|amplia|pior|melhor|expan|retra/i;
+const VERBOS_EVOLUCAO_MS = /avan[çc]|recu|agrav|surg|desapare|intensific|abrand|atenu|passou|passando|deixou|amplia|pior|melhor|expan|retra/i;
+// Movimentos em relação ao mês anterior, só quando o texto oficial os cita.
+const MOVIMENTOS_MS = Object.freeze([
+  ["Avanço", /avan[çc]/i],
+  ["Recuo", /recu[oa]/i],
+  ["Intensificação", /intensific|agrav|piorou/i],
+  ["Abrandamento", /abrand|atenu|ameniz/i],
+  ["Surgimento", /surgi/i],
+  ["Desaparecimento", /desapare|deixou de registrar/i],
+]);
+const DIRECOES_MS = "extremo norte|extremo sul|extremo leste|extremo oeste|centro-oeste|centro-norte|centro-sul|centro-leste|nordeste|noroeste|sudeste|sudoeste|norte|sul|leste|oeste|centro";
+const REGIOES_NOMEADAS_MS = /\b(Sertão|Agreste|Zona da Mata|Recôncavo|Litoral(?: [A-ZÀ-Ú][a-zà-ú]+)?|Pantanal|Semiárido|Triângulo Mineiro|Vale do [A-ZÀ-Ú][a-zà-ú]+|Região Metropolitana(?: de [A-ZÀ-Ú][a-zà-ú]+)?|divisa com (?:o|a|os|as) [A-ZÀ-Ú][a-zà-ú]+(?: (?:do|da|de) [A-ZÀ-Ú][a-zà-ú]+)*)/g;
+
+// Regiões do estado citadas literalmente no texto oficial, na ordem em que
+// aparecem. Nomes de UF ("Rio Grande do Norte") não contam como direção.
+function regioesCitadasMs(texto) {
+  let limpo = String(texto || "");
+  for (const [, nome] of Object.values(monitorSecas.UFS)) {
+    if (/\b(Norte|Sul)\b/.test(nome)) limpo = limpo.split(nome).join(" ".repeat(nome.length));
+  }
+  const achados = [];
+  for (const m of limpo.matchAll(REGIOES_NOMEADAS_MS)) achados.push([m.index, m[1]]);
+  const direcoes = new RegExp(`(?<![\\wÀ-ú-])(${DIRECOES_MS})(?![\\wÀ-ú-])`, "gi");
+  for (const m of limpo.matchAll(direcoes)) achados.push([m.index, m[1].toLowerCase()]);
+  return [...new Set(achados.sort((a, b) => a[0] - b[0]).map(([, nome]) => nome))];
+}
 
 // Reorganiza o texto oficial da UF sem reescrevê-lo: cada frase vai, inteira,
-// para "Situação", "Evolução no mês" ou "Impactos". As intensidades e os
-// tipos de impacto destacados são só os códigos citados literalmente no texto.
+// para "Situação", "Evolução" ou "Impactos". Intensidades, impactos,
+// movimentos e regiões destacados são só os citados literalmente no texto.
 function analisarResumoMs(texto) {
   const original = String(texto || "");
   const frases = original.split(/(?<=\.)\s+/).map((f) => f.trim()).filter(Boolean);
@@ -556,65 +582,97 @@ function analisarResumoMs(texto) {
   const ordemImpactos = Object.keys(IMPACTOS_MS);
   const impactos = [...new Set([...original.matchAll(/\((CL|C|L)\)/g)].map((m) => m[1]))]
     .sort((a, b) => ordemImpactos.indexOf(a) - ordemImpactos.indexOf(b));
-  return { grupos, intensidades, impactos };
+  const movimentos = MOVIMENTOS_MS.filter(([, padrao]) => padrao.test(original)).map(([rotulo]) => rotulo);
+  return { grupos, intensidades, impactos, movimentos, regioes: regioesCitadasMs(original) };
 }
 
-function blocoResumoUfMs(resumo, rotulo) {
-  const cabecalho = `<div class="ms-uf-titulo">Situação da seca — ${esc(resumo.nome)}</div>
-    <div class="ms-uf-abrangencia">Resumo estadual — ${esc(resumo.uf)}; sem detalhamento municipal disponível na fonte.</div>`;
+const percentualMs = (valor) => `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
+
+function tabelaAreaMs(percentuais, rotulo) {
+  const linhas = ["si", "s0", "s1", "s2", "s3", "s4"].map((chave) => {
+    const cat = monitorSecas.CATEGORIAS[chave];
+    const valor = percentuais[chave];
+    return `<tr class="${valor > 0 ? "" : "ms-area-zero"}"><td><span class="ms-chip" style="background:${cat.cor};"></span>${chave === "si" ? "" : `${cat.codigo} `}${esc(cat.nome)}</td><td class="ms-area-pct">${percentualMs(valor)}</td></tr>`;
+  }).join("");
+  return `<div class="ms-grupo"><div class="ms-grupo-titulo">Área do estado por categoria — ${esc(rotulo)}</div>
+    <table class="ms-area">${linhas}</table>
+    <p class="ms-nota-pct">Dados tabulares oficiais da ANA (áreas acumuladas S0–S4, S1–S4…), separados por categoria como no portal.</p></div>`;
+}
+
+function blocoResumoUfMs(resumo, rotulo, cidade) {
+  const cabecalho = `<div class="ms-uf-titulo">Situação no estado</div>
+    <div class="ms-uf-abrangencia">Análise estadual publicada pela ANA para ${esc(resumo.nome)} (${esc(resumo.uf)}). Não é uma classificação específica para a base ${esc(cidade?.nome || "")}: a fonte não publica classificação municipal.</div>`;
+  const area = resumo.percentuais ? tabelaAreaMs(resumo.percentuais, rotulo) : "";
   if (!resumo.texto) {
-    return `${cabecalho}<p class="ms-uf-paragrafo">Não disponível na fonte para ${esc(rotulo.toLowerCase())}.</p>`;
+    return `${cabecalho}${area}<p class="ms-uf-paragrafo">Texto oficial da ANA não disponível para este estado em ${esc(rotulo.toLowerCase())}. A ausência de texto não indica ausência de seca.</p>`;
   }
-  const { grupos, intensidades, impactos } = analisarResumoMs(resumo.texto);
+  const { grupos, intensidades, impactos, movimentos, regioes } = analisarResumoMs(resumo.texto);
+  const destaque = (titulo, itens) => itens.length
+    ? `<div class="ms-destaque"><span class="ms-destaque-rotulo">${titulo}</span>${itens.join("")}</div>`
+    : "";
   const destaques = [
-    intensidades.length && `<div class="ms-destaque"><span class="ms-destaque-rotulo">Intensidades citadas</span>${intensidades.map((chave) => {
+    // Sem dados de área, as categorias presentes vêm só do que o texto cita.
+    !resumo.percentuais && destaque("Intensidades citadas", intensidades.map((chave) => {
       const cat = monitorSecas.CATEGORIAS[chave];
       return `<span class="ms-tag"><span class="ms-chip" style="background:${cat.cor};"></span>${chave === "si" ? "" : `${cat.codigo} `}${esc(cat.nome)}</span>`;
-    }).join("")}</div>`,
-    impactos.length && `<div class="ms-destaque"><span class="ms-destaque-rotulo">Tipos de impacto citados</span>${impactos.map((c) => `<span class="ms-tag">${esc(IMPACTOS_MS[c])}</span>`).join("")}</div>`,
+    })),
+    destaque("Em relação ao mês anterior", movimentos.map((m) => `<span class="ms-tag">${esc(m)}</span>`)),
+    destaque("Regiões citadas", regioes.map((r) => `<span class="ms-tag">${esc(r)}</span>`)),
+    destaque("Tipos de impacto citados", impactos.map((c) => `<span class="ms-tag">${esc(IMPACTOS_MS[c])}</span>`)),
   ].filter(Boolean).join("");
   const grupo = (titulo, frases) => frases.length
     ? `<div class="ms-grupo"><div class="ms-grupo-titulo">${titulo}</div>${frases.map((f) => `<p class="ms-uf-paragrafo">${esc(f)}</p>`).join("")}</div>`
     : "";
   return `${cabecalho}
+    ${area}
     ${destaques ? `<div class="ms-destaques">${destaques}</div>` : ""}
     ${grupo("Situação", grupos.situacao)}
-    ${grupo("Evolução no mês", grupos.evolucao)}
+    ${grupo("Evolução em relação ao mês anterior", grupos.evolucao)}
     ${grupo("Impactos", grupos.impactos)}`;
 }
 
-// Seção "Monitor de Secas — <Mês>/<Ano>": mapa oficial à esquerda e, à
-// direita, só o resumo oficial da UF do próprio informativo.
+// Seção "Monitor de Secas — <Estado> / <UF>": mapa ESTADUAL oficial da UF da
+// base à esquerda e, à direita, a situação no estado do MESMO mês. Bases da
+// mesma UF recebem o mesmo mapa e a mesma publicação.
 function blocoMonitorSecas(r) {
   const ms = r.monitorSecas;
   if (!ms) return "";
-  const rotulo = ms.competencia?.rotulo || "competência indisponível";
-  const titulo = `<h4 class="subsecao ms-titulo">Monitor de Secas — ${esc(rotulo)}</h4>
-  <p class="ms-nota">Acompanhamento <strong>mensal</strong> da seca publicado pela ANA (condição acumulada no mês de referência). Não é previsão meteorológica diária.</p>`;
-  const resumo = (ms.resumosUf || []).find((item) => item.uf === r.cidade?.uf);
-  const mapa = ms.status === "indisponivel" ? null : monitorSecas.mapaDataUri(ms.competencia);
-  if (ms.status === "indisponivel" || !mapa || !resumo) {
-    return `${titulo}
-    <p class="clima-indisponivel">Não disponível na fonte para ${esc(rotulo.toLowerCase())} nesta emissão${ms.mensagem ? ` — ${esc(ms.mensagem)}` : ""}. Consulta: ${esc(ms.urls?.pagina || "monitordesecas.ana.gov.br")}</p>`;
+  const uf = r.cidade?.uf || ms.uf;
+  const nomeUf = monitorSecas.UFS[uf]?.[1] || ms.nomeUf || uf;
+  const titulo = `<h4 class="subsecao ms-titulo">Monitor de Secas — ${esc(nomeUf)} / ${esc(uf)}</h4>`;
+  const resumo = (ms.resumosUf || []).find((item) => item.uf === uf);
+  const mapa = ms.status === "indisponivel" || ms.uf !== uf ? null : monitorSecas.mapaUfDataUri(ms.competencia, uf);
+  const consulta = ms.urls?.pagina || monitorSecas.PORTAL_URL;
+  if (!mapa || !resumo || !ms.competencia) {
+    return `<div class="ms-bloco">${titulo}
+    <p class="clima-indisponivel">Monitor de Secas temporariamente indisponível para este estado. A ausência do mapa não indica ausência de seca.</p>
+    <p class="ms-ref"><strong>Fonte:</strong> ANA — Monitor de Secas. Consulta: <a href="${escAtributo(consulta)}">${esc(consulta)}</a></p></div>`;
   }
 
+  const rotulo = ms.competencia.rotulo;
   const elaborado = dataElaboracaoMs(ms.dataElaboracao);
   const coletado = formatarDataBrasilia(ms.coletadoEm);
+  const verificado = formatarDataBrasilia(ms.verificadoEm);
   const legenda = ["si", "s0", "s1", "s2", "s3", "s4"].map((chave) => {
     const cat = monitorSecas.CATEGORIAS[chave];
     return `<span class="ms-leg-item"><span class="ms-chip" style="background:${cat.cor};"></span>${chave === "si" ? "" : `${cat.codigo} `}${esc(cat.nome)}</span>`;
   }).join("");
 
   return `<div class="ms-bloco">${titulo}
+  <p class="ms-referencia"><strong>Referência:</strong> ${esc(rotulo)} — publicação mensal da ANA${elaborado ? ` (mapa final elaborado em ${esc(elaborado)})` : ""}. Retrata a condição de seca acumulada no mês de referência; não é previsão meteorológica diária.</p>
+  ${ms.aviso ? `<p class="ms-aviso"><strong>Atualização não confirmada.</strong> ${esc(ms.aviso)}</p>` : ""}
   <table class="ms-layout" role="presentation"><tr>
     <td class="ms-col-mapa">
-      <img class="ms-mapa" src="${mapa}" alt="Mapa oficial do Monitor de Secas — ${escAtributo(rotulo)}" />
+      <img class="ms-mapa" src="${mapa}" alt="Mapa oficial do Monitor de Secas — ${escAtributo(nomeUf)} — ${escAtributo(rotulo)}" />
       <div class="ms-legenda"><strong>Legenda (reproduzida do mapa oficial):</strong><br>${legenda}<br>
-        <strong>Tipos de impacto:</strong> C = curto prazo (ex.: agricultura, pastagem); L = longo prazo (ex.: hidrologia, ecologia); linhas = delimitação de impactos dominantes.</div>
-      <p class="ms-ref">Fonte: ANA / Monitor de Secas — competência ${esc(rotulo.toLowerCase())}.${elaborado ? ` Elaborado em ${esc(elaborado)}.` : ""} Coleta: ${esc(coletado || "—")}${ms.status === "cache" ? " (cópia validada armazenada)" : ""}.</p>
+        <strong>Códigos de impacto usados pela ANA:</strong> C = curto prazo (ex.: agricultura, pastagem); L = longo prazo (ex.: hidrologia, ecologia).</div>
     </td>
-    <td class="ms-col-info">${blocoResumoUfMs(resumo, rotulo)}</td>
-  </tr></table></div>`;
+    <td class="ms-col-info">${blocoResumoUfMs(resumo, rotulo, r.cidade)}</td>
+  </tr></table>
+  <p class="ms-ref"><strong>Fonte:</strong> ANA — Monitor de Secas. Mapa estadual e texto da mesma publicação (${esc(rotulo)}).
+    Mapa obtido em ${esc(coletado || "—")} (horário de Brasília)${ms.status === "cache" || ms.status === "nao_confirmado" ? ", cópia validada armazenada" : ""}${verificado && ms.status !== "nao_confirmado" ? `; publicação mais recente confirmada em ${esc(verificado)}` : ""}.
+    <a href="${escAtributo(consulta)}">${esc(consulta)}</a></p>
+  </div>`;
 }
 
 function dataCurta(dataIso) {
@@ -699,6 +757,7 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
       <td class="p3d-num">${Number.isFinite(d.umidadeMinPct) || Number.isFinite(d.umidadeMaxPct) ? `${celulaNumero(d.umidadeMinPct)} / ${celulaNumero(d.umidadeMaxPct)}` : NAO_DISPONIVEL}</td>
       <td class="p3d-num">${celulaNumero(d.rajadaMaxKmh)}</td>
       <td class="p3d-num">${celulaNumero(d.chuvaMm, 1)}</td>
+      <td class="p3d-num">${Number.isFinite(d.probabilidadeChuvaPct) ? `${numeroBr(d.probabilidadeChuvaPct, 0)}%` : `<span class="p3d-nd">—</span>`}</td>
       <td class="p3d-num">${celulaNumero(d.uvMax, 1)}</td>
       <td class="p3d-num">${celulaCalor(r.climaSaude, d.data)}</td>
       <td>${d.condicao ? esc(d.condicao) : NAO_DISPONIVEL}</td>
@@ -720,20 +779,21 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
     <p class="p3d-sub">${local} · três dias seguintes à data de geração deste informativo (hoje não incluído).</p>
     ${situacao}
     <table class="p3d">
-      <colgroup><col style="width:12%"><col style="width:14%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:12%"><col style="width:19%"></colgroup>
+      <colgroup><col style="width:13%"><col style="width:11.5%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:12%"><col style="width:9%"><col style="width:11.5%"><col style="width:13%"></colgroup>
       <thead><tr>
         <th>Data</th>
         <th class="p3d-num">Temperatura Máx./Mín. (°C)</th>
         <th class="p3d-num">Umidade Mín./Máx. (%)</th>
         <th class="p3d-num">Rajada prevista (km/h)</th>
         <th class="p3d-num">Chuva prevista/dia (mm)</th>
+        <th class="p3d-num">Probabilidade de chuva (%)</th>
         <th class="p3d-num">Índice UV (máx.)</th>
         <th class="p3d-num">Calor</th>
         <th>Condição geral</th>
       </tr></thead>
       <tbody>${linhas}</tbody>
     </table>
-    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "INMET")}; umidade — ${esc(p.fontesCampo?.umidade || "INMET")}; rajada — ${esc(p.fontesCampo?.rajada || "INMET")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
+    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "INMET")}; umidade — ${esc(p.fontesCampo?.umidade || "INMET")}; rajada — ${esc(p.fontesCampo?.rajada || "INMET")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; probabilidade de chuva — ${esc(p.fontesCampo?.probabilidadeChuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
       ${p.status === "indisponivel" ? "Tentativa de consulta" : "Atualização (horário da consulta à fonte)"}: ${esc(consulta || "horário indisponível")}, horário local.
       INMET é prioritário para chuva, vento e rajada; quando não publica um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita na linha de fontes. O índice UV usa Open-Meteo.
       Fonte de dados de calor: ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))} — ${DESCRICAO_CALOR}.</p>
@@ -1064,6 +1124,14 @@ function renderPdfHtml(r, opcoes = {}) {
   .ms-leg-item { display: inline-block; margin-right: 8px; white-space: nowrap; }
   .ms-chip { display: inline-block; width: 10px; height: 10px; border: 1px solid #555; margin-right: 4px; vertical-align: -1px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .ms-ref { font-size: 8pt; color: #444; margin: 5px 0 0 0; }
+  .ms-ref a { word-break: break-all; }
+  .ms-referencia { font-size: 9.5pt; margin: 4px 0 8px 0; }
+  .ms-aviso { font-size: 9.5pt; margin: 0 0 8px 0; padding: 6px 10px; border-left: 4px solid ${brand.amarelo}; background: #FFFBE6; }
+  table.ms-area { width: 100%; margin: 0 0 3px 0; font-size: 9.5pt; border: 0; }
+  table.ms-area td { padding: 2px 4px; border: 0; border-bottom: 1px solid ${brand.cinzaClaro}; }
+  table.ms-area td.ms-area-pct { text-align: right; font-weight: bold; white-space: nowrap; width: 22%; }
+  table.ms-area tr.ms-area-zero td { color: #888; font-weight: normal; }
+  .ms-nota-pct { font-size: 7.5pt; color: #666; margin: 0; }
   td.ms-col-info { padding-left: 6px !important; }
   .ms-uf-titulo { font-size: 13pt; font-weight: bold; color: ${brand.verde}; line-height: 1.3; margin: 0 0 4px 0; }
   .ms-uf-abrangencia { font-size: 9pt; font-style: italic; color: #555; margin-bottom: 12px; }
@@ -1088,7 +1156,7 @@ function renderPdfHtml(r, opcoes = {}) {
   .p3d-max { font-weight: bold; color: #B23A12; }
   .p3d-min { font-weight: bold; color: #1F5F99; }
   .p3d-sep { color: #999; margin: 0 5px; }
-  .p3d-nd { font-size: 9pt; font-style: italic; color: #666; white-space: nowrap; }
+  .p3d-nd { font-size: 9pt; font-style: italic; color: #666; }
   .calor-nivel { font-weight: bold; white-space: nowrap; }
   .calor-nd { font-size: 9pt; font-style: italic; color: #666; white-space: nowrap; }
   .p3d-aviso { font-size: 9.5pt; margin: 6px 0; padding: 6px 10px; border-left: 4px solid ${brand.amarelo}; background: #FFFBE6; }

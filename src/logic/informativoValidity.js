@@ -11,6 +11,26 @@ const EDICOES_INFORMATIVO = Object.freeze({
     validadeFimDia: 1,
     validadeFimHora: 0,
   }),
+  "09:00": Object.freeze({
+    codigo: "09h",
+    papel: "atualizacao",
+    inicioHora: 9,
+    fimPrevisaoHora: 24,
+    previsaoAte: "00h",
+    periodo: "hoje, das 09h até 00h do dia seguinte",
+    validadeFimDia: 1,
+    validadeFimHora: 5,
+  }),
+  "12:00": Object.freeze({
+    codigo: "12h",
+    papel: "atualizacao",
+    inicioHora: 12,
+    fimPrevisaoHora: 24,
+    previsaoAte: "00h",
+    periodo: "hoje, das 12h até 00h do dia seguinte",
+    validadeFimDia: 1,
+    validadeFimHora: 5,
+  }),
   "15:00": Object.freeze({
     codigo: "15h",
     papel: "atualizacao",
@@ -21,7 +41,46 @@ const EDICOES_INFORMATIVO = Object.freeze({
     validadeFimDia: 1,
     validadeFimHora: 5,
   }),
+  "17:00": Object.freeze({
+    codigo: "17h",
+    papel: "atualizacao",
+    inicioHora: 17,
+    fimPrevisaoHora: 24,
+    previsaoAte: "00h",
+    periodo: "hoje, das 17h até 00h do dia seguinte",
+    validadeFimDia: 1,
+    validadeFimHora: 5,
+  }),
+  "20:00": Object.freeze({
+    codigo: "20h",
+    papel: "atualizacao",
+    inicioHora: 20,
+    fimPrevisaoHora: 24,
+    previsaoAte: "00h",
+    periodo: "hoje, das 20h até 00h do dia seguinte",
+    validadeFimDia: 1,
+    validadeFimHora: 5,
+  }),
 });
+
+// Edições do dia em ordem cronológica. A das 05h é a inicial; as demais são
+// atualizações comparadas com ela.
+const HORARIOS_INFORMATIVO = Object.freeze(Object.keys(EDICOES_INFORMATIVO).sort());
+const HORARIO_EDICAO_INICIAL = "05:00";
+
+/**
+ * Lista de horários a partir de texto "HH:MM,HH:MM" (ex.: variável de
+ * ambiente). Vazio = todas as edições. Horário desconhecido gera erro, para
+ * não agendar silenciosamente uma edição sem regras definidas.
+ */
+function horariosConfigurados(valor, padrao = HORARIOS_INFORMATIVO) {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return [...padrao];
+  const lista = [...new Set(texto.split(",").map((h) => h.trim()).filter(Boolean))];
+  const invalido = lista.find((h) => !EDICOES_INFORMATIVO[h]);
+  if (invalido) throw new Error(`Horário de informativo inválido: "${invalido}". Use: ${HORARIOS_INFORMATIVO.join(", ")}.`);
+  return lista.sort();
+}
 
 function partesNoFuso(instante, fuso = FUSO_INFORMATIVOS) {
   const partes = new Intl.DateTimeFormat("en-CA", {
@@ -101,6 +160,9 @@ function informativoVigente(validade, instante = new Date()) {
 module.exports = {
   FUSO_INFORMATIVOS,
   EDICOES_INFORMATIVO,
+  HORARIOS_INFORMATIVO,
+  HORARIO_EDICAO_INICIAL,
+  horariosConfigurados,
   partesNoFuso,
   instanteNoFuso,
   adicionarDias,

@@ -6,7 +6,7 @@ const { buscarMar } = require("../src/sources/marine");
 const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../src/sources/inmet");
 const { criarServicoCorRio } = require("../src/sources/corRio");
 const climaSaude = require("../src/sources/climaSaudeService");
-const { competenciaConfigurada, interpretarApi } = require("../src/sources/monitorSecas");
+const { competenciaConfigurada, descobrirPublicacao, interpretarApi } = require("../src/sources/monitorSecas");
 const oceanopAreas = require("../src/config/oceanopAreas");
 
 const inicio = new Date();
@@ -123,8 +123,10 @@ async function main() {
     })),
   ];
 
-  const competencia = competenciaConfigurada();
+  let competencia = null;
   tarefas.push(executar("anaMonitorSecas", async () => {
+    // Referência fixada no .env ou, no modo normal, a publicação mais recente.
+    competencia = competenciaConfigurada() || (await descobrirPublicacao({ gravar: false })).competencia;
     const url = `https://apimsbr.ana.gov.br/rest/cms-msne/mapa-monitor?mes=${competencia.mes}&ano=${competencia.ano}&final=true&response_format=apil5&use_fk=true&include_all_obj_fk=true&limit=1&orderBy=id,desc`;
     const resposta = await fetch(url, { signal: AbortSignal.timeout(10000), headers: { Accept: "application/json", Referer: "https://monitordesecas.ana.gov.br/" } });
     let bruto = null;

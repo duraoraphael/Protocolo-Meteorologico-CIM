@@ -6,6 +6,7 @@ const { cartaoCorRioEmail } = require("./corRioEmail");
 const AlertTitle = require("../../public/alert-title");
 const { calorPorData, dataLocal, ROTULOS_CALOR } = require("../logic/calorPorData");
 const { TIPOS_DOCUMENTO, alertaExibivel } = require("../logic/alertPresentation");
+const { edicaoInformativo } = require("../logic/informativoValidity");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
 // bgcolor + background) para que nenhum cliente herde áreas escuras. Só o
@@ -53,14 +54,27 @@ function rajadaMaxima(r) {
   return { valor: maximo.rajadaMaxKmh, periodo: maximo.periodo };
 }
 
+// Hora final de um período ("12h–18h" → 18; "18h–00h" → 24).
+function fimPeriodo(p) {
+  const fim = String(p?.janela || "").match(/[–-]\s*(\d{1,2})h/);
+  if (fim) return Number(fim[1]) === 0 ? 24 : Number(fim[1]);
+  return { "manhã": 12, manha: 12, tarde: 18, noite: 24 }[String(p?.periodo || "").toLowerCase()] ?? null;
+}
+
+// Períodos que ainda importam para a edição: os que terminam depois do
+// horário dela (às 15h, a manhã já passou).
+function periodosDaEdicao(r, periodos) {
+  const inicio = edicaoInformativo(r.horarioAgendado)?.inicioHora;
+  if (!Number.isFinite(inicio)) return periodos;
+  return periodos.filter((p) => { const fim = fimPeriodo(p); return fim === null || fim > inicio; });
+}
+
 function chuvaPrevistaAcumulada(r) {
   const diaria = r.previsaoDias?.[0]?.chuvaMm;
   if (Number.isFinite(diaria)) return diaria;
 
   const periodos = Array.isArray(r.chuvaPorPeriodo) ? r.chuvaPorPeriodo : [];
-  const relevantes = r.horarioAgendado === "15:00"
-    ? periodos.filter((p) => !/^manh[aã]$/i.test(String(p?.periodo || "")))
-    : periodos;
+  const relevantes = periodosDaEdicao(r, periodos);
   if (!relevantes.length || relevantes.some((p) => !Number.isFinite(p?.precipitacaoMm))) return null;
   return Math.round(relevantes.reduce((total, p) => total + p.precipitacaoMm, 0) * 10) / 10;
 }
@@ -68,11 +82,11 @@ function chuvaPrevistaAcumulada(r) {
 function probabilidadeChuvaPrevista(r) {
   if (Number.isFinite(r.probabilidadeChuvaPrevista)) return r.probabilidadeChuvaPrevista;
   const periodos = Array.isArray(r.chuvaPorPeriodo) ? r.chuvaPorPeriodo : [];
-  const relevantes = r.horarioAgendado === "15:00"
-    ? periodos.filter((p) => !/^manh[aã]$/i.test(String(p?.periodo || "")))
-    : r.horarioAgendado === "05:00"
-      ? periodos.filter((p) => !/^noite$/i.test(String(p?.periodo || "")))
-      : periodos;
+  // A edição das 05h considera 05h–15h (sem a noite); as demais, do seu
+  // horário até 00h.
+  const relevantes = r.horarioAgendado === "05:00"
+    ? periodos.filter((p) => !/^noite$/i.test(String(p?.periodo || "")))
+    : periodosDaEdicao(r, periodos);
   const valores = relevantes.map((p) => p?.probabilidade).filter(Number.isFinite);
   return valores.length ? Math.max(...valores) : null;
 }

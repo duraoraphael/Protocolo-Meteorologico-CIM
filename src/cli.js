@@ -9,8 +9,10 @@
 //   node src/cli.js --teste --horario=05:00,15:00 --todas-bases
 //                                    (envio de TESTE dos informativos agendados:
 //                                     assunto "[TESTE 05:00]", PDF *_TESTE, sem
-//                                     histórico do agendador e sem GED; o das
-//                                     15h compara com o das 05h deste teste)
+//                                     histórico do agendador e sem GED; as
+//                                     edições após 05h comparam com a das 05h
+//                                     deste teste). Edições: 05:00, 09:00,
+//                                     12:00, 15:00, 17:00, 20:00 ou "todas".
 
 require("dotenv").config();
 require("./security/certificados");
@@ -18,6 +20,7 @@ const { executarPipeline } = require("./pipeline");
 const { fecharNavegador } = require("./render/pdfGenerator");
 const { CIDADES } = require("./config/cities");
 const { resumo } = require("./logic/scheduledReport");
+const { HORARIO_EDICAO_INICIAL, horariosConfigurados } = require("./logic/informativoValidity");
 
 function lerArgumento(nome) {
   const arg = process.argv.find((a) => a.startsWith(`--${nome}=`));
@@ -25,9 +28,8 @@ function lerArgumento(nome) {
 }
 
 async function enviarTeste(enviarEmail) {
-  const horarios = (lerArgumento("horario") || "05:00,15:00").split(",").map((h) => h.trim()).filter(Boolean);
-  const invalido = horarios.find((h) => !["05:00", "15:00"].includes(h));
-  if (invalido) throw new Error(`Horário inválido: "${invalido}". Use 05:00 e/ou 15:00.`);
+  const argumento = lerArgumento("horario") || "05:00,15:00";
+  const horarios = horariosConfigurados(argumento === "todas" ? "" : argumento);
   const bases = process.argv.includes("--todas-bases") ? Object.keys(CIDADES) : [lerArgumento("cidade") || process.env.CIDADE];
   let falhas = 0;
   for (const cidadeChave of bases) {
@@ -35,7 +37,7 @@ async function enviarTeste(enviarEmail) {
     for (const horarioAgendado of horarios) {
       try {
         const r = await executarPipeline({ cidadeChave, enviarEmail, horarioAgendado, teste: true, comparacaoAnterior: anterior });
-        if (horarioAgendado === "05:00") anterior = resumo(r.report);
+        if (horarioAgendado === HORARIO_EDICAO_INICIAL) anterior = resumo(r.report);
         console.log(`[CIM][TESTE ${horarioAgendado}] ${r.report.cidade.nome}: ${r.envio ? `enviado para ${r.envio.destinatarios.join(", ")}` : "e-mail não enviado (--sem-email)"} | ${r.arquivoPdf}`);
       } catch (erro) {
         falhas += 1;

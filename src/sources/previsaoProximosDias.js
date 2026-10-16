@@ -2,7 +2,8 @@
 //
 // Fontes: INMET é prioritário para chuva, vento e rajada; Open-Meteo fornece
 // complemento identificado quando o produto municipal não publica valores
-// numéricos, além do índice UV e de temperatura/condição quando necessário.
+// numéricos, além do índice UV, da probabilidade diária de chuva e de
+// temperatura/condição quando necessário.
 //
 // A Open-Meteo calcula os agregados diários no dia civil (00h–24h) do fuso
 // pedido em `timezone`, então pedimos no fuso da própria localidade e não é
@@ -26,6 +27,7 @@ const CAMPOS = Object.freeze({
   temperature_2m_min: "°C",
   wind_gusts_10m_max: "km/h",
   precipitation_sum: "mm",
+  precipitation_probability_max: "%",
   uv_index_max: "",
   weather_code: "wmo code",
 });
@@ -93,6 +95,7 @@ function diaSemDados(dataIso) {
     tempMinC: null,
     rajadaMaxKmh: null,
     chuvaMm: null,
+    probabilidadeChuvaPct: null,
     uvMax: null,
     codigoTempo: null,
     condicao: null,
@@ -137,6 +140,7 @@ function montarPrevisaoProximosDiasInmet(cidade, previsaoInmet, { agora = new Da
       chuva: dias.some((dia) => Number.isFinite(dia.chuvaMm))
         ? "INMET — previsão oficial"
         : "Indisponível — o produto municipal do INMET não publicou volume previsto numérico",
+      probabilidadeChuva: "Indisponível — o produto municipal do INMET não publicou probabilidade diária",
       uv: "Open-Meteo — previsão complementar",
       condicao: "INMET — previsão oficial",
     },
@@ -156,6 +160,7 @@ function mesclarPrevisaoProximosDias(inmet, complementar) {
       tempMinC: usarNumero(oficial.tempMinC, alternativo.tempMinC),
       rajadaMaxKmh: usarNumero(oficial.rajadaMaxKmh, alternativo.rajadaMaxKmh),
       chuvaMm: usarNumero(oficial.chuvaMm, alternativo.chuvaMm),
+      probabilidadeChuvaPct: usarNumero(oficial.probabilidadeChuvaPct, alternativo.probabilidadeChuvaPct),
       uvMax: usarNumero(oficial.uvMax, alternativo.uvMax),
       codigoTempo: Number.isInteger(oficial.codigoTempo) ? oficial.codigoTempo : alternativo.codigoTempo ?? null,
       condicao: oficial.condicao || alternativo.condicao || null,
@@ -167,6 +172,7 @@ function mesclarPrevisaoProximosDias(inmet, complementar) {
       (!Number.isFinite(oficial.tempMinC) && Number.isFinite(alternativo.tempMinC)) ||
       (!Number.isFinite(oficial.rajadaMaxKmh) && Number.isFinite(alternativo.rajadaMaxKmh)) ||
       (!Number.isFinite(oficial.chuvaMm) && Number.isFinite(alternativo.chuvaMm)) ||
+      (!Number.isFinite(oficial.probabilidadeChuvaPct) && Number.isFinite(alternativo.probabilidadeChuvaPct)) ||
       Number.isFinite(alternativo.uvMax) ||
       (!oficial.condicao && Boolean(alternativo.condicao));
   });
@@ -199,6 +205,7 @@ function mesclarPrevisaoProximosDias(inmet, complementar) {
       umidade: "INMET — previsão oficial",
       rajada: fonteNumerica("rajadaMaxKmh"),
       chuva: fonteNumerica("chuvaMm"),
+      probabilidadeChuva: fonteNumerica("probabilidadeChuvaPct"),
       uv: dias.some((dia) => Number.isFinite(dia.uvMax)) ? "Open-Meteo — previsão complementar" : "Indisponível",
       condicao: condicaoInmet ? "INMET — previsão oficial" : condicaoComplementar ? "Open-Meteo — previsão complementar" : "Indisponível",
     },
@@ -233,6 +240,13 @@ function interpretarResposta(json, datas, fuso) {
     return typeof v === "number" && Number.isFinite(v) ? v : null;
   };
 
+  // Probabilidade diária publicada pela fonte (precipitation_probability_max,
+  // máxima do dia civil local). Valor fora de 0–100 é tratado como inválido.
+  const probabilidade = (i) => {
+    const v = valor("precipitation_probability_max", i);
+    return v !== null && v >= 0 && v <= 100 ? Math.round(v) : null;
+  };
+
   const indicePorData = new Map(daily.time.map((data, i) => [data, i]));
   const dias = datas.map((data) => {
     const i = indicePorData.get(data);
@@ -244,6 +258,7 @@ function interpretarResposta(json, datas, fuso) {
       tempMinC: valor("temperature_2m_min", i),
       rajadaMaxKmh: valor("wind_gusts_10m_max", i),
       chuvaMm: valor("precipitation_sum", i),
+      probabilidadeChuvaPct: probabilidade(i),
       uvMax: valor("uv_index_max", i),
       codigoTempo,
       condicao: descreverCondicaoDiaria(codigoTempo),
@@ -254,11 +269,11 @@ function interpretarResposta(json, datas, fuso) {
 }
 
 function campoPreenchido(dia) {
-  return ["tempMaxC", "tempMinC", "rajadaMaxKmh", "chuvaMm", "uvMax", "condicao"].some((c) => dia[c] !== null);
+  return ["tempMaxC", "tempMinC", "rajadaMaxKmh", "chuvaMm", "probabilidadeChuvaPct", "uvMax", "condicao"].some((c) => dia[c] !== null);
 }
 
 function diaCompleto(dia) {
-  return ["tempMaxC", "tempMinC", "rajadaMaxKmh", "chuvaMm", "uvMax", "condicao"].every((c) => dia[c] !== null);
+  return ["tempMaxC", "tempMinC", "rajadaMaxKmh", "chuvaMm", "probabilidadeChuvaPct", "uvMax", "condicao"].every((c) => dia[c] !== null);
 }
 
 /**

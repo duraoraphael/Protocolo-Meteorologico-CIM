@@ -49,7 +49,8 @@ function registroHistorico(report, enviadoEmISO = new Date().toISOString()) {
   };
 }
 
-function compararComManha(anterior, atual) {
+// Compara uma edição posterior do dia com a edição inicial (05:00).
+function compararComManha(anterior, atual, horarioAtual = "15:00") {
   if (!anterior) return ["Relatório das 05:00 indisponível para comparação nesta base."];
   const mudancas = [];
   for (const [campo, nome] of [["grau", "Grau geral"], ["vento", "Gatilho de vento"], ["chuva", "Gatilho de chuva"]]) {
@@ -61,7 +62,7 @@ function compararComManha(anterior, atual) {
   }
   for (const [campo, nome, unidade] of [["rajadaMaxKmh", "Rajada prevista", "km/h"], ["precipitacaoTotalMm", "Chuva prevista", "mm"]]) {
     if (Number.isFinite(anterior[campo]) && Number.isFinite(atual[campo]) && anterior[campo] !== atual[campo]) {
-      mudancas.push(`${nome} (previsão das 05:00 → previsão das 15:00): ${anterior[campo]} ${unidade} → ${atual[campo]} ${unidade}.`);
+      mudancas.push(`${nome} (previsão das 05:00 → previsão das ${horarioAtual}): ${anterior[campo]} ${unidade} → ${atual[campo]} ${unidade}.`);
     }
   }
   const antes = anterior.fenomenos || [];

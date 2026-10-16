@@ -22,10 +22,19 @@ function fetchCorRio(url) {
   return Promise.resolve(json([]));
 }
 
+// ANA simulada: listagem do bucket (meses e mapas estaduais) + API mensal.
 function fetchAna(comp) {
+  const aaaamm = `${comp.ano}${String(comp.mes).padStart(2, "0")}`;
+  const xml = (corpo) => new Response(`<ListBucketResult><IsTruncated>false</IsTruncated>${corpo}</ListBucketResult>`, { status: 200 });
   return async (url) => {
-    const mes = Number(new URL(url).searchParams.get("mes"));
-    const ano = Number(new URL(url).searchParams.get("ano"));
+    const u = new URL(url);
+    if (u.hostname.startsWith("ana-monitor-secas-files")) {
+      const prefixo = u.searchParams.get("prefix");
+      if (prefixo === "uploads/produtos/srm_persist/") return xml(`<CommonPrefixes><Prefix>${prefixo}${aaaamm}/</Prefix></CommonPrefixes>`);
+      return xml(`<Contents><Key>${prefixo}ms_rio_de_janeiro_${aaaamm}.png</Key><ETag>"x"</ETag><Size>10</Size></Contents>`);
+    }
+    const mes = Number(u.searchParams.get("mes"));
+    const ano = Number(u.searchParams.get("ano"));
     if (mes !== comp.mes || ano !== comp.ano) return json({ data: { list: [] } });
     return json({ data: { list: [{ id: 1, mes, ano, final: true, nome: comp.rotulo.replace("/", " de ") }] } });
   };
@@ -33,7 +42,7 @@ function fetchAna(comp) {
 
 // Fontes saudáveis; cada teste troca só a que quer quebrar.
 function fontesOk(extra = {}) {
-  const { competenciaConfigurada } = require("../src/sources/monitorSecas");
+  const { competenciaDeChave } = require("../src/sources/monitorSecas");
   return {
     openMeteo: async () => ({
       condicaoGeral: "Poucas nuvens", tempMin: 21, tempMax: 31,
@@ -46,7 +55,7 @@ function fontesOk(extra = {}) {
     observacaoInmet: async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: 22, temperaturaMaxC: 37, chuvaUltimaHoraMm: 0.8, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: 31 } }),
     climaSaude: async () => ({ status: "operacional", dados: { dataConsulta: "2026-10-13", municipio: "Rio de Janeiro", uf: "RJ", ehf: { classificacao: "Sem excesso" }, riscoCombinado: "Normal" } }),
     corRio: (opcoes) => criarServicoCorRio({ ...opcoes, fetchImpl: fetchCorRio, esperarFn: semEspera }),
-    fetch: fetchAna(competenciaConfigurada()),
+    fetch: fetchAna(competenciaDeChave("2026-08")),
     ...extra,
   };
 }
@@ -116,18 +125,25 @@ test("falha de DNS no serviço marinho vira indisponível; licença Open-Meteo a
   assert.equal(r.problemas.length, 2);
 });
 
-test("ANA avisa quando já existe competência mais nova que a configurada", async () => {
-  const { competenciaConfigurada } = require("../src/sources/monitorSecas");
-  const comp = competenciaConfigurada();
-  const base = fetchAna(comp);
-  const seguinte = (comp.mes % 12) + 1;
-  const proxima = { mes: seguinte, ano: comp.mes === 12 ? comp.ano + 1 : comp.ano };
-  const fetchProxima = fetchAna({ ...proxima, rotulo: competenciaConfigurada(`${proxima.ano}-${String(seguinte).padStart(2, "0")}`).rotulo });
-  const fetch = async (url) => (Number(new URL(url).searchParams.get("mes")) === seguinte ? fetchProxima(url) : base(url));
-  const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ fetch }) });
-  const item = itemDe(r, "ANA Monitor de Secas");
-  assert.equal(item.situacao, SITUACAO.OK);
-  assert.match(item.detalhe, /MONITOR_SECAS_COMPETENCIA=/);
+test("ANA informa a publicação mais recente e avisa quando a competência fixada é outra", async () => {
+  const { competenciaDeChave } = require("../src/sources/monitorSecas");
+  const fetch = fetchAna(competenciaDeChave("2026-08"));
+  const anterior = process.env.MONITOR_SECAS_COMPETENCIA;
+  try {
+    delete process.env.MONITOR_SECAS_COMPETENCIA;
+    let item = itemDe(await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ fetch }) }), "ANA Monitor de Secas");
+    assert.equal(item.situacao, SITUACAO.OK);
+    assert.match(item.detalhe, /Publicação mais recente: Agosto\/2026 \(mapa final na API e 1 mapas estaduais no bucket\)/);
+    assert.doesNotMatch(item.detalhe, /MONITOR_SECAS_COMPETENCIA/);
+
+    process.env.MONITOR_SECAS_COMPETENCIA = "2026-07";
+    item = itemDe(await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ fetch }) }), "ANA Monitor de Secas");
+    assert.equal(item.situacao, SITUACAO.OK);
+    assert.match(item.detalhe, /MONITOR_SECAS_COMPETENCIA=2026-07 fixa outra referência/);
+  } finally {
+    if (anterior === undefined) delete process.env.MONITOR_SECAS_COMPETENCIA;
+    else process.env.MONITOR_SECAS_COMPETENCIA = anterior;
+  }
 });
 
 test("utilitários: campos faltando e classificação de erro", () => {

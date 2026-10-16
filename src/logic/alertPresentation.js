@@ -7,10 +7,24 @@ const RECOMENDACAO_NEUTRA =
 
 const TIPOS_DOCUMENTO = Object.freeze({
   INFORMATIVO_05H: "INFORMATIVO_05H",
+  INFORMATIVO_09H: "INFORMATIVO_09H",
+  INFORMATIVO_12H: "INFORMATIVO_12H",
   INFORMATIVO_15H: "INFORMATIVO_15H",
+  INFORMATIVO_17H: "INFORMATIVO_17H",
+  INFORMATIVO_20H: "INFORMATIVO_20H",
   AVISO_COR_RIO: "AVISO_COR_RIO",
   EXTRAORDINARIO: "ALERTA_EXTRAORDINARIO",
   ALERTA_CIM: "ALERTA_CIM",
+});
+
+// Edições programadas do informativo diário (ver informativoValidity.js).
+const INFORMATIVO_POR_HORARIO = Object.freeze({
+  "05:00": TIPOS_DOCUMENTO.INFORMATIVO_05H,
+  "09:00": TIPOS_DOCUMENTO.INFORMATIVO_09H,
+  "12:00": TIPOS_DOCUMENTO.INFORMATIVO_12H,
+  "15:00": TIPOS_DOCUMENTO.INFORMATIVO_15H,
+  "17:00": TIPOS_DOCUMENTO.INFORMATIVO_17H,
+  "20:00": TIPOS_DOCUMENTO.INFORMATIVO_20H,
 });
 
 const FENOMENO_POR_TIPO = Object.freeze({
@@ -39,9 +53,8 @@ function pesoNivel(grau) {
 }
 
 function tipoDocumentoPorHorario(horarioAgendado) {
-  if (horarioAgendado === "05:00") return TIPOS_DOCUMENTO.INFORMATIVO_05H;
-  if (horarioAgendado === "15:00") return TIPOS_DOCUMENTO.INFORMATIVO_15H;
-  return TIPOS_DOCUMENTO.EXTRAORDINARIO;
+  const tipo = INFORMATIVO_POR_HORARIO[horarioAgendado];
+  return tipo || TIPOS_DOCUMENTO.EXTRAORDINARIO;
 }
 
 function tipoDocumentoDoRelatorio(report) {
@@ -49,8 +62,7 @@ function tipoDocumentoDoRelatorio(report) {
 }
 
 function informativoProgramado(tipoDocumento) {
-  return tipoDocumento === TIPOS_DOCUMENTO.INFORMATIVO_05H
-    || tipoDocumento === TIPOS_DOCUMENTO.INFORMATIVO_15H;
+  return Object.values(INFORMATIVO_POR_HORARIO).includes(tipoDocumento);
 }
 
 function deveExibirNoDocumento({ nivel, tipoDocumento = TIPOS_DOCUMENTO.EXTRAORDINARIO } = {}) {

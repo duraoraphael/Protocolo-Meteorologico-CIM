@@ -3,6 +3,10 @@ const { executarPipeline } = require("./pipeline");
 const { CIDADES } = require("./config/cities");
 const { dataBrasilia, lerEstado, gravarEstado, registroHistorico } = require("./logic/scheduledReport");
 const { BASE_COR_RIO } = require("./config/distributionBases");
+const { HORARIOS_INFORMATIVO, HORARIO_EDICAO_INICIAL, horariosConfigurados } = require("./logic/informativoValidity");
+
+// O aviso COR-Rio mantém por padrão só as edições das 05:00 e 15:00.
+const HORARIOS_COR_RIO_PADRAO = Object.freeze(["05:00", "15:00"]);
 const {
   relatorioDiarioAtivo,
   envioUnicoAgendadoAtivo,
@@ -10,7 +14,7 @@ const {
 } = require("./config/email");
 
 /**
- * Restrição opcional do envio único de teste. O agendamento 05h/15h percorre
+ * Restrição opcional do envio único de teste. O agendamento diário percorre
  * sempre todas as bases cadastradas em src/config/cities.js.
  *   BASES_ENVIO_DIARIO=rio_de_janeiro,salvador
  */
@@ -38,6 +42,7 @@ async function executarHorarioAgendado(horario, {
   carregar = lerEstado,
   salvar = gravarEstado,
   data = dataBrasilia(),
+  incluirCorRio = true,
 } = {}) {
   if (processamentoAgendado) {
     console.warn(`[AGENDADOR] ${horario}: execução anterior ainda em andamento; ciclo sobreposto ignorado.`);
@@ -60,7 +65,10 @@ async function executarHorarioAgendado(horario, {
           cidadeChave,
           enviarEmail: true,
           horarioAgendado: horario,
-          comparacaoAnterior: horario === "15:00" ? estado[`${data}|${cidadeChave}|05:00`]?.resumo || null : null,
+          // Edições posteriores comparam com a edição inicial (05:00) do dia.
+          comparacaoAnterior: horario !== HORARIO_EDICAO_INICIAL
+            ? estado[`${data}|${cidadeChave}|${HORARIO_EDICAO_INICIAL}`]?.resumo || null
+            : null,
         });
         if (!resultado.envio) throw new Error("SMTP não confirmou o envio do relatório.");
         estado[chave] = registroHistorico(resultado.report);
@@ -80,7 +88,7 @@ async function executarHorarioAgendado(horario, {
         onResultado?.(erro, null);
       }
     }
-    {
+    if (incluirCorRio) {
       const chaveCorRio = `${data}|${BASE_COR_RIO}|${horario}`;
       if (!estado[chaveCorRio]) {
         try {
@@ -114,7 +122,21 @@ async function executarHorarioAgendado(horario, {
   }
 }
 
-/** Agenda os dois relatórios diários para todas as bases em Brasília. */
+function lerHorarios(variavel, padrao) {
+  try {
+    return horariosConfigurados(process.env[variavel], padrao);
+  } catch (erro) {
+    console.error(`[AGENDADOR] ${variavel}: ${erro.message} Usando o padrão (${padrao.join(", ")}).`);
+    return [...padrao];
+  }
+}
+
+/**
+ * Agenda as edições diárias do informativo para todas as bases, no horário
+ * de Brasília. Padrão: 05:00, 09:00, 12:00, 15:00, 17:00 e 20:00.
+ *   HORARIOS_INFORMATIVO=05:00,15:00   (opcional; restringe as edições)
+ *   HORARIOS_COR_RIO=05:00,15:00       (edições que também enviam o aviso COR-Rio)
+ */
 function iniciarAgendamentoDiario(onResultado, agendar = cron.schedule) {
   if (!relatorioDiarioAtivo()) {
     console.log("[CIM] Agendamento diário desativado em src/config/email.js.");
@@ -125,10 +147,16 @@ function iniciarAgendamentoDiario(onResultado, agendar = cron.schedule) {
     return null;
   }
 
-  const manha = agendar("0 5 * * *", () => executarHorarioAgendado("05:00", { onResultado }), { timezone: "America/Sao_Paulo" });
-  const tarde = agendar("0 15 * * *", () => executarHorarioAgendado("15:00", { onResultado }), { timezone: "America/Sao_Paulo" });
-  console.log(`[AGENDADOR] 05:00 e 15:00 (America/Sao_Paulo), ${Object.keys(CIDADES).length} bases meteorológicas + distribuição COR-RIO.`);
-  return { manha, tarde };
+  const horarios = lerHorarios("HORARIOS_INFORMATIVO", HORARIOS_INFORMATIVO);
+  const horariosCorRio = lerHorarios("HORARIOS_COR_RIO", HORARIOS_COR_RIO_PADRAO);
+  const tarefas = Object.fromEntries(horarios.map((horario) => {
+    const [hora, minuto] = horario.split(":").map(Number);
+    const incluirCorRio = horariosCorRio.includes(horario);
+    const tarefa = agendar(`${minuto} ${hora} * * *`, () => executarHorarioAgendado(horario, { onResultado, incluirCorRio }), { timezone: "America/Sao_Paulo" });
+    return [horario, tarefa];
+  }));
+  console.log(`[AGENDADOR] ${horarios.join(", ")} (America/Sao_Paulo), ${Object.keys(CIDADES).length} bases meteorológicas; aviso COR-RIO em ${horariosCorRio.filter((h) => horarios.includes(h)).join(", ") || "nenhum horário"}.`);
+  return tarefas;
 }
 
 /**

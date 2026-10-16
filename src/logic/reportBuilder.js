@@ -39,7 +39,11 @@ function agora() { return new Date(); }
 const PERIODO_COBERTO_AGENDADO = "definido pela edição do informativo";
 const JANELAS_PROBABILIDADE_EDICAO = Object.freeze({
   "05:00": Object.freeze({ inicioHora: 5, fimHora: 15, janela: "05h–15h" }),
+  "09:00": Object.freeze({ inicioHora: 9, fimHora: 24, janela: "09h–00h" }),
+  "12:00": Object.freeze({ inicioHora: 12, fimHora: 24, janela: "12h–00h" }),
   "15:00": Object.freeze({ inicioHora: 15, fimHora: 24, janela: "15h–00h" }),
+  "17:00": Object.freeze({ inicioHora: 17, fimHora: 24, janela: "17h–00h" }),
+  "20:00": Object.freeze({ inicioHora: 20, fimHora: 24, janela: "20h–00h" }),
 });
 
 function probabilidadeChuvaDaEdicao({ horarioAgendado, inmetPrevisao, openMeteo } = {}) {
