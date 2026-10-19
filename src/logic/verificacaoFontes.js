@@ -22,6 +22,7 @@ const { competenciaConfigurada, descobrirPublicacao } = require("../sources/moni
 const { tipoErro } = require("../sources/httpJsonClient");
 const { credenciaisConfiguradas, destinoConfigurado } = require("../integrations/sharepointGed");
 const oceanopAreas = require("../config/oceanopAreas");
+const { buscarOceanop, validarPonto } = require("../sources/oceanop");
 
 const SITUACAO = Object.freeze({
   OK: "ok",
@@ -166,9 +167,17 @@ function verificarConfiguracoes(env) {
   else if (producao) itens.push(item("Licença Open-Meteo", "Configuração", SITUACAO.BLOQUEADA, "NODE_ENV=production sem OPEN_METEO_API_KEY: Open-Meteo bloqueada até a licença comercial ser configurada."));
   else itens.push(item("Licença Open-Meteo", "Configuração", SITUACAO.NAO_CONFIGURADA, "Sem OPEN_METEO_API_KEY: usando API gratuita (uso não comercial). Produção ficará bloqueada."));
 
-  itens.push(Object.keys(oceanopAreas).length
-    ? item("Oceanop", "Configuração", SITUACAO.NAO_CONFIGURADA, "Áreas cadastradas; consulta real só dentro da rede/VPN Petrobras (não testada aqui).")
-    : item("Oceanop", "Configuração", SITUACAO.NAO_CONFIGURADA, "Nenhum identificador de área em src/config/oceanopAreas.js."));
+  const pontosOceanop = Object.values(oceanopAreas).filter((ponto) => ponto?.habilitado === true);
+  if (!pontosOceanop.length) {
+    itens.push(item("Oceanop", "Configuração", SITUACAO.NAO_CONFIGURADA, "Nenhum ponto autorizado em src/config/oceanopAreas.js."));
+  } else {
+    try {
+      pontosOceanop.forEach(validarPonto);
+      itens.push(item("Oceanop", "Configuração", SITUACAO.OK, `${pontosOceanop.length} ponto(s) autorizado(s) com ID e coordenadas válidos.`));
+    } catch (erro) {
+      itens.push(item("Oceanop", "Configuração", SITUACAO.BLOQUEADA, erro.message));
+    }
+  }
 
   itens.push(destinoConfigurado()
     ? item("GED SharePoint", "Configuração", SITUACAO.OK, "Credenciais Azure e biblioteca configuradas.")
@@ -197,6 +206,7 @@ async function executarVerificacao({
     avisosInmet: buscarAvisosInmet,
     climaSaude: climaSaude.consultar,
     corRio: criarServicoCorRio,
+    oceanop: buscarOceanop,
     fetch: globalThis.fetch,
     ...fontes,
   };
@@ -205,6 +215,7 @@ async function executarVerificacao({
   const pontoMar = costeira.pontoMar || costeira;
   const fuso = rio.fusoHorario || "America/Sao_Paulo";
   const opcoes = { fuso, timeoutMs: OPCOES_HTTP.timeoutMs, logger: { log() {}, warn() {}, error() {} } };
+  const pontosOceanop = Object.values(oceanopAreas).filter((ponto) => ponto?.habilitado === true);
 
   const gerais = await Promise.all([
     verificar("Open-Meteo Air Quality", "Rio de Janeiro", () => f.qualidadeAr(rio.latitude, rio.longitude, opcoes), {
@@ -216,6 +227,8 @@ async function executarVerificacao({
     verificar("INMET Avisos", "Nacional", () => f.avisosInmet(rio.codigoIbge, opcoes), { avisos: "lista de avisos" }),
     verificarCorRio(f.corRio).catch((erro) => [item("COR-Rio", "Rio de Janeiro", situacaoDoErro(erro), erro.message)]),
     verificarMonitorSecas(f.fetch),
+    ...(pontosOceanop.length ? [verificar("Oceanop", `${pontosOceanop.length} ponto(s) autorizado(s)`,
+      () => f.oceanop(pontosOceanop, { ...opcoes, tentativas: 2 }), { "previsoes.0.pointId": "primeiro PointID retornado" })] : []),
   ]);
 
   // Por base em sequência: evita disparar dezenas de requisições simultâneas

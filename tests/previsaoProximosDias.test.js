@@ -249,9 +249,9 @@ test("PDF: seção técnica com unidades nos títulos e 'Não disponível' em ve
   assert.match(linhas[2], /<td class="p3d-num">0%<\/td>/, "0% é exibido normalmente");
   assert.ok(secao.includes("probabilidade de chuva — Open-Meteo;"), "fonte identificada na linha de fontes");
   assert.ok(!secao.includes("Probabilidade a preencher"));
-  assert.ok(secao.includes("<strong>02/10/2026</strong>"));
-  assert.ok(secao.includes("<strong>04/10/2026</strong>"));
-  assert.ok(!secao.includes("01/10/2026</strong>"), "dia atual não entra");
+  assert.ok(secao.includes("<strong>02/10/26</strong>"));
+  assert.ok(secao.includes("<strong>04/10/26</strong>"));
+  assert.ok(!secao.includes("01/10/26</strong>"), "dia atual não entra");
   assert.ok(secao.includes(">55,3<"));
   assert.ok(secao.includes(">0,0<"), "zero real exibido como zero");
   assert.ok(secao.includes(">4,6<") && secao.includes(">8,6<"), "UV real de cada data");
@@ -290,7 +290,7 @@ test("PDF: fonte indisponível mantém a seção com as datas", async (t) => {
   const html = renderPdfHtml(reportMinimo(previsao));
   const secao = html.slice(html.indexOf("2. Previsão para os próximos 3 dias"));
   assert.ok(secao.includes("Fonte indisponível nesta emissão"));
-  assert.equal((secao.match(/<strong>0[234]\/10\/2026<\/strong>/g) || []).length, 3);
+  assert.equal((secao.match(/<strong>0[234]\/10\/26<\/strong>/g) || []).length, 3);
   assert.equal((secao.match(/Não disponível<\/span>/g) || []).length, 18);
   assert.equal((secao.match(/<span class="p3d-nd">—<\/span>/g) || []).length, 3, "probabilidade ausente aparece como —");
   assert.equal((secao.match(/class="calor-nd">Indisponível</g) || []).length, 3);

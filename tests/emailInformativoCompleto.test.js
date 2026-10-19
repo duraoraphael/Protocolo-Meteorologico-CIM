@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const cheerio = require('cheerio');
-const { renderEmailHtml } = require('../src/render/emailTemplate');
+const { renderEmailHtml, probabilidadeChuvaPrevista } = require('../src/render/emailTemplate');
 const { VISUAL_NIVEL } = require('../src/render/alertCards');
 
 function relatorio(sobrescritas = {}) {
@@ -68,6 +68,17 @@ test('cabeçalho, indicadores e rodapé usam dados e fontes do relatório', () =
   assert.ok(!html.includes('Rajada prevista/registrada'));
   assert.ok(!html.includes('QUALIDADE DO AR (PM2,5)') && !html.includes('14.5 µg/m³'));
   assert.ok(!html.includes('display:grid') && !html.includes('display:flex'));
+});
+
+test('e-mail identifica Petrobras — OCEANOP somente quando a fonte entrou no relatório', () => {
+  const html = semImagem(renderEmailHtml(relatorio({
+    mar: { fonte: 'Petrobras — OCEANOP', alturaMaxDiaM: 2.1, estadoMarDia: 'Moderado' },
+    fontesPorCampo: {
+      ...relatorio().fontesPorCampo,
+      'mar.alturaMaxDiaM': 'Petrobras — OCEANOP',
+    },
+  })));
+  assert.match(html, /Petrobras — OCEANOP/);
 });
 
 test('informativos de 05h e 15h exibem exatamente a lista institucional de fontes', () => {
@@ -148,8 +159,10 @@ test('chuva acumulada/dia usa apenas previsão e nunca o acumulado observado', (
   assert.doesNotMatch(cardIndisponivel.text(), /91 mm/);
 });
 
-test('previsão da edição fica à direita, com peso normal e escrita padronizada', () => {
-  for (const [horarioAgendado, horaExibida, frase] of [['05:00', '05h', 'Previsão até 15h'], ['15:00', '15h', 'Previsão até 00h']]) {
+test('previsão de todas as edições fica à direita, até 00h e com escrita padronizada', () => {
+  for (const horarioAgendado of ['05:00', '09:00', '12:00', '15:00', '17:00', '20:00']) {
+    const horaExibida = horarioAgendado.replace(':00', 'h');
+    const frase = 'Previsão até 00h';
     const html = semImagem(renderEmailHtml(relatorio({ horarioAgendado, horaConsulta: horarioAgendado, previsaoAte: '00h' })));
     const $ = cheerio.load(html);
     const card = $('div').filter((_, elemento) => $(elemento).text().trim() === 'RAJADA PREVISTA').first().closest('td');
@@ -177,6 +190,18 @@ test('previsão da edição fica à direita, com peso normal e escrita padroniza
     assert.doesNotMatch(html, /\| Previsão até/);
     assert.match($.text(), /Fontes de dados:[^]*Open-Meteo/);
   }
+});
+
+test('fallback da probabilidade das 05h considera também o período da noite', () => {
+  assert.equal(probabilidadeChuvaPrevista(relatorio({
+    horarioAgendado: '05:00',
+    probabilidadeChuvaPrevista: null,
+    chuvaPorPeriodo: [
+      { periodo: 'Manhã', janela: '05h–12h', probabilidade: 20 },
+      { periodo: 'Tarde', janela: '12h–18h', probabilidade: 45 },
+      { periodo: 'Noite', janela: '18h–00h', probabilidade: 90 },
+    ],
+  })), 90);
 });
 
 test('card de qualidade do ar exibe somente a classificação dinâmica', () => {
@@ -308,7 +333,7 @@ test('alerta, aviso oficial e recomendações aparecem uma vez e na ordem solici
   assert.deepEqual(cards.map((_, c) => $(c).attr('data-nivel')).get(), ['ALERTA', 'ATENÇÃO']);
   const [vento, aviso] = cards.map((_, c) => $(c)).get();
   assert.equal(vento.find('[data-alert-title]').text().replace(/\s+/g, ' ').trim(), '● VENTO — ALERTA');
-  assert.equal(aviso.find('[data-alert-title]').text().replace(/\s+/g, ' ').trim(), '● TEMPESTADE COM RAIOS — ATENÇÃO');
+  assert.equal(aviso.find('[data-alert-title]').text().replace(/\s+/g, ' ').trim(), '● TEMPESTADE — ATENÇÃO');
   // Recomendações completas dentro do card do próprio alerta, sem bloco separado.
   assert.deepEqual(vento.find('[data-alert-recommendation]').map((_, li) => $(li).text()).get(), ['Reforçar monitoramento.', 'Paralisar atividades expostas.']);
   assert.ok(aviso.find('[data-alert-recommendation]').length > 0);
@@ -374,6 +399,7 @@ test('aviso INMET usa a cor do seu nível e a linha dinâmica fica escura sobre 
     ['Baixa Umidade', 'Perigo Potencial', 'ATENÇÃO'],
     ['Chuvas Intensas', 'Perigo', 'ALERTA'],
     ['Tempestade', 'Grande Perigo', 'EMERGÊNCIA'],
+    ['Vendaval', 'Perigo', 'ALERTA'],
   ]) {
     const html = semImagem(renderEmailHtml(relatorio({ avisosInmet: [{ descricao: evento, severidade }] })));
     const $ = cheerio.load(html);
@@ -381,6 +407,7 @@ test('aviso INMET usa a cor do seu nível e a linha dinâmica fica escura sobre 
     const v = VISUAL_NIVEL[nivel];
     assert.equal(card.length, 1);
     assert.equal(card.attr('data-nivel'), nivel);
+    assert.equal(card.find('[data-alert-title]').text().replace(/^●\s*/, '').trim(), `${evento.toUpperCase()} — ${nivel}`);
     assert.ok(card.attr('style').includes(`border:1.5px solid ${v.cor}`));
     assert.match(card.find('[data-alert-title]').attr('style'), new RegExp(`^color:${v.texto};font:bold`));
     assert.equal(card.find('[data-alert-level]').text(), v.rotulo);
@@ -404,7 +431,8 @@ test('e-mail omite completamente as previsões dos próximos dias', () => {
     assert.ok(!html.includes('Dia +1'));
     assert.ok(!html.includes('2026-09-29'));
   }
-  assert.ok(tarde.includes('ATENÇÃO → ALERTA'));
+  assert.ok(!tarde.includes('ATENÇÃO → ALERTA'));
+  assert.ok(!tarde.includes('ATUALIZAÇÃO DE PREVISÃO'));
   assert.ok(tarde.includes('Fontes de dados:'));
   assert.ok(tarde.includes('Open-Meteo'));
 });

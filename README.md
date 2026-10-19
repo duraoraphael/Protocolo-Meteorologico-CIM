@@ -73,8 +73,8 @@ ENVIO_AUTOMATICO_DIARIO=true
 
 Os horários permanentes são 05:00, 09:00, 12:00, 15:00, 17:00 e 20:00, no
 fuso `America/Sao_Paulo`; cada edição traz a previsão do seu horário até 00h
-(a das 05:00 destaca a janela 05h–15h) e as posteriores às 05:00 comparam com
-ela. `HORARIOS_INFORMATIVO` restringe as edições e `HORARIOS_COR_RIO` define
+e as posteriores às 05:00 comparam com ela. `HORARIOS_INFORMATIVO` restringe
+as edições e `HORARIOS_COR_RIO` define
 em quais delas o aviso COR-RIO é enviado (padrão 05:00 e 15:00).
 
 ## 3. Uso
@@ -140,12 +140,19 @@ kiosk também ao iniciar a sessão.
 | **Open-Meteo Weather** | Complemento identificado para temperatura, umidade, condição, chuva, vento e rajada quando o INMET não publicar o valor numérico | Nunca é apresentado como dado oficial do INMET; a origem complementar permanece indicada por campo |
 | **INMET — estação automática** (`apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}`) | Temperatura/umidade atuais e extremos horários; `Chuva acumulada/dia`, `Chuva acumulada/Hora`; medições de vento e rajada usadas somente no monitoramento observacional | `Chuva acumulada/dia` soma as leituras cuja hora de referência pertence ao dia civil local; `Chuva acumulada/Hora` usa a última hora oficial disponível e identifica o intervalo. Uma medição de rajada nunca ocupa o campo de rajada prevista |
 | **INMET — previsão e avisos** (`apiprevmet3.inmet.gov.br`) | Fonte prioritária para chuva, vento e rajada previstos; também fornece condição, temperatura, umidade e avisos de perigo ativos | Direção, intensidade e resumo textual são preservados. Se o produto municipal não publicar um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita |
-| **Open-Meteo Marine** (`customer-marine-api.open-meteo.com` em produção) | Altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Mesma licença/chave comercial; atende ao item do protocolo original que pedia dados de mar (OCEANOP) |
+| **OCEANOP / Petrobras** (`POST /api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync`) | Fonte marinha prioritária exclusivamente nos pontos autorizados e homologados | Consulta server-side em lote; associação obrigatória pelo `PointID`; altura e altura máxima, período e período de pico, e onda e ondulação permanecem separados. Sem unidade ou fuso confirmados, o dado não entra no informativo |
+| **Open-Meteo Marine** (`customer-marine-api.open-meteo.com` em produção) | Fallback identificado para altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Mesma licença/chave comercial; permanece ativo quando não há ponto OCEANOP homologado ou a consulta oficial falha |
 | **Open-Meteo Air Quality / CAMS** (`customer-air-quality-api.open-meteo.com` em produção) | PM2,5/PM10, European AQI de PM2,5 e índice UV previsto | Mesma licença/chave comercial; AQI e UV mantêm identificação CAMS/Open-Meteo |
 | **Clima e Saúde — Ministério da Saúde** ([Excesso de Calor](https://clima.saude.gov.br/)) | EHF, risco combinado e GeoSES | Consulta server-side do HTML oficial, com validação de município, UF e data. Indisponibilidade nunca é convertida em nível Normal |
 | **Monitor de Secas — ANA** ([portal](https://monitordesecas.ana.gov.br/) e [tabela S0–S4](https://monitordesecas.ana.gov.br/tabela-de-classificacao)) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
 | **COR-Rio** ([Centro de Operações e Resiliência](https://cor.rio/), `appcor.cor-rio.work/estagio_cidade` e `cor.rio/wp-json/wp/v2/posts`) | Painel "Comunicados COR-Rio", seção técnica no PDF disponível para consulta e aviso de e-mail exclusivo da base lógica `COR-RIO — RJ` — somente para o município do Rio de Janeiro (`integracaoCorRio`) | Públicas, sem chave. O aviso por e-mail usa apenas os destinatários vinculados a `cor_rio`; responsáveis da base meteorológica `rio_de_janeiro` não o recebem automaticamente. O endpoint de estágio é o mesmo que o widget da página cor.rio consulta; última coleta válida em `data/cor-rio.json` |
-| **Oceanop / Petrobras** | Diagnóstico da integração privada quando uma área é vinculada | Depende de rede/VPN e contrato interno; unidades não documentadas não são convertidas nem misturadas aos campos públicos |
+
+Para ativar o OCEANOP, cadastre cada ponto permitido em
+`src/config/oceanopAreas.js` com `ID`, latitude, longitude, referência, fuso e
+unidades confirmadas pela Petrobras. O exemplo P-68 da documentação não é
+usado como ponto operacional. Autenticação, limites de uso e altura de medição
+do vento também precisam ser confirmados; o vento OCEANOP só complementa um
+campo ausente quando unidade, definição e altura estiverem homologadas.
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório
@@ -195,6 +202,13 @@ Emergência). Sem aviso oficial correspondente, dados numéricos válidos das
 APIs podem produzir uma **classificação interna baseada em observação oficial**, sempre
 identificada dessa forma no corpo do e-mail. As recomendações são específicas
 por fenômeno e proporcionais ao nível detectado.
+
+O título de um aviso oficial também conserva literalmente o fenômeno publicado
+pelo INMET, apenas normalizado para caixa alta e combinado com o grau. Exemplos:
+`Tempestade` vira `TEMPESTADE — ALERTA`, `Chuvas Intensas` vira
+`CHUVAS INTENSAS — ATENÇÃO` e `Vendaval` vira `VENDAVAL — EMERGÊNCIA`. Riscos,
+impactos e instruções continuam no detalhamento; o sistema não acrescenta termos
+ao título oficial, como transformar `Tempestade` em `Tempestade com raios`.
 
 | Categoria | Limiar | Base da referência |
 |---|---|---|

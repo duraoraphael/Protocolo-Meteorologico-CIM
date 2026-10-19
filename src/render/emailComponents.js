@@ -33,8 +33,10 @@ function nivelExibicao(grau) {
   return normalizarGrau(grau) || "NORMAL";
 }
 
-function nomeParametroAlerta(tipo) {
-  return AlertTitle.nomeParametro(tipo || "Condições meteorológicas");
+function nomeParametroAlerta(tipo, { oficial = false } = {}) {
+  return oficial
+    ? AlertTitle.nomeOficial(tipo || "Aviso oficial INMET")
+    : AlertTitle.nomeParametro(tipo || "Condições meteorológicas");
 }
 
 function statusEmail(grau) {
@@ -131,8 +133,11 @@ function renderStatusChangeCard({
 }) {
   const atual = normalizarGrau(grau) || "NORMAL";
   const visual = statusEmail(atual);
-  const fenomeno = nomeParametroAlerta(tipo);
-  const tituloAtual = AlertTitle.formatarTitulo(fenomeno, atual);
+  const avisoOficial = naturezaDado === "Aviso oficial";
+  const fenomeno = nomeParametroAlerta(tipo, { oficial: avisoOficial });
+  const tituloAtual = avisoOficial
+    ? AlertTitle.formatarTituloOficial(fenomeno, atual)
+    : AlertTitle.formatarTitulo(fenomeno, atual);
 
   if (resumido) {
     return `<table data-alert-card="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#FFFFFF;border:1.5px solid ${visual.cor};border-left:5px solid ${visual.cor};margin:0 0 14px;">
@@ -147,7 +152,6 @@ function renderStatusChangeCard({
   const anterior = normalizarGrau(grauAnterior);
   const classificacao = classificacaoMudanca(anterior, atual, motivo);
   const nivelAtual = nivelExibicao(atual);
-  const avisoOficial = naturezaDado === "Aviso oficial";
   const normalizacaoOficial = avisoOficial && atual === "NORMAL";
   const tituloMudanca = avisoOficial
     ? (anterior ? `${normalizacaoOficial ? "NORMALIZAÇÃO" : "MUDANÇA"} DE AVISO OFICIAL INMET` : "AVISO OFICIAL INMET")

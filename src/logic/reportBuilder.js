@@ -16,7 +16,12 @@ const { metadadosMeteorologicos } = require("./weatherSourceMetadata");
 const { montarContextoMeteorologicoSetor } = require("./sectorWeatherContext");
 const { buscarMarComFallback } = require("../sources/marine");
 const { buscarQualidadeAr } = require("../sources/airQuality");
-const { buscarOceanop } = require("../sources/oceanop");
+const {
+  buscarOceanop,
+  mapearOceanopParaMar,
+  mapearOceanopParaVento,
+  FONTE: FONTE_OCEANOP,
+} = require("../sources/oceanop");
 const climaSaudeService = require("../sources/climaSaudeService");
 const oceanopAreas = require("../config/oceanopAreas");
 const {
@@ -38,7 +43,7 @@ function agora() { return new Date(); }
 
 const PERIODO_COBERTO_AGENDADO = "definido pela edição do informativo";
 const JANELAS_PROBABILIDADE_EDICAO = Object.freeze({
-  "05:00": Object.freeze({ inicioHora: 5, fimHora: 15, janela: "05h–15h" }),
+  "05:00": Object.freeze({ inicioHora: 5, fimHora: 24, janela: "05h–00h" }),
   "09:00": Object.freeze({ inicioHora: 9, fimHora: 24, janela: "09h–00h" }),
   "12:00": Object.freeze({ inicioHora: 12, fimHora: 24, janela: "12h–00h" }),
   "15:00": Object.freeze({ inicioHora: 15, fimHora: 24, janela: "15h–00h" }),
@@ -120,7 +125,7 @@ function montarVentoPorPeriodo({ base }) {
         velocidadeMediaKmh: p.velocidadeMediaKmh ?? null,
         rajadaMaxKmh: p.rajadaMaxKmh ?? null,
         tipoDado: p.tipoDado || "indisponivel",
-        referenciaInmet: `Previsão municipal INMET · intensidade oficial: ${p.intensidadeVento && p.intensidadeVento !== "—" ? p.intensidadeVento : "não publicada"}`,
+        referenciaInmet: `Previsão municipal INMET · intensidade oficial: ${p.intensidadeVento && p.intensidadeVento !== "—" ? p.intensidadeVento : "não publicada"}${p.fonteOceanop ? ` · complemento numérico: ${FONTE_OCEANOP}` : ""}`,
       };
     });
 }
@@ -181,17 +186,54 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     avisosColeta.push("INMET — Avisos: não foi possível atualizar esta fonte.");
   }
 
-  // Condições de mar: só para bases costeiras/portuárias/offshore.
+  // Condições de mar: OCEANOP é prioritária somente em ponto autorizado com
+  // unidade, fuso e período válidos. Caso contrário, preserva-se o fallback
+  // Open-Meteo Marine já existente, sem misturar os dois produtos.
   let mar = null;
   let marArmazenado = null;
+  let marOpenMeteo = null;
+  let resultadoOceanop = null;
+  let ventoOceanop = null;
   let healthMarine = naoAplicavel("Open-Meteo Marine", "Base não costeira.");
-  if (cidade.costeira) {
+  const pontoOceanop = oceanopAreas[cidade.chave];
+  let healthOceanop = !pontoOceanop?.habilitado
+    ? naoConfigurada("Oceanop / Petrobras", "Ponto OCEANOP autorizado ainda não vinculado a esta base.")
+    : naoAplicavel("Oceanop / Petrobras", "Base não costeira.");
+  if (cidade.costeira && pontoOceanop?.habilitado) {
+    try {
+      resultadoOceanop = await buscarOceanop([pontoOceanop]);
+      mar = mapearOceanopParaMar(resultadoOceanop, pontoOceanop, {
+        agora: dataNow,
+        inicioHora: janelaEdicao?.inicioHora ?? 5,
+        fimHora: janelaEdicao?.fimPrevisaoHora ?? 24,
+      });
+      ventoOceanop = mapearOceanopParaVento(resultadoOceanop, pontoOceanop, {
+        agora: dataNow,
+        inicioHora: janelaEdicao?.inicioHora ?? 5,
+        fimHora: janelaEdicao?.fimPrevisaoHora ?? 24,
+      });
+      healthOceanop = operacional("Oceanop / Petrobras", "Previsão oficial do ponto autorizado recebida e validada.", {
+        checkedAt: dataNow.toISOString(),
+        lastSuccessAt: resultadoOceanop.consultadoEm,
+      });
+      healthMarine = naoAplicavel("Open-Meteo Marine", "OCEANOP forneceu as condições marítimas prioritárias.");
+    } catch (erro) {
+      registrarFalha("OCEANOP", erro);
+      healthOceanop = indisponivel("Oceanop / Petrobras", erro);
+      avisosColeta.push("Oceanop / Petrobras: previsão do ponto indisponível ou não homologada; utilizando a fonte marítima alternativa.");
+    }
+  }
+  if (cidade.costeira && !mar) {
     const resultadoMarine = await buscarMarComFallback(cidade);
     healthMarine = resultadoMarine.health;
     falhasApi.marine = resultadoMarine.erro || null;
-    if (resultadoMarine.health.status === "operacional") mar = resultadoMarine.dados;
+    if (resultadoMarine.health.status === "operacional") {
+      mar = resultadoMarine.dados;
+      marOpenMeteo = resultadoMarine.dados;
+    }
     else if (resultadoMarine.health.status === "degradado") {
       marArmazenado = resultadoMarine.dados;
+      marOpenMeteo = resultadoMarine.dados;
       avisosColeta.push("Open-Meteo Marine: consulta atual indisponível; utilizando última coleta válida armazenada.");
     } else {
       avisosColeta.push("Open-Meteo Marine: não foi possível atualizar esta fonte.");
@@ -256,7 +298,6 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     },
   };
 
-  const marOpenMeteo = mar;
   const arOpenMeteo = qualidadeAr;
   const integrado = mapearFontesDoRelatorio(
     base,
@@ -283,10 +324,39 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     inmetObservacao,
     fontesPorCampo: integrado.fontesPorCampo,
   });
+  if (ventoOceanop) {
+    for (const chave of ["manha", "tarde", "noite"]) {
+      const periodo = base.periodos?.[chave];
+      const complemento = ventoOceanop[chave];
+      if (!periodo || !complemento) continue;
+      let utilizou = false;
+      if (!Number.isFinite(periodo.velocidadeMediaKmh) && Number.isFinite(complemento.velocidadeMediaKmh)) {
+        periodo.velocidadeMediaKmh = complemento.velocidadeMediaKmh;
+        integrado.fontesPorCampo[`periodos.${chave}.velocidadeMediaKmh`] = FONTE_OCEANOP;
+        utilizou = true;
+      }
+      if (!Number.isFinite(periodo.rajadaMaxKmh) && Number.isFinite(complemento.rajadaMaxKmh)) {
+        periodo.rajadaMaxKmh = complemento.rajadaMaxKmh;
+        integrado.fontesPorCampo[`periodos.${chave}.rajadaMaxKmh`] = FONTE_OCEANOP;
+        utilizou = true;
+      }
+      if ((!periodo.direcao || periodo.direcao === "—") && complemento.direcao) {
+        periodo.direcao = complemento.direcao;
+        integrado.fontesPorCampo[`periodos.${chave}.direcao`] = FONTE_OCEANOP;
+        utilizou = true;
+      }
+      periodo.fonteOceanop = utilizou;
+    }
+    const rajadas = Object.values(base.periodos).map((periodo) => periodo.rajadaMaxKmh).filter(Number.isFinite);
+    base.rajadaMaxKmh = rajadas.length ? Math.max(...rajadas) : null;
+    if (rajadas.length) integrado.fontesPorCampo.rajadaMaxKmh = [...new Set(
+      ["manha", "tarde", "noite"].map((chave) => integrado.fontesPorCampo[`periodos.${chave}.rajadaMaxKmh`]).filter((fonte) => fonte && fonte !== "Indisponível")
+    )].join(" / ");
+  }
   integrado.atual = base.atual;
   const probabilidadeChuvaEdicao = probabilidadeChuvaDaEdicao({ horarioAgendado, inmetPrevisao, openMeteo });
   integrado.fontesPorCampo.probabilidadeChuvaPrevista = probabilidadeChuvaEdicao.fonte;
-  if (mar && cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
+  if (mar?.fonte === "Open-Meteo Marine" && cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
   // A coleta preserva os registros oficiais distintos para auditoria. Na
   // superfície operacional, avisos sobrepostos do mesmo fenômeno viram uma
   // única ocorrência: prevalece o mais grave/vigente/recente.
@@ -387,7 +457,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   if (marOpenMeteo)
     fontesAutomatizadas.push({
       nome: "Open-Meteo Marine",
-      uso: `Ondas, marulho e temperatura da superfície do mar${mar.referenciaPonto ? ` (ponto de referência: ${mar.referenciaPonto})` : ""}`,
+      uso: `Ondas, marulho e temperatura da superfície do mar${marOpenMeteo.referenciaPonto ? ` (ponto de referência: ${marOpenMeteo.referenciaPonto})` : ""}`,
+    });
+  if (resultadoOceanop && mar?.fonte === FONTE_OCEANOP)
+    fontesAutomatizadas.push({
+      nome: FONTE_OCEANOP,
+      uso: `Ondas, ondulação e períodos previstos no ponto autorizado ${mar.pontoOceanop}${ventoOceanop ? "; complemento numérico de vento com unidade e altura homologadas" : ""}`,
     });
   if (arOpenMeteo)
     fontesAutomatizadas.push({
@@ -418,23 +493,6 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       nome: "Climatempo",
       uso: "Cruzamento comercial — sem API pública gratuita",
     });
-
-  const vinculoOceanop = oceanopAreas[cidade.chave];
-  const oceanopLocalId = vinculoOceanop?.oceanopLocalId || vinculoOceanop?.local || null;
-  let healthOceanop;
-  if (!oceanopLocalId) {
-    healthOceanop = naoConfigurada("Oceanop / Petrobras", "Local Oceanop ainda não vinculado a esta base.");
-  } else {
-    try {
-      await buscarOceanop(oceanopLocalId);
-      healthOceanop = operacional("Oceanop / Petrobras", "Integração Oceanop consultada com sucesso.");
-    } catch (erro) {
-      registrarFalha("OCEANOP", erro);
-      healthOceanop = indisponivel("Oceanop / Petrobras", erro);
-      avisosColeta.push("Oceanop / Petrobras: não foi possível atualizar esta fonte.");
-    }
-  }
-
 
   // Mantido para compatibilidade com o rodapé do PDF, que cita as fontes
   // principais em uma linha só.

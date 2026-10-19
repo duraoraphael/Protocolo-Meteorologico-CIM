@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const AlertTitle = require("../public/alert-title");
 const { renderPdfHtml } = require("../src/render/pdfTemplate");
 const { renderEmailHtml } = require("../src/render/emailTemplate");
-const { renderAlertEmailHtml } = require("../src/render/alertEmailTemplate");
+const { renderAlertEmailHtml, assuntoAlerta } = require("../src/render/alertEmailTemplate");
 const { carregarPainel } = require("./helpers/fakeDom");
 
 const TITULOS = [
@@ -57,6 +57,54 @@ test("formatador compartilhado produz os quatro títulos canônicos obrigatório
     AlertTitle.formatarTitulo("Qualidade do ar", "Atenção"),
     AlertTitle.formatarTitulo("Calor e saúde", "Normal"),
   ], TITULOS);
+});
+
+test("fenômeno oficial do INMET é preservado sem complemento ou singularização", () => {
+  assert.deepEqual([
+    AlertTitle.formatarTituloOficial("Tempestade", "Alerta"),
+    AlertTitle.formatarTituloOficial("Chuvas Intensas", "Atenção"),
+    AlertTitle.formatarTituloOficial("Vendaval", "Emergência"),
+  ], [
+    "TEMPESTADE — ALERTA",
+    "CHUVAS INTENSAS — ATENÇÃO",
+    "VENDAVAL — EMERGÊNCIA",
+  ]);
+
+  const r = {
+    ...relatorio(),
+    severidade: { grau: "ALERTA", eventos: [] },
+    eventoMaisRelevante: null,
+    avisosInmet: [{
+      descricao: "Tempestade", severidade: "Perigo", inicio: "10:00", fim: "18:00",
+      riscos: ["Chuva intensa e rajadas de vento."], instrucoes: ["Busque abrigo."],
+    }],
+    ocorrencias: [{
+      id: "inmet-1", fenomeno: "tempestade", fenomenoOficial: "Tempestade",
+      grau: "ALERTA", classificacaoOficial: "Perigo", rotulo: "Tempestade",
+      icone: "storm", resumo: "Chuva intensa.", validade: "10:00 até 18:00",
+      fontes: ["INMET"], blocos: [{ origem: "inmet", fenomeno: "Tempestade" }],
+    }],
+  };
+  const painel = carregarPainel().executar("Dashboard.home")(r);
+  const email = renderEmailHtml(r);
+  const pdf = renderPdfHtml(r);
+  for (const saida of [painel, email, pdf]) {
+    assert.match(saida, /TEMPESTADE — ALERTA|>Tempestade</);
+    assert.doesNotMatch(saida, /TEMPESTADE COM RAIOS|TEMPESTADES? DE RAIOS/i);
+  }
+
+  const base = {
+    cidade: r.cidade,
+    report: r,
+    alertas: [{
+      tipo: "Tempestade", naturezaDado: "Aviso oficial", fonteDados: "INMET",
+      grau: "ALERTA", detalhe: "Chuva intensa e rajadas de vento.",
+    }],
+  };
+  const alerta = renderAlertEmailHtml(base);
+  assert.match(alerta, /TEMPESTADE — ALERTA/);
+  assert.match(assuntoAlerta(base), /TEMPESTADE — ALERTA/);
+  assert.doesNotMatch(`${alerta} ${assuntoAlerta(base)}`, /TEMPESTADE COM RAIOS|TEMPESTADES? DE RAIOS/i);
 });
 
 test("painel, informativo, PDF extraordinário e Alerta CIM padronizam títulos e omitem cards NORMAL", () => {

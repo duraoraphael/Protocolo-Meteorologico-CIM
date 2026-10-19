@@ -16,8 +16,9 @@ function clearResults() {
 }
 base.addEventListener('change',()=>{
  clearResults();const selected=areas.find(a=>a.chave===base.value);
- localInput.value=selected?.local || '';
- document.getElementById('vinculo').textContent=selected?.local ? 'Local associado a esta base na configuração do projeto.' : 'Esta base ainda não possui vínculo confirmado no Oceanop. Informe o identificador correto; o nome do município pode não ser aceito pela fonte.';
+ localInput.value=selected?.pointId || '';
+ document.getElementById('consultar').disabled=!selected?.habilitado;
+ document.getElementById('vinculo').textContent=selected?.habilitado ? 'Ponto autorizado associado a esta base na configuração do projeto.' : 'Esta base ainda não possui ponto OCEANOP autorizado e homologado.';
 });
 localInput.addEventListener('input',clearResults);
 async function loadAreas(){
@@ -40,15 +41,15 @@ form.addEventListener('submit',async e=>{
  const button=document.getElementById('consultar');button.disabled=true;button.textContent='Consultando…';
  results.setAttribute('aria-busy','true');statusEl.textContent='Consultando Oceanop…';
  try{
- const params=new URLSearchParams({local:localInput.value.trim()});
+ const params=new URLSearchParams({cidade:base.value});
  const r=await fetch(`/api/oceanop/previsao?${params}`,{signal:request.signal});
  const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.erro||'Não foi possível consultar o Oceanop.');
  if(controller!==request)return;response=data;
  statusEl.textContent=data.previsoes.length ? `${data.previsoes.length} intervalos retornados pela fonte.` : 'Nenhuma previsão encontrada para este local.';
  if(!data.previsoes.length)return;
  localFilter.innerHTML='<option value="">Todos os locais retornados</option>'+[...new Set(data.previsoes.map(r=>r.local).filter(Boolean))].map(p=>`<option value="${escape(p)}">${escape(p)}</option>`).join('');
- document.getElementById('resultado-titulo').textContent=`Local: ${data.consulta.local}`;
- document.getElementById('consulta-info').textContent=`Consulta realizada em ${new Date(data.consultadoEm).toLocaleString('pt-BR')} · Confira o local retornado antes de associar os dados à base.`;
+ document.getElementById('resultado-titulo').textContent=`Ponto: ${data.consulta.pontos.map(p=>p.ID).join(', ')}`;
+ document.getElementById('consulta-info').textContent=`Consulta realizada em ${new Date(data.consultadoEm).toLocaleString('pt-BR')} · Respostas associadas pelo PointID solicitado.`;
  results.hidden=false;render();
  }catch(e){if(e.name!=='AbortError'&&controller===request){statusEl.dataset.error='true';statusEl.textContent=e.message}}
  finally{if(controller===request){button.disabled=false;button.textContent='Consultar previsão';results.setAttribute('aria-busy','false')}}

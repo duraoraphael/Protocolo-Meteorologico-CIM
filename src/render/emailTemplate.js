@@ -1,5 +1,5 @@
 const { esc } = require("./pdfTemplate");
-const { renderDailyChanges, renderEmailHeader, renderEmailHeaderStyles } = require("./emailComponents");
+const { renderEmailHeader, renderEmailHeaderStyles } = require("./emailComponents");
 const { montarCardsAlerta, visualNivel } = require("./alertCards");
 const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
@@ -82,11 +82,8 @@ function chuvaPrevistaAcumulada(r) {
 function probabilidadeChuvaPrevista(r) {
   if (Number.isFinite(r.probabilidadeChuvaPrevista)) return r.probabilidadeChuvaPrevista;
   const periodos = Array.isArray(r.chuvaPorPeriodo) ? r.chuvaPorPeriodo : [];
-  // A edição das 05h considera 05h–15h (sem a noite); as demais, do seu
-  // horário até 00h.
-  const relevantes = r.horarioAgendado === "05:00"
-    ? periodos.filter((p) => !/^noite$/i.test(String(p?.periodo || "")))
-    : periodosDaEdicao(r, periodos);
+  // Todas as edições consideram a previsão do seu horário até 00h.
+  const relevantes = periodosDaEdicao(r, periodos);
   const valores = relevantes.map((p) => p?.probabilidade).filter(Number.isFinite);
   return valores.length ? Math.max(...valores) : null;
 }
@@ -116,7 +113,7 @@ function celulaChuva(chuvaPrevista, probabilidade) {
 // que o e-mail é aberto.
 function frasePrevisao(r) {
   if (!r.horarioAgendado || !r.previsaoAte) return "";
-  return `Previsão até ${r.horarioAgendado === "05:00" ? "15h" : r.previsaoAte}`;
+  return `Previsão até ${r.previsaoAte}`;
 }
 
 // Linha acima dos cards: "Hora da consulta" à esquerda e a janela da previsão
@@ -243,14 +240,16 @@ function cartaoAlerta(card) {
 const FONTES_DADOS_EMAIL = "INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)";
 
 function fontesDeDados() {
-  return esc(FONTES_DADOS_EMAIL);
+  const relatorio = arguments[0];
+  const usaOceanop = relatorio?.mar?.fonte === "Petrobras — OCEANOP" ||
+    Object.values(relatorio?.fontesPorCampo || {}).some((fonte) => /OCEANOP/i.test(String(fonte)));
+  return esc(usaOceanop ? `${FONTES_DADOS_EMAIL} | Petrobras — OCEANOP` : FONTES_DADOS_EMAIL);
 }
 
 const { faixaSimulacaoEmail } = require("./simulationBanner");
 
 function renderEmailHtml(r, { incluirCorRio = true } = {}) {
   const eventos = eventosLocais(r);
-  const mudancas = renderDailyChanges(r.mudancasDia);
   // O corpo do e-mail mantém o filtro de antes (oculta NORMAL); ordem, cores
   // e recomendações vêm do mesmo modelo usado no PDF.
   const cartoesAlerta = montarCardsAlerta(r, { tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO }).map(cartaoAlerta).join("");
@@ -272,7 +271,7 @@ function renderEmailHtml(r, { incluirCorRio = true } = {}) {
         })}
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:11px 20px 0;">${linhaReferencia(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:4px 20px 5px;">${resumoMeteorologico(r)}</td></tr>
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${cartoesAlerta}${mudancas}</td></tr>
+        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${cartoesAlerta}</td></tr>
         ${incluirCorRio ? `<tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}</td></tr>` : ""}
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:10px 25px 6px;color:${COR.texto};font:14px/1.4 Arial,sans-serif;"><strong>Fontes de dados:</strong><br>${fontesDeDados(r, eventos)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-left:4px solid ${COR.verde};"><tr><td bgcolor="${COR.celula}" style="padding:11px 17px;background:${COR.celula};color:#333333;font:14px/1.4 Arial,sans-serif;">Relatório técnico completo com tabelas, avisos oficiais e fontes consultadas em anexo (PDF).</td></tr></table></td></tr>

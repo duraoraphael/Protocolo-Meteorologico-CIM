@@ -271,7 +271,8 @@ test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem
     report: { dataFormatadaCurta: "28/09/2026", horaConsulta: "15:00", ventoPorPeriodo: [] },
     alertas: [oficial],
   });
-  assert.match(html, /TEMPESTADE COM RAIOS — ALERTA/);
+  assert.match(html, /TEMPESTADE — ALERTA/);
+  assert.doesNotMatch(html, /TEMPESTADE COM RAIOS|TEMPESTADES? DE RAIOS/);
   assert.match(html, /Informe do aviso:<\/strong> Chuva entre 30 e 60 mm\/h\. Ventos intensos de 60 a 100 km\/h\./);
   assert.doesNotMatch(html, /AVISO OFICIAL INMET|Órgão emissor|Previsão complementar|Classificação:|Instruções oficiais:|Fonte de dados:/);
   assert.equal((html.match(/Chuva entre 30 e 60 mm\/h/g) || []).length, 1);

@@ -39,8 +39,19 @@
     return original.toUpperCase();
   }
 
+  // Avisos oficiais já chegam com o nome definido pelo órgão emissor. Eles
+  // não passam pelo agrupamento semântico acima, que existe apenas para
+  // eventos internos (por exemplo, um código WMO com atividade elétrica).
+  function nomeOficial(valor) {
+    return (removerClassificacao(valor) || "AVISO OFICIAL INMET").toUpperCase();
+  }
+
   function formatarTitulo(parametro, grau) {
     return `${nomeParametro(parametro)} — ${normalizarGrau(grau) || String(grau || "NORMAL").toUpperCase()}`;
+  }
+
+  function formatarTituloOficial(parametro, grau) {
+    return `${nomeOficial(parametro)} — ${normalizarGrau(grau) || String(grau || "NORMAL").toUpperCase()}`;
   }
 
   function tituloEvento(evento, grauPadrao = "NORMAL") {
@@ -48,5 +59,5 @@
     return formatarTitulo(parametro, evento?.grau || grauPadrao);
   }
 
-  return { formatarTitulo, nomeParametro, normalizarGrau, removerClassificacao, tituloEvento };
+  return { formatarTitulo, formatarTituloOficial, nomeOficial, nomeParametro, normalizarGrau, removerClassificacao, tituloEvento };
 });

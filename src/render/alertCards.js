@@ -178,7 +178,7 @@ function cardAvisoInmet(aviso, eventosLocais, r) {
     origem: "inmet",
     fenomeno,
     nivel,
-    titulo: AlertTitle.formatarTitulo(evento || "Aviso oficial INMET", nivel),
+    titulo: AlertTitle.formatarTituloOficial(evento || "Aviso oficial INMET", nivel),
     rotuloOrigem: "Aviso oficial INMET",
     linhas: [
       linha("Aviso", `${evento || "—"} — ${severidade || "—"}`),

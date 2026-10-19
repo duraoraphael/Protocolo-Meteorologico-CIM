@@ -266,7 +266,10 @@ function montarOcorrencias(report) {
     }
     aplicarBloco(alvo, bloco);
     if (!bloco.grau) alvo.semMapeamento = true;
-    alvo.rotulo = alvo.blocos.some((b) => b.origem === "protocolo" && !b.derivadoDoAviso) ? alvo.rotulo : (aviso.descricao || alvo.rotulo);
+    // O título de um aviso oficial pertence ao INMET. Preserve-o mesmo se a
+    // ocorrência também tiver um bloco interno do mesmo grupo meteorológico.
+    alvo.fenomenoOficial = aviso.descricao || alvo.fenomenoOficial || null;
+    alvo.rotulo = alvo.fenomenoOficial || alvo.rotulo;
     alvo.classificacaoOficial = aviso.severidade || null;
     // Com aviso oficial, o resumo do card é o texto de riscos do próprio
     // aviso (fiel à fonte); os valores numéricos do protocolo continuam em

@@ -40,7 +40,7 @@ function dadosOpenMeteo() {
   };
 }
 
-test("probabilidade da edição usa o máximo horário de 05h–15h e 15h–00h", () => {
+test("probabilidade da edição usa o máximo entre seu horário e 00h", () => {
   const chuvaHoraria = Array.from({ length: 19 }, (_, indice) => {
     const hora = indice + 5;
     return { horario: `${String(hora).padStart(2, "0")}:00`, probabilidade: hora === 14 ? 85 : hora === 20 ? 92 : 20 };
@@ -48,9 +48,9 @@ test("probabilidade da edição usa o máximo horário de 05h–15h e 15h–00h"
   const openMeteo = { chuvaHoraria };
 
   assert.deepEqual(probabilidadeChuvaDaEdicao({ horarioAgendado: "05:00", openMeteo }), {
-    valor: 85,
+    valor: 92,
     fonte: "Open-Meteo — previsão complementar",
-    janela: "05h–15h",
+    janela: "05h–00h",
     regra: "probabilidade máxima prevista no período",
   });
   assert.deepEqual(probabilidadeChuvaDaEdicao({ horarioAgendado: "15:00", openMeteo }), {
@@ -66,7 +66,7 @@ test("probabilidade da edição usa o máximo horário de 05h–15h e 15h–00h"
   }), {
     valor: 95,
     fonte: "INMET — previsão oficial",
-    janela: "05h–15h",
+    janela: "05h–00h",
     regra: "probabilidade máxima prevista no período",
   });
 });
@@ -285,8 +285,9 @@ test("PDF e e-mail exibem a referência da edição sem perder a comparação", 
   assert.ok(email.indexOf("Previsão até 00h") < email.indexOf("RAJADA PREVISTA"));
   assert.doesNotMatch(email, /\| Previsão até/);
   assert.doesNotMatch(email, /Amanhã|Nublado/);
-  for (const saida of [pdf, email]) {
-    assert.match(saida, /ATENÇÃO → ALERTA/);
-    assert.match(saida, /35 km\/h → 48 km\/h/);
-  }
+  assert.match(pdf, /ATENÇÃO → ALERTA/);
+  assert.match(pdf, /35 km\/h → 48 km\/h/);
+  assert.doesNotMatch(email, /ATENÇÃO → ALERTA/);
+  assert.doesNotMatch(email, /35 km\/h → 48 km\/h/);
+  assert.doesNotMatch(email, /ATUALIZAÇÃO DE PREVISÃO/);
 });

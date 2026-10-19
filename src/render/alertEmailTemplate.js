@@ -142,7 +142,9 @@ function renderAlertEmailHtml(base) {
 function assuntoAlerta(base) {
   const alertas = alertasCimExibiveis(base.alertas);
   if (!alertas.length) return "";
-  const tipos = [...new Set(alertas.map((a) => nomeParametroAlerta(a.tipo)))].slice(0, 2).join(" / ");
+  const tipos = [...new Set(alertas.map((a) => nomeParametroAlerta(a.tipo, {
+    oficial: a.naturezaDado === "Aviso oficial",
+  })))].slice(0, 2).join(" / ");
   const grau = alertas
     .map((a) => normalizarGrau(a.grau))
     .filter(Boolean)

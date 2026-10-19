@@ -385,10 +385,22 @@ function tabelaMar(mar, fontesPorCampo = {}) {
   const temperatura = mar.temperaturaMarC != null
     ? ` Temperatura média da superfície do mar: ${mar.temperaturaMarC}°C (${esc(fontesPorCampo["mar.temperaturaMarC"] || "Open-Meteo Marine")}).`
     : "";
+  const alturaPeriodo = (periodo) => {
+    if (periodo.alturaOndaM != null && periodo.alturaMaxM != null) return `${periodo.alturaOndaM} m (máx. ${periodo.alturaMaxM} m)`;
+    if (periodo.alturaMaxM != null) return `${periodo.alturaMaxM} m`;
+    if (periodo.alturaOndaM != null) return `${periodo.alturaOndaM} m`;
+    return "—";
+  };
+  const periodoOnda = (periodo) => {
+    if (periodo.periodoOndaS != null && periodo.periodoPicoOndaS != null) return `${periodo.periodoOndaS} s (pico ${periodo.periodoPicoOndaS} s)`;
+    if (periodo.periodoOndaS != null) return `${periodo.periodoOndaS} s`;
+    if (periodo.periodoPicoOndaS != null) return `Pico ${periodo.periodoPicoOndaS} s`;
+    return "—";
+  };
   return blocoTabela({
     titulo: `<h4 class="subsecao">Condições de mar${mar.referenciaPonto ? ` (ponto de referência: ${esc(mar.referenciaPonto)})` : ""}</h4>`,
     antes: mar.desatualizado ? `<p class="nota"><strong>Dado armazenado.</strong> Última atualização válida: ${esc(formatarDataBrasilia(mar.ultimaAtualizacao) || "horário indisponível")}.</p>` : "",
-    fonte: `Fonte de dados: ${esc(fonte)}. Altura e marulho: máximo previsto em cada período de hoje.${temperatura}`,
+    fonte: `Fonte de dados: ${esc(fonte)}. Altura de onda e altura máxima permanecem conceitos distintos quando ambas são publicadas; marulho representa a ondulação separada.${temperatura}`,
     tabela: `<table>
     <thead><tr><th>Período</th><th>Estado do mar</th><th>Altura máx.</th><th>Período de onda</th><th>Direção</th><th>Marulho</th></tr></thead>
     <tbody>
@@ -396,8 +408,8 @@ function tabelaMar(mar, fontesPorCampo = {}) {
         .map(
           (p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
             <td>${esc(p.periodo)}</td><td>${esc(p.estadoMar)}</td>
-            <td>${p.alturaMaxM == null ? "—" : p.alturaMaxM + " m"}</td>
-            <td>${p.periodoOndaS == null ? "—" : p.periodoOndaS + " s"}</td>
+            <td>${alturaPeriodo(p)}</td>
+            <td>${periodoOnda(p)}</td>
             <td>${esc(p.direcaoOnda)}</td>
             <td>${p.marulhoMaxM == null ? "—" : p.marulhoMaxM + " m"}</td>
           </tr>`
@@ -740,6 +752,11 @@ function dataHoraLocal(iso, fuso) {
   return `${p.day}/${p.month}/${p.year} às ${p.hour}:${p.minute} (${p.timeZoneName})`;
 }
 
+function dataD3ComAnoCurto(valor) {
+  const partes = String(valor || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return partes ? `${partes[1]}/${partes[2]}/${partes[3].slice(-2)}` : String(valor || "");
+}
+
 // Seção final "Previsão para os próximos 3 dias": título e tabela num mesmo
 // bloco indivisível — se não couberem no fim da página, vão juntos para a
 // próxima. Valor ausente na fonte aparece como "Não disponível", nunca zero.
@@ -752,7 +769,7 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
       ? NAO_DISPONIVEL
       : `<span class="p3d-max">${celulaNumero(d.tempMaxC)}</span><span class="p3d-sep">/</span><span class="p3d-min">${celulaNumero(d.tempMinC)}</span>`;
     return `<tr class="${i % 2 === 1 ? "zebra" : ""}">
-      <td class="p3d-data"><strong>${esc(d.dataFormatada)}</strong><span>${esc(d.diaSemana)}</span></td>
+      <td class="p3d-data"><strong>${esc(dataD3ComAnoCurto(d.dataFormatada))}</strong><span>${esc(d.diaSemana)}</span></td>
       <td class="p3d-num">${temperatura}</td>
       <td class="p3d-num">${Number.isFinite(d.umidadeMinPct) || Number.isFinite(d.umidadeMaxPct) ? `${celulaNumero(d.umidadeMinPct)} / ${celulaNumero(d.umidadeMaxPct)}` : NAO_DISPONIVEL}</td>
       <td class="p3d-num">${celulaNumero(d.rajadaMaxKmh)}</td>
@@ -1147,7 +1164,7 @@ function renderPdfHtml(r, opcoes = {}) {
   .p3d-bloco { break-inside: avoid; page-break-inside: avoid; padding-top: 1px; }
   .p3d-sub { font-size: 10pt; color: #555; margin: 6px 0 4px 0; }
   table.p3d { table-layout: fixed; font-size: 10.5pt; margin: 8px 0 0 0; border: 1px solid ${brand.cinzaBorda}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  table.p3d th { background: ${brand.verde}; color: #ffffff; font-size: 9.5pt; line-height: 1.3; padding: 10px 10px; vertical-align: bottom; }
+  table.p3d th { background: ${brand.verde}; color: #ffffff; font-size: 9.5pt; line-height: 1.3; padding: 10px 6px; text-align: center; vertical-align: middle; white-space: normal; overflow-wrap: anywhere; word-break: normal; }
   table.p3d td { padding: 12px 10px; vertical-align: middle; line-height: 1.35; }
   table.p3d tr { break-inside: avoid; page-break-inside: avoid; }
   table.p3d .p3d-num { text-align: center; padding-left: 6px; padding-right: 6px; }

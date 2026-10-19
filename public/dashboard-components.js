@@ -156,7 +156,9 @@ const Dashboard = (() => {
     return `<section class="secao-periodos"><div class="section-heading"><h2>${icon(name)}${title}</h2><button class="text-link" data-detail="${detail}">Ver mais <span aria-hidden="true">→</span></button></div><div class="table-scroll" tabindex="0" role="region" aria-label="${title}"><table class="tabela-periodos"><caption class="sr-only">${title}</caption><thead><tr>${headers.map(h => `<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map(row => `<tr>${row.map((v, i) => i === 0 ? `<th scope="row">${v}</th>` : `<td>${v}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}" class="empty-table">Dados indisponíveis para esta base.</td></tr>`}</tbody></table></div></section>`;
   }
   function marine(r) {
-    return table('Condições de mar por período', 'waves', ['Período', 'Estado do mar', 'Altura máx.', 'Período de onda', 'Direção', 'Marulho'], (r.mar?.periodos || []).map(p => [escape(p.periodo), escape(p.estadoMar), unit(p.alturaMaxM,' m'), unit(p.periodoOndaS,' s'), escape(p.direcaoOnda), unit(p.marulhoMaxM,' m')]), 'mar');
+    const altura = p => p.alturaOndaM != null && p.alturaMaxM != null ? `${unit(p.alturaOndaM,' m')} (máx. ${unit(p.alturaMaxM,' m')})` : unit(p.alturaMaxM ?? p.alturaOndaM,' m');
+    const periodo = p => p.periodoOndaS != null && p.periodoPicoOndaS != null ? `${unit(p.periodoOndaS,' s')} (pico ${unit(p.periodoPicoOndaS,' s')})` : unit(p.periodoOndaS ?? p.periodoPicoOndaS,' s');
+    return table('Condições de mar por período', 'waves', ['Período', 'Estado do mar', 'Altura máx.', 'Período de onda', 'Direção', 'Marulho'], (r.mar?.periodos || []).map(p => [escape(p.periodo), escape(p.estadoMar), altura(p), periodo(p), escape(p.direcaoOnda), unit(p.marulhoMaxM,' m')]), 'mar');
   }
   function windRain(r) {
     const vento = table('Vento por período', 'wind', ['Período', 'Direção', 'Vento (velocidade média)', 'Rajada prevista (máx.)', 'Referência INMET'], (r.ventoPorPeriodo || []).map(v => [
@@ -202,6 +204,12 @@ const Dashboard = (() => {
   function cardsEmailDe(r) {
     return Array.isArray(r.conteudoEmail?.cards) ? r.conteudoEmail.cards : [];
   }
+  function tituloOcorrencia(o, grau) {
+    const oficial = o.fenomenoOficial || (o.blocos || []).find(b => b.origem === 'inmet')?.fenomeno;
+    return oficial
+      ? TitulosAlerta.formatarTituloOficial(oficial, grau)
+      : TitulosAlerta.formatarTitulo(o.rotulo, grau);
+  }
   // Card de alerta do e-mail sem ocorrência correspondente no painel.
   function emailOnlyCard(card) {
     const n = nivel(card.nivel);
@@ -215,7 +223,7 @@ const Dashboard = (() => {
   function occurrenceCard(o, cardsEmail = []) {
     const n = nivel(o.grau);
     const rotuloNivel = o.grau && NIVEIS[o.grau] ? o.grau : (o.classificacaoOficial || 'Sem classificação');
-    const titulo = TitulosAlerta.formatarTitulo(o.rotulo, rotuloNivel);
+    const titulo = tituloOcorrencia(o, rotuloNivel);
     const valores = (o.valores || []).length ? `<dl class="oc-valores">${o.valores.map(v => `<div><dt>${escape(v.rotulo)}</dt><dd>${escape(v.valor)}</dd></div>`).join('')}</dl>` : '';
     const fontes = (o.fontes || []).map(f => f.replace(/\s+—\s+aviso oficial$/i, '')).join(' + ') || 'Fonte não informada';
     const avisos = [
@@ -317,12 +325,12 @@ const Dashboard = (() => {
   function detailsTitle(r, type) {
     if (String(type).startsWith('ocorrencia:')) {
       const o = r && occurrencesOf(r).find(item => item.id === type.slice(11));
-      return o ? TitulosAlerta.formatarTitulo(o.rotulo, NIVEIS[o.grau] ? o.grau : o.classificacaoOficial || 'Ocorrência') : 'Ocorrência';
+      return o ? tituloOcorrencia(o, NIVEIS[o.grau] ? o.grau : o.classificacaoOficial || 'Ocorrência') : 'Ocorrência';
     }
     return {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[type] || 'Detalhes';
   }
   function details(r, type) {
-    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: INMET prioritário para chuva, vento, rajada, temperatura, umidade, previsão textual e avisos; Open-Meteo Weather como complemento identificado quando o INMET não publica um valor numérico; Clima e Saúde para EHF e risco térmico; Open-Meteo Air Quality/CAMS para índice UV e qualidade do ar; Open-Meteo Marine para condições de mar.</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
+    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: INMET prioritário para chuva, vento, rajada, temperatura, umidade, previsão textual e avisos; Open-Meteo Weather como complemento identificado quando o INMET não publica um valor numérico; Clima e Saúde para EHF e risco térmico; Open-Meteo Air Quality/CAMS para índice UV e qualidade do ar; Petrobras — OCEANOP para condições marítimas de pontos autorizados e homologados, com Open-Meteo Marine como alternativa identificada.</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
     if (!r) return '<p>Os dados desta base ainda não estão disponíveis.</p>';
     if (String(type).startsWith('ocorrencia:')) return occurrenceDetails(r, type.slice(11));
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;
@@ -336,7 +344,7 @@ const Dashboard = (() => {
     const apiCards = (r.monitoramentoApis || []).map(api => `<article class="api-status api-${escape(api.status)}"><div><strong>${escape(api.nome)}</strong><span>${escape(statusLabels[api.status] || api.status)}</span></div><p>${escape(api.detalhe)}</p>${api.id === 'oceanop' ? `<a href="areas.html?cidade=${encodeURIComponent(r.cidade.chave)}">Abrir monitoramento Oceanop</a>` : ''}</article>`).join('');
     const ocorrencias = occurrencesOf(r);
     const resumoEventos = ocorrencias.length
-      ? ocorrencias.map(o => `<article class="aviso-item nivel-${nivel(o.grau).classe}"><strong>${escape(TitulosAlerta.formatarTitulo(o.rotulo, NIVEIS[o.grau] ? o.grau : o.classificacaoOficial))}</strong><p>${escape(o.resumo)}</p><p>Validade: ${escape(o.validade)} · Fonte de dados: ${escape((o.fontes || []).join(' + '))}</p><button class="text-link det-link" data-detail="ocorrencia:${escape(o.id)}">Ver detalhes <span aria-hidden="true">→</span></button></article>`).join('')
+      ? ocorrencias.map(o => `<article class="aviso-item nivel-${nivel(o.grau).classe}"><strong>${escape(tituloOcorrencia(o, NIVEIS[o.grau] ? o.grau : o.classificacaoOficial))}</strong><p>${escape(o.resumo)}</p><p>Validade: ${escape(o.validade)} · Fonte de dados: ${escape((o.fontes || []).join(' + '))}</p><button class="text-link det-link" data-detail="ocorrencia:${escape(o.id)}">Ver detalhes <span aria-hidden="true">→</span></button></article>`).join('')
       : '<p>Nenhuma ocorrência ativa no período analisado.</p>';
     const avisos = r.avisosInmetStatus === 'indisponivel'
       ? '<p class="det-indisponivel">A coleta de avisos oficiais do INMET falhou nesta atualização; os avisos vigentes não puderam ser confirmados.</p>'

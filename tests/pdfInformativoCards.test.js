@@ -24,11 +24,12 @@ function report(extra = {}) {
 }
 
 test("cabeçalho usa a edição e a previsão na mesma linha", () => {
-  for (const [horarioAgendado, horaExibida] of [["05:00", "05h"], ["15:00", "15h"]]) {
+  for (const horarioAgendado of ["05:00", "09:00", "12:00", "15:00", "17:00", "20:00"]) {
+    const horaExibida = horarioAgendado.replace(":00", "h");
     const $ = cheerio.load(renderPdfHtml(report({ horarioAgendado, horaConsulta: horarioAgendado })));
     const referencia = $(".referencia-edicao").text().replace(/\s+/g, " ");
     assert.match(referencia, new RegExp(`Hora da consulta: ${horaExibida} \\(Horário de Brasília\\) \\| Previsão até 00h`));
-    assert.doesNotMatch(referencia, /(?:05|15):00/);
+    assert.doesNotMatch(referencia, /(?:05|09|12|15|17|20):00/);
   }
 });
 
@@ -39,6 +40,25 @@ test("condições de mar aparecem imediatamente após qualidade do ar e índice 
   const qualidade = titulos.indexOf("Qualidade do Ar e Índice UV");
   assert.ok(qualidade >= 0);
   assert.match(titulos[qualidade + 1], /^Condições de mar/);
+});
+
+test("condições de mar OCEANOP distinguem altura, máxima, período e pico sem alterar a tabela", () => {
+  const $ = cheerio.load(renderPdfHtml(report({
+    mar: {
+      fonte: "Petrobras — OCEANOP",
+      referenciaPonto: "PONTO-A",
+      periodos: [{
+        periodo: "Manhã", estadoMar: "Moderado", alturaOndaM: 1.1, alturaMaxM: 2.1,
+        periodoOndaS: 9.7, periodoPicoOndaS: 11.2, direcaoOnda: "SE", marulhoMaxM: 0.8,
+      }],
+    },
+    fontesPorCampo: { "mar.alturaMaxDiaM": "Petrobras — OCEANOP" },
+  })));
+  const bloco = $("h4.subsecao").filter((_, item) => $(item).text().startsWith("Condições de mar")).closest("section");
+  assert.match(bloco.text(), /Petrobras — OCEANOP/);
+  assert.match(bloco.text(), /1\.1 m \(máx\. 2\.1 m\)/);
+  assert.match(bloco.text(), /9\.7 s \(pico 11\.2 s\)/);
+  assert.equal(bloco.find("th").length, 6, "a integração não cria colunas nem altera o layout aprovado");
 });
 
 test("qualidade do ar mantém classificação e referências técnicas", () => {
