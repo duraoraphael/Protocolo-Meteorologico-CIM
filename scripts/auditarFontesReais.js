@@ -11,7 +11,7 @@ const oceanopAreas = require("../src/config/oceanopAreas");
 
 const inicio = new Date();
 const rio = getCidade("rio_de_janeiro");
-const linhares = getCidade("linhares");
+const natal = getCidade("natal");
 const capturas = {};
 
 function fetchCapturado(nome) {
@@ -44,7 +44,7 @@ async function executar(nome, tarefa, resumir) {
 
 async function main() {
   const semEspera = async () => {};
-  const pontoMar = linhares.pontoMar || linhares;
+  const pontoMar = natal.pontoMar || natal;
   const tarefas = [
     executar("openMeteo", () => buscarOpenMeteo(rio.latitude, rio.longitude, {
       fuso: rio.fusoHorario || "America/Sao_Paulo", fetchImpl: fetchCapturado("openMeteo"), timeoutMs: 10000, esperarFn: semEspera,
@@ -77,9 +77,9 @@ async function main() {
       normalizado: { uvMax: normalizado.uvMax, pm25Medio: normalizado.pm25Medio, pm10Medio: normalizado.pm10Medio, europeanAqiPm25: normalizado.aqiPm25 },
     })),
     executar("marine", () => buscarMar(pontoMar.latitude, pontoMar.longitude, {
-      fuso: linhares.fusoHorario || "America/Sao_Paulo", fetchImpl: fetchCapturado("marine"), timeoutMs: 10000, esperarFn: semEspera, logger: { warn() {} },
+      fuso: natal.fusoHorario || "America/Sao_Paulo", fetchImpl: fetchCapturado("marine"), timeoutMs: 10000, esperarFn: semEspera, logger: { warn() {} },
     }), (normalizado, captura) => ({
-      endpoint: captura.endpoint, statusHttp: captura.statusHttp, localidade: `${linhares.nome}/${linhares.uf}`,
+      endpoint: captura.endpoint, statusHttp: captura.statusHttp, localidade: `${natal.nome}/${natal.uf}`,
       coordenadasSolicitadas: [pontoMar.latitude, pontoMar.longitude], coordenadasGrade: [captura.bruto?.latitude, captura.bruto?.longitude],
       fuso: captura.bruto?.timezone, unidades: captura.bruto?.hourly_units,
       intervaloOriginal: [captura.bruto?.hourly?.time?.[0], captura.bruto?.hourly?.time?.at?.(-1)],

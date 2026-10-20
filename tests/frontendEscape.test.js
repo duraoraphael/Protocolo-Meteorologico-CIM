@@ -130,7 +130,22 @@ test("painel usa rajada OCEANOP consolidada e identifica horário/fonte", () => 
     fontesPorCampo: { rajadaMaxKmh: "Petrobras — OCEANOP" },
     monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
   });
-  assert.match(html, /Rajada prevista[\s\S]*43\.2 <small>km\/h<\/small>/);
+  assert.match(html, /Rajada prevista[\s\S]*43\.20 <small>km\/h<\/small>/);
   assert.match(html, /Petrobras — OCEANOP/);
   assert.match(html, /20\/10\/2026 12:00:00/);
+});
+
+test("painel usa o pico diário Tetra Tech e mantém a fonte", () => {
+  const painel = carregarPainel();
+  const html = painel.executar("Dashboard.home")({
+    cidade: { chave: "santos", nome: "Santos", uf: "SP" },
+    rajadaMaxKmh: 51.856,
+    rajadaPrevistaReferencia: { periodoReferencia: "pico diário de 2026-10-20" },
+    ventoPorPeriodo: [],
+    fontesPorCampo: { rajadaMaxKmh: "Tetra Tech/OCEANOP" },
+    monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
+  });
+  assert.match(html, /Rajada prevista[\s\S]*51\.86 <small>km\/h<\/small>/);
+  assert.match(html, /Tetra Tech\/OCEANOP/);
+  assert.match(html, /pico diário de 2026-10-20/);
 });

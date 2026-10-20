@@ -29,6 +29,8 @@ const Dashboard = (() => {
   const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.cloud}</svg>`;
   const weatherIcon = (code, day = true) => code == null ? 'cloud' : code >= 95 ? 'storm' : (code >= 71 && code <= 77) || code === 85 || code === 86 ? 'snow' : code >= 51 ? 'rain' : code >= 45 ? 'fog' : code < 2 ? (day == null ? 'cloud' : day ? 'sun' : 'moon') : 'cloud';
   const unit = (value, suffix) => value == null ? '—' : `${escape(value)}${suffix}`;
+  const oneDecimal = value => Number(value).toFixed(1);
+  const twoDecimals = value => Number(value).toFixed(2);
   const pair = (a, b, suffix) => a == null && b == null ? '—' : `${unit(a, suffix)} / ${unit(b, suffix)}`;
   const list = (items) => `<ul>${items.map(x => `<li>${escape(x)}</li>`).join('')}</ul>`;
   // Níveis do protocolo: nomes preservados, cores do painel por gravidade.
@@ -138,7 +140,7 @@ const Dashboard = (() => {
     const cards = [
       metric('Temperatura prevista', pair(r.tempMin, r.tempMax, '°'), detalheTemp, 'thermometer', '', sources('tempMin','tempMax')),
       metric('Umidade relativa prevista', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
-      metric('Rajada prevista', Number.isFinite(gustValue) ? unit(gustValue, ' <small>km/h</small>') : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
+      metric('Rajada prevista', Number.isFinite(gustValue) ? unit(twoDecimals(gustValue), ' <small>km/h</small>') : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
       ...cardsEmail,
       metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), r.coberturaObservacoesInmet?.parcial ? `Dia civil local · parcial (${r.coberturaObservacoesInmet.amostras || 0}/${r.coberturaObservacoesInmet.horasEsperadas || 0} leituras)` : 'Dia civil local · cobertura completa', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
       metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), r.precipitacaoHoraReferencia ? `Hora de referência: ${escape(r.precipitacaoHoraReferencia)} · INMET` : 'Hora de referência indisponível', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
@@ -168,7 +170,7 @@ const Dashboard = (() => {
       `${escape(v.periodo)}${v.janela ? ` <small>${escape(v.janela)}</small>` : ''}`,
       escape(v.direcao),
       v.velocidadeMediaKmh == null ? 'Não disponível' : unit(v.velocidadeMediaKmh, ' km/h'),
-      v.rajadaMaxKmh == null ? 'Não disponível' : unit(v.rajadaMaxKmh, ' km/h'),
+      v.rajadaMaxKmh == null ? 'Não disponível' : unit(twoDecimals(v.rajadaMaxKmh), ' km/h'),
       escape(v.referenciaInmet || 'Previsão municipal INMET'),
     ]), 'vento');
     const chuva = table('Chuva por período', 'rain', ['Período', 'Probabilidade', 'Acumulado no período (mm)', 'Resumo INMET'], (r.chuvaPorPeriodo || []).map(item => [

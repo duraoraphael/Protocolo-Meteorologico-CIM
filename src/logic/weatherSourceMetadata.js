@@ -20,7 +20,7 @@ function registroFonte({
   };
 }
 
-function metadadosMeteorologicos({ cidade, climaSaude, inmetObservacao, inmetPrevisao, openMeteo, oceanopVento, geradoEm }) {
+function metadadosMeteorologicos({ cidade, climaSaude, inmetObservacao, inmetPrevisao, openMeteo, rajadaPrioritaria, oceanopVento, geradoEm }) {
   const observacao = inmetObservacao?.observacao;
   const localidade = `${cidade.nome}/${cidade.uf}`;
   const metadadoInmet = (indicadorDisponivel) => registroFonte({
@@ -86,14 +86,14 @@ function metadadosMeteorologicos({ cidade, climaSaude, inmetObservacao, inmetPre
     chuvaObservada: metadadoInmet(Number.isFinite(observacao?.chuvaUltimaHoraMm)),
     vento: metadadoPrevisaoComFallback(ventoInmetDisponivel, ventoComplementar,
       "Direção, intensidade e valores numéricos previstos para o vento."),
-    rajadaPrevista: Number.isFinite(oceanopVento?.rajadaMaxKmh) ? registroFonte({
-      fonte: "Petrobras — OCEANOP",
-      instanteMedicao: oceanopVento.rajadaPrevistaEm,
-      ultimaAtualizacao: oceanopVento.dataEscrita || geradoEm || null,
-      localidade: oceanopVento.local || localidade,
+    rajadaPrevista: Number.isFinite((rajadaPrioritaria || oceanopVento)?.rajadaMaxKmh) ? registroFonte({
+      fonte: (rajadaPrioritaria || oceanopVento).fonte || "Petrobras — OCEANOP",
+      instanteMedicao: (rajadaPrioritaria || oceanopVento).rajadaPrevistaEm,
+      ultimaAtualizacao: (rajadaPrioritaria || oceanopVento).dataEscrita || geradoEm || null,
+      localidade: (rajadaPrioritaria || oceanopVento).local || localidade,
       natureza: "previsto",
       status: "operacional",
-      detalhe: `Rajada máxima na janela operacional${oceanopVento.periodoReferencia ? ` (${oceanopVento.periodoReferencia})` : ""}.`,
+      detalhe: `Rajada máxima prevista${(rajadaPrioritaria || oceanopVento).periodoReferencia ? ` (${(rajadaPrioritaria || oceanopVento).periodoReferencia})` : ""}.`,
     }) : metadadoPrevisaoComFallback(rajadaPrevista, rajadaComplementar,
       "Rajada máxima numérica prevista."),
     ventoObservado: metadadoInmet([observacao?.ventoVelocidadeKmh, observacao?.ventoDirecaoGraus, observacao?.rajadaKmh].some(Number.isFinite)),

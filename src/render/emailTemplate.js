@@ -37,8 +37,12 @@ function horaConsultaEmail(valor) {
   return texto(horaCheia ? `${horaCheia[1]}h` : valor);
 }
 
-function numeroUnidade(valor, unidade) {
-  return Number.isFinite(valor) ? `${esc(valor)} ${unidade}` : "Dado indisponível";
+function numeroUnidade(valor, unidade, casas = null) {
+  if (!Number.isFinite(valor)) return "Dado indisponível";
+  const exibido = Number.isInteger(casas)
+    ? valor.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })
+    : valor;
+  return `${esc(exibido)} ${unidade}`;
 }
 
 function parOuTraco(minimo, maximo, sufixoMin, sufixoMax) {
@@ -149,7 +153,7 @@ function valorCalor(r) {
 
 function resumoMeteorologico(r) {
   const rajada = rajadaMaxima(r);
-  const rajadaValor = Number.isFinite(rajada.valor) ? numeroUnidade(rajada.valor, "km/h") : "Dado indisponível";
+  const rajadaValor = Number.isFinite(rajada.valor) ? numeroUnidade(rajada.valor, "km/h", 2) : "Dado indisponível";
   const chuvaPrevista = chuvaPrevistaAcumulada(r);
   const probabilidade = probabilidadeChuvaPrevista(r);
   const ar = Number.isFinite(r.qualidadeAr?.aqiPm25) && presente(r.qualidadeAr?.pm25Classificacao?.nivel)
@@ -247,9 +251,14 @@ const FONTES_DADOS_EMAIL = "INMET | Clima e Saúde — Ministério da Saúde | O
 
 function fontesDeDados() {
   const relatorio = arguments[0];
-  const usaOceanop = relatorio?.mar?.fonte === "Petrobras — OCEANOP" ||
-    Object.values(relatorio?.fontesPorCampo || {}).some((fonte) => /OCEANOP/i.test(String(fonte)));
-  return esc(usaOceanop ? `${FONTES_DADOS_EMAIL} | Petrobras — OCEANOP` : FONTES_DADOS_EMAIL);
+  const valores = [relatorio?.mar?.fonte, ...Object.values(relatorio?.fontesPorCampo || {})].map(String);
+  const adicionais = [];
+  if (valores.some((fonte) => fonte === "Petrobras — OCEANOP")) adicionais.push("Petrobras — OCEANOP");
+  if (valores.some((fonte) => fonte === "Tetra Tech/OCEANOP")) {
+    const referencia = relatorio?.rajadaPrevistaReferencia?.periodoReferencia;
+    adicionais.push(`Tetra Tech/OCEANOP${referencia ? ` (${referencia})` : ""}`);
+  }
+  return esc([FONTES_DADOS_EMAIL, ...adicionais].join(" | "));
 }
 
 const { faixaSimulacaoEmail } = require("./simulationBanner");

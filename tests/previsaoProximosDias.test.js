@@ -100,6 +100,25 @@ test("OCEANOP substitui somente rajadas D+3 com valor válido e preserva os dema
   assert.equal(resultado.fontesCampo.rajada, "Petrobras — OCEANOP / Open-Meteo");
 });
 
+test("Tetra Tech aplica picos distintos por dia e preserva a procedência", () => {
+  const previsao = {
+    status: "ok",
+    dias: [
+      { data: "2026-10-21", rajadaMaxKmh: 20 },
+      { data: "2026-10-22", rajadaMaxKmh: 21 },
+      { data: "2026-10-23", rajadaMaxKmh: 22 },
+    ],
+    fontesCampo: { rajada: "Open-Meteo" },
+  };
+  const resultado = p3d.aplicarRajadasOceanop(previsao, [
+    { data: "2026-10-21", rajadaMaxKmh: 51.856, fonte: "Tetra Tech/OCEANOP" },
+    { data: "2026-10-22", rajadaMaxKmh: 44.448, fonte: "Tetra Tech/OCEANOP" },
+  ], "Tetra Tech/OCEANOP");
+  assert.deepEqual(resultado.dias.map((dia) => dia.rajadaMaxKmh), [51.856, 44.448, 22]);
+  assert.equal(resultado.dias[0].fonteRajada, "Tetra Tech/OCEANOP");
+  assert.equal(resultado.fontesCampo.rajada, "Tetra Tech/OCEANOP / Open-Meteo");
+});
+
 test("produto operacional prioriza INMET e complementa rajada/chuva/UV com Open-Meteo", () => {
   const oficial = p3d.montarPrevisaoProximosDiasInmet(CIDADES.macae, {
     dias: DATAS_MACAE.map((data, indice) => ({

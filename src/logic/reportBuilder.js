@@ -10,7 +10,7 @@ const {
 const { buscarObservacaoInmet } = require("../sources/inmetObservations");
 const { montarOcorrencias } = require("./ocorrenciasPainel");
 const { tipoDocumentoPorHorario } = require("./alertPresentation");
-const { edicaoInformativo, intervaloAvisos, validadeInformativo } = require("./informativoValidity");
+const { edicaoInformativo, intervaloAvisos, validadeInformativo, partesNoFuso } = require("./informativoValidity");
 const { aplicarPoliticaFontes } = require("./weatherSourcePolicy");
 const { metadadosMeteorologicos } = require("./weatherSourceMetadata");
 const { montarContextoMeteorologicoSetor } = require("./sectorWeatherContext");
@@ -25,6 +25,11 @@ const {
 } = require("../sources/oceanop");
 const climaSaudeService = require("../sources/climaSaudeService");
 const oceanopAreas = require("../config/oceanopAreas");
+const rajadaPortais = require("../config/rajadaPortais");
+const {
+  buscarRajadasTetraTech,
+  FONTE: FONTE_TETRATECH,
+} = require("../sources/tetratechGusts");
 const {
   criarHealthCheck,
   operacional,
@@ -166,6 +171,54 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     falhasApi.inmetPrevisao = erro;
     registrarFalha("INMET-PREVISAO", erro);
     avisosColeta.push("INMET — Previsão: não foi possível atualizar esta fonte.");
+  }
+
+  // Pico diário de rajada publicado no portal Tetra Tech/OCEANOP. O acesso
+  // usa exclusivamente a API oficial consumida pelo próprio portal. Aracaju
+  // e Araucária permanecem desabilitadas enquanto não houver, respectivamente,
+  // licença de automação e equivalência geográfica validada.
+  const portalRajada = rajadaPortais[cidade.chave];
+  const nomePortalRajada = portalRajada?.fonte === "climatempo" ? "Climatempo" : FONTE_TETRATECH;
+  let resultadoRajadaPortal = null;
+  let picoRajadaPortalHoje = null;
+  let previsaoRajadaPortalDias = [];
+  let healthRajadaPortal = !portalRajada
+    ? naoAplicavel(nomePortalRajada, "Base sem portal de rajada cadastrado.")
+    : !portalRajada.habilitado
+      ? naoConfigurada(nomePortalRajada, portalRajada.motivo || "Coleta automatizada não habilitada.")
+      : naoAplicavel(nomePortalRajada, "Área configurada, aguardando consulta.");
+  if (portalRajada?.habilitado && portalRajada.fonte === "tetratech") {
+    try {
+      resultadoRajadaPortal = await buscarRajadasTetraTech(cidade.nome, portalRajada);
+      const partesHoje = partesNoFuso(dataNow, portalRajada.fusoHorario);
+      const dataHoje = `${partesHoje.year}-${String(partesHoje.month).padStart(2, "0")}-${String(partesHoje.day).padStart(2, "0")}`;
+      picoRajadaPortalHoje = resultadoRajadaPortal.picosDiarios.find((item) => item.data === dataHoje) || null;
+      previsaoRajadaPortalDias = resultadoRajadaPortal.picosDiarios.map((item) => ({
+        data: item.data,
+        rajadaMaxKmh: item.rajadaPrevistaKmH,
+        rajadaPrevistaEm: item.picoEm,
+        local: item.area,
+        fonte: item.fonte,
+        rajadaOriginal: item.rajadaOriginal,
+        unidadeOriginal: item.unidadeOriginal,
+      }));
+      if (resultadoRajadaPortal.desatualizado) {
+        healthRajadaPortal = degradado(FONTE_TETRATECH, resultadoRajadaPortal.erroAtual,
+          resultadoRajadaPortal.consultadoEm, { checkedAt: dataNow.toISOString() });
+        avisosColeta.push("Tetra Tech/OCEANOP: utilizando o último boletim válido armazenado para a data correspondente.");
+      } else {
+        healthRajadaPortal = operacional(FONTE_TETRATECH, "Picos diários de rajada recebidos da API oficial do portal.", {
+          checkedAt: dataNow.toISOString(),
+          lastSuccessAt: resultadoRajadaPortal.consultadoEm,
+        });
+      }
+    } catch (erro) {
+      registrarFalha("TETRATECH-OCEANOP", erro);
+      healthRajadaPortal = erro?.code === "TETRATECH_CREDENTIALS_MISSING"
+        ? naoConfigurada(FONTE_TETRATECH, "Configure X-API-Key ou credencial OAuth oficialmente autorizada.")
+        : indisponivel(FONTE_TETRATECH, erro);
+      avisosColeta.push("Tetra Tech/OCEANOP: pico diário de rajada indisponível; preservadas as fontes alternativas.");
+    }
   }
 
   try {
@@ -386,6 +439,23 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       integrado.fontesPorCampo.rajadaPrevistaKmh = FONTE_OCEANOP;
     }
   }
+  // O pico diário do portal é prioritário no card/resumo de rajada, mas não é
+  // copiado para períodos sem comprovação do horário dentro daquela janela.
+  if (Number.isFinite(picoRajadaPortalHoje?.rajadaPrevistaKmH)) {
+    base.rajadaMaxKmh = picoRajadaPortalHoje.rajadaPrevistaKmH;
+    base.rajadaPrioritariaReferencia = {
+      fonte: picoRajadaPortalHoje.fonte,
+      rajadaMaxKmh: picoRajadaPortalHoje.rajadaPrevistaKmH,
+      rajadaPrevistaEm: picoRajadaPortalHoje.picoEm,
+      periodoReferencia: `pico diário de ${picoRajadaPortalHoje.data}`,
+      local: picoRajadaPortalHoje.area,
+      dataEscrita: picoRajadaPortalHoje.atualizadoEm,
+      rajadaOriginal: picoRajadaPortalHoje.rajadaOriginal,
+      unidadeOriginal: picoRajadaPortalHoje.unidadeOriginal,
+    };
+    integrado.fontesPorCampo.rajadaMaxKmh = FONTE_TETRATECH;
+    integrado.fontesPorCampo.rajadaPrevistaKmh = FONTE_TETRATECH;
+  }
   integrado.atual = base.atual;
   const probabilidadeChuvaEdicao = probabilidadeChuvaDaEdicao({ horarioAgendado, inmetPrevisao, openMeteo });
   integrado.fontesPorCampo.probabilidadeChuvaPrevista = probabilidadeChuvaEdicao.fonte;
@@ -497,6 +567,11 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       nome: FONTE_OCEANOP,
       uso: `${ventoOceanop ? "Rajada prevista prioritária, velocidade média e direção do vento na área homologada" : ""}${ventoOceanop && mar?.fonte === FONTE_OCEANOP ? "; " : ""}${mar?.fonte === FONTE_OCEANOP ? `ondas, ondulação e períodos previstos em ${mar.pontoOceanop}` : ""}`,
     });
+  if (resultadoRajadaPortal && picoRajadaPortalHoje)
+    fontesAutomatizadas.push({
+      nome: FONTE_TETRATECH,
+      uso: `Pico diário de rajada previsto em ${picoRajadaPortalHoje.area}, convertido de nós para km/h`,
+    });
   if (arOpenMeteo)
     fontesAutomatizadas.push({
       nome: "Open-Meteo Air Quality",
@@ -604,6 +679,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     paraMonitoramento("open-meteo-air", "Open-Meteo Air Quality",
       healthDaColeta("Open-Meteo Air Quality", Boolean(arOpenMeteo), falhasApi.airQuality, "Qualidade do ar e UV previstos recebidos")),
     paraMonitoramento("oceanop", "Oceanop / Petrobras", healthOceanop),
+    paraMonitoramento("tetratech-oceanop", nomePortalRajada, healthRajadaPortal),
     paraMonitoramento("clima-saude", "Clima e Saúde — Ministério da Saúde", healthClimaSaude),
   ];
 
@@ -651,7 +727,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     precipitacaoPeriodoMm: base.precipitacaoPeriodoMm ?? null,
     rajadaMaxKmh: base.rajadaMaxKmh,
     rajadaPrevistaKmh: base.rajadaMaxKmh,
-    rajadaPrevistaReferencia: base.rajadaOceanopReferencia || null,
+    rajadaPrevistaReferencia: base.rajadaPrioritariaReferencia || base.rajadaOceanopReferencia || null,
     rajadaObservadaMaxKmh: base.rajadaObservadaMaxKmh,
     tabelaTemperaturaUmidade,
     ventoPorPeriodo,
@@ -667,7 +743,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       inmetObservacao,
       inmetPrevisao,
       openMeteo,
-      oceanopVento: base.rajadaOceanopReferencia || null,
+      rajadaPrioritaria: base.rajadaPrioritariaReferencia || base.rajadaOceanopReferencia || null,
       geradoEm: dataNow.toISOString(),
     }),
     mar,
@@ -704,6 +780,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     inmetPrevisao,
     contextoMeteorologicoSetor,
     previsaoOceanopDias,
+    previsaoRajadaPortalDias,
     geradoEmISO: dataNow.toISOString(),
     horarioAgendado,
     tipoDocumento: tipoDocumentoPorHorario(horarioAgendado),

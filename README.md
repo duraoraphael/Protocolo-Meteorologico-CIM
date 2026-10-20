@@ -9,7 +9,7 @@ da sala de operação, com atualização automática, seletor de base e um botã
 protegido por senha para disparar a geração manual.
 
 **12 bases cadastradas** (seletor no topo do painel): Rio de Janeiro, Macaé,
-Cabiúnas (Terminal), Brasília, Manaus, Santos, Aracaju, Linhares, Anchieta,
+Cabiúnas (Terminal), Brasília, Manaus, Santos, Aracaju, Natal, Oiapoque,
 Vitória, Araucária e Salvador — ver `src/config/cities.js`.
 
 ---
@@ -105,7 +105,7 @@ da TV, de preferência em **tela cheia/modo kiosk** (Chrome: `chrome
 
 O painel:
 - Tem um **seletor de base** no topo (Rio de Janeiro, Macaé, Cabiúnas,
-  Brasília, Manaus, Santos, Aracaju, Linhares, Anchieta, Vitória, Araucária,
+  Brasília, Manaus, Santos, Aracaju, Natal, Oiapoque, Vitória, Araucária,
   Salvador) — a base escolhida fica salva na URL (`?cidade=chave`), então dá
   pra fixar uma TV numa base específica salvando esse link.
 - Atualiza os dados automaticamente a cada 10 minutos (sem enviar e-mail).
@@ -141,6 +141,7 @@ kiosk também ao iniciar a sessão.
 | **INMET — estação automática** (`apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}`) | Temperatura/umidade atuais e extremos horários; `Chuva acumulada/dia`, `Chuva acumulada/Hora`; medições de vento e rajada usadas somente no monitoramento observacional | `Chuva acumulada/dia` soma as leituras cuja hora de referência pertence ao dia civil local; `Chuva acumulada/Hora` usa a última hora oficial disponível e identifica o intervalo. Uma medição de rajada nunca ocupa o campo de rajada prevista |
 | **INMET — previsão e avisos** (`apiprevmet3.inmet.gov.br`) | Fonte prioritária para chuva, vento e rajada previstos; também fornece condição, temperatura, umidade e avisos de perigo ativos | Direção, intensidade e resumo textual são preservados. Se o produto municipal não publicar um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita |
 | **OCEANOP / Petrobras** (`GET /api/v1/previsao/JsonPrevisaoAreaAsync?local=...`) | Fonte prioritária de rajada prevista exclusivamente nas áreas autorizadas e homologadas | Consulta server-side por identificador `local`; nunca envia coordenadas. Sem correspondência, unidade ou fuso confirmados, preserva INMET/Open-Meteo e não promove o dado |
+| **Tetra Tech/OCEANOP** (`/api/v1/areas/json` e `/api/v1/bulletins/{idArea}`) | Pico diário de rajada prevista para áreas terrestres autorizadas | A API oficial do portal exige `X-API-Key` ou OAuth. A série de rajada exibida em nós é convertida por `km/h = nós × 1,852`; o horizonte completo é armazenado localmente e continua válido por data quando a sessão expira |
 | **Open-Meteo Marine** (`customer-marine-api.open-meteo.com` em produção) | Fallback identificado para altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Mesma licença/chave comercial; permanece ativo quando não há ponto OCEANOP homologado ou a consulta oficial falha |
 | **Open-Meteo Air Quality / CAMS** (`customer-air-quality-api.open-meteo.com` em produção) | PM2,5/PM10, European AQI de PM2,5 e índice UV previsto | Mesma licença/chave comercial; AQI e UV mantêm identificação CAMS/Open-Meteo |
 | **Clima e Saúde — Ministério da Saúde** ([Excesso de Calor](https://clima.saude.gov.br/)) | EHF, risco combinado e GeoSES | Consulta server-side do HTML oficial, com validação de município, UF e data. Indisponibilidade nunca é convertida em nível Normal |
@@ -154,6 +155,12 @@ O exemplo `sururu` não é usado como área operacional. Quando a fonte não
 responde, as fontes meteorológicas atuais permanecem como fallback.
 O monitor bruto em `areas.html` usa a senha operacional; identificadores locais
 e respostas da fonte não são expostos pela listagem pública de bases.
+
+O pico diário do portal Tetra Tech/OCEANOP está preparado para Rio de Janeiro,
+Manaus, Macaé, Brasília, Santos, Vitória, Salvador, Natal e Oiapoque. Configure uma credencial
+oficial conforme `RAJADAS_PORTAIS.md`. Araucária não usa automaticamente a
+página de Wenceslau Bráz sem validação geográfica. Aracaju permanece no fallback:
+os termos públicos do Climatempo vedam robôs e extração automatizada.
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório
@@ -251,19 +258,16 @@ não são exibidas no card.
 | Manaus | AM | 1302603 | — |
 | Santos | SP | 3548500 | sim |
 | Aracaju | SE | 2800308 | sim |
-| Linhares | ES | 3203205 | sim (ponto próprio) |
-| Anchieta | ES | 3200409 | sim |
+| Natal | RN | 2408102 | sim |
+| Oiapoque | AP | 1600501 | sim |
 | Vitória | ES | 3205309 | sim |
 | Araucária | PR | 4101804 | — |
 | Salvador | BA | 2927408 | sim |
 
-Dois casos merecem atenção ao mexer nesse cadastro:
+Um caso merece atenção ao mexer nesse cadastro:
 - **Cabiúnas** é um distrito de Macaé, não um município. Usa coordenadas
   próprias do terminal (mais precisas para o modelo numérico) mas o código
   IBGE de Macaé, porque a previsão oficial do INMET é por município.
-- **Linhares** tem litoral (foz do Rio Doce), mas o centro do município
-  fica fora da grade do modelo de ondas. Por isso tem `pontoMar` próprio
-  apontando para Regência — só os dados de mar usam esse ponto.
 
 ### Adicionar uma nova base
 

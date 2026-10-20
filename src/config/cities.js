@@ -128,37 +128,34 @@ const CIDADES = {
     },
   },
 
-  linhares: {
-    chave: "linhares",
+  natal: {
+    chave: "natal",
     costeira: true,
-    nome: "Linhares",
-    uf: "ES",
-    latitude: -19.3796775,
-    longitude: -40.0610087,
-    // O centro de Linhares fica ~50 km da costa, fora da grade do modelo de
-    // ondas. O litoral do município (foz do Rio Doce, em Regência) é o ponto
-    // usado só para os dados de mar — a previsão de tempo continua sendo a
-    // do município.
-    pontoMar: { latitude: -19.6486, longitude: -39.8258, referencia: "Regência (foz do Rio Doce)" },
-    codigoIbge: "3203205",
-    climaSaudeUrl: "https://clima.saude.gov.br/es/linhares?modo=ehf",
+    nome: "Natal",
+    uf: "RN",
+    fusoHorario: "America/Fortaleza",
+    latitude: -5.8115,
+    longitude: -35.2415,
+    codigoIbge: "2408102",
+    climaSaudeUrl: "https://clima.saude.gov.br/rn/natal?modo=ehf",
     links: {
-      inmet: "https://previsao.inmet.gov.br/3203205",
+      inmet: "https://previsao.inmet.gov.br/2408102",
       defesaCivilTelefone: "199",
     },
   },
 
-  anchieta: {
-    chave: "anchieta",
+  oiapoque: {
+    chave: "oiapoque",
     costeira: true,
-    nome: "Anchieta",
-    uf: "ES",
-    latitude: -20.8057672,
-    longitude: -40.6454564,
-    codigoIbge: "3200409",
-    climaSaudeUrl: "https://clima.saude.gov.br/es/anchieta?modo=ehf",
+    nome: "Oiapoque",
+    uf: "AP",
+    fusoHorario: "America/Belem",
+    latitude: 3.861224,
+    longitude: -51.796699,
+    codigoIbge: "1600501",
+    climaSaudeUrl: "https://clima.saude.gov.br/ap/oiapoque?modo=ehf",
     links: {
-      inmet: "https://previsao.inmet.gov.br/3200409",
+      inmet: "https://previsao.inmet.gov.br/1600501",
       defesaCivilTelefone: "199",
     },
   },

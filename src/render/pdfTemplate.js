@@ -328,7 +328,7 @@ function tabelaVento(periodos) {
         .map(
           (p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
             <td><strong>${celulaPeriodo(p)}</strong></td><td>${textoOuIndisponivel(p.direcao)}</td><td>${Number.isFinite(p.velocidadeMediaKmh) ? `${numeroBr(p.velocidadeMediaKmh, 1)} km/h` : "Não disponível"}</td>
-            <td>${Number.isFinite(p.rajadaMaxKmh) ? `${numeroBr(p.rajadaMaxKmh, 1)} km/h` : "Não disponível"}</td><td>${textoOuIndisponivel(p.referenciaInmet)}</td>
+            <td>${Number.isFinite(p.rajadaMaxKmh) ? `${numeroBr(p.rajadaMaxKmh, 2)} km/h` : "Não disponível"}</td><td>${textoOuIndisponivel(p.referenciaInmet)}</td>
           </tr>`
         )
         .join("")}
@@ -714,7 +714,7 @@ function blocoPrevisaoAgendada(r, tituloSecao = "") {
       <span>${Number.isFinite(dia.chuvaMm) ? `${numeroBr(dia.chuvaMm, 1)} mm` : "—"}</span>
       <small><strong>Probabilidade de chuva:</strong> ${Number.isFinite(r.probabilidadeChuvaPrevista) ? `${numeroBr(r.probabilidadeChuvaPrevista, 0)}%` : "Indisponível"}</small>
     </td>
-    <td>${Number.isFinite(dia.rajadaKmh) ? `${numeroBr(dia.rajadaKmh, 0)} km/h` : "—"}</td>
+    <td>${Number.isFinite(dia.rajadaKmh) ? `${numeroBr(dia.rajadaKmh, 2)} km/h` : "—"}</td>
     <td>${celulaCalor(r.climaSaude, dia.data)}</td>
   </tr>`).join("");
   return blocoTabela({
@@ -772,7 +772,7 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
       <td class="p3d-data"><strong>${esc(dataD3ComAnoCurto(d.dataFormatada))}</strong><span>${esc(d.diaSemana)}</span></td>
       <td class="p3d-num">${temperatura}</td>
       <td class="p3d-num">${Number.isFinite(d.umidadeMinPct) || Number.isFinite(d.umidadeMaxPct) ? `${celulaNumero(d.umidadeMinPct)} / ${celulaNumero(d.umidadeMaxPct)}` : NAO_DISPONIVEL}</td>
-      <td class="p3d-num">${celulaNumero(d.rajadaMaxKmh)}</td>
+      <td class="p3d-num">${celulaNumero(d.rajadaMaxKmh, 2)}</td>
       <td class="p3d-num">${celulaNumero(d.chuvaMm, 1)}</td>
       <td class="p3d-num">${Number.isFinite(d.probabilidadeChuvaPct) ? `${numeroBr(d.probabilidadeChuvaPct, 0)}%` : `<span class="p3d-nd">—</span>`}</td>
       <td class="p3d-num">${celulaNumero(d.uvMax, 1)}</td>

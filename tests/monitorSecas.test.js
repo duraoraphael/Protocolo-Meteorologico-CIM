@@ -152,10 +152,10 @@ test("competência: AAAA-MM validado; sem configuração o modo é automático",
 test("as 12 bases estão associadas à UF correta e cada UF tem mapa estadual no portal", () => {
   const esperado = {
     rio_de_janeiro: "RJ", macae: "RJ", cabiunas: "RJ", brasilia: "DF", manaus: "AM", santos: "SP",
-    aracaju: "SE", linhares: "ES", anchieta: "ES", vitoria: "ES", araucaria: "PR", salvador: "BA",
+    aracaju: "SE", natal: "RN", oiapoque: "AP", vitoria: "ES", araucaria: "PR", salvador: "BA",
   };
   assert.deepEqual(Object.fromEntries(Object.entries(CIDADES).map(([chave, c]) => [chave, c.uf])), esperado);
-  const nomes = { RJ: "Rio de Janeiro", DF: "Distrito Federal", AM: "Amazonas", SP: "São Paulo", SE: "Sergipe", ES: "Espírito Santo", PR: "Paraná", BA: "Bahia" };
+  const nomes = { RJ: "Rio de Janeiro", DF: "Distrito Federal", AM: "Amazonas", SP: "São Paulo", SE: "Sergipe", RN: "Rio Grande do Norte", AP: "Amapá", ES: "Espírito Santo", PR: "Paraná", BA: "Bahia" };
   for (const [uf, nome] of Object.entries(nomes)) assert.equal(ms.UFS[uf][1], nome);
   // Alias da tabela de UFs do próprio portal.
   assert.equal(ms.chaveMapaUf(AGOSTO, "RJ"), "uploads/produtos/srm_persist/202608/ms/ms_rio_de_janeiro_202608.png");
@@ -313,8 +313,11 @@ test("PDF: cada base mostra só o mapa e a situação da sua UF, uma única vez 
   const pasta = pastaTemporaria(t);
   usarPasta(t, pasta);
   const fetchFn = fonteFalsa(AGOSTO_TODAS);
-  const nomes = { RJ: "Rio de Janeiro", AM: "Amazonas", ES: "Espírito Santo", PR: "Paraná" };
-  for (const chave of ["rio_de_janeiro", "macae", "cabiunas", "manaus", "vitoria", "linhares", "anchieta", "araucaria"]) {
+  const nomes = {
+    RJ: "Rio de Janeiro", AM: "Amazonas", ES: "Espírito Santo", PR: "Paraná",
+    RN: "Rio Grande do Norte", AP: "Amapá",
+  };
+  for (const chave of ["rio_de_janeiro", "macae", "cabiunas", "manaus", "vitoria", "natal", "oiapoque", "araucaria"]) {
     const cidade = CIDADES[chave];
     const dados = await ms.obterMonitorSecas({ uf: cidade.uf, fetchFn, pasta, intervaloMs: 3_600_000 });
     const html = renderPdfHtml(relatorio(cidade, dados));

@@ -211,7 +211,7 @@ async function executarVerificacao({
     ...fontes,
   };
   const rio = getCidade("rio_de_janeiro");
-  const costeira = getCidade("linhares");
+  const costeira = getCidade("natal");
   const pontoMar = costeira.pontoMar || costeira;
   const fuso = rio.fusoHorario || "America/Sao_Paulo";
   const opcoes = { fuso, timeoutMs: OPCOES_HTTP.timeoutMs, logger: { log() {}, warn() {}, error() {} } };

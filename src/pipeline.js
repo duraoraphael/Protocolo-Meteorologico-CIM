@@ -192,8 +192,12 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   const previsaoInmet3d = montarPrevisaoProximosDiasInmet(cidade, report.inmetPrevisao, { agora: instantePrevisao });
   const previsaoComplementar3d = await obterPrevisaoProximosDias(cidade, { agora: instantePrevisao });
   report.previsaoProximosDias = aplicarRajadasOceanop(
-    mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d),
-    report.previsaoOceanopDias
+    aplicarRajadasOceanop(
+      mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d),
+      report.previsaoOceanopDias
+    ),
+    report.previsaoRajadaPortalDias,
+    "Tetra Tech/OCEANOP"
   );
   if (report.previsaoProximosDias.status === "indisponivel") {
     report.avisosColeta.push("INMET (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");

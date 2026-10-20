@@ -217,8 +217,8 @@ function mesclarPrevisaoProximosDias(inmet, complementar) {
   };
 }
 
-/** OCEANOP substitui somente a rajada dos dias em que publicou valor válido. */
-function aplicarRajadasOceanop(previsao, diasOceanop = []) {
+/** Uma fonte prioritária substitui somente a rajada dos dias em que publicou valor válido. */
+function aplicarRajadasOceanop(previsao, diasOceanop = [], fontePadrao = "Petrobras — OCEANOP") {
   if (!previsao || !Array.isArray(previsao.dias) || !Array.isArray(diasOceanop) || !diasOceanop.length) return previsao;
   const porData = new Map(diasOceanop.filter((dia) => Number.isFinite(dia?.rajadaMaxKmh)).map((dia) => [dia.data, dia]));
   if (!porData.size) return previsao;
@@ -230,19 +230,21 @@ function aplicarRajadasOceanop(previsao, diasOceanop = []) {
     return {
       ...dia,
       rajadaMaxKmh: oceanop.rajadaMaxKmh,
-      fonteRajada: "Petrobras — OCEANOP",
+      fonteRajada: oceanop.fonte || fontePadrao,
       rajadaPrevistaEm: oceanop.rajadaPrevistaEm || null,
       rajadaLocal: oceanop.local || null,
     };
   });
+  const fontesPrioritarias = [...new Set(diasOceanop.map((dia) => dia?.fonte || fontePadrao).filter(Boolean))];
+  const rotuloPrioritario = fontesPrioritarias.join(" / ");
   return utilizou ? {
     ...previsao,
     dias,
     fontesCampo: {
       ...previsao.fontesCampo,
-      rajada: dias.every((dia) => !Number.isFinite(dia.rajadaMaxKmh) || dia.fonteRajada === "Petrobras — OCEANOP")
-        ? "Petrobras — OCEANOP"
-        : `Petrobras — OCEANOP / ${previsao.fontesCampo?.rajada || "fonte alternativa"}`,
+      rajada: dias.every((dia) => !Number.isFinite(dia.rajadaMaxKmh) || fontesPrioritarias.includes(dia.fonteRajada))
+        ? rotuloPrioritario
+        : `${rotuloPrioritario} / ${previsao.fontesCampo?.rajada || "fonte alternativa"}`,
     },
   } : previsao;
 }
