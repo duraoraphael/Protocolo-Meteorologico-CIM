@@ -52,6 +52,10 @@ function criarApp({
   servicoCorRio = servicoCorRioPadrao(),
 } = {}) {
   const senhaConfere = criarComparadorSenha(senhaPainel);
+  const controleTentativas = criarControleTentativas(opcoesTentativas);
+  async function verificarSenha(req, senha = req.body?.senha) {
+    return controleTentativas.verificar(req.ip, () => senhaConfere(senha));
+  }
   const app = express();
   // V-08: não anunciar a tecnologia e aplicar cabeçalhos de segurança
   // (CSP, nosniff, X-Frame-Options, Referrer-Policy) em todas as respostas.
@@ -62,7 +66,7 @@ function criarApp({
   if (confiancaProxy !== false) app.set("trust proxy", confiancaProxy);
   app.use(cabecalhosSeguranca());
   app.use(express.json({ limit: "100kb" }));
-  app.use("/api/oceanop", require("./src/integrations/oceanopRoutes"));
+  app.use("/api/oceanop", require("./src/integrations/oceanopRoutes").criarOceanopRouter({ verificarSenha }));
   app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
   // Ativos visuais do CIM ficam em Logo/, na raiz do projeto.
   app.use("/logo", express.static(path.join(__dirname, "Logo")));
@@ -134,13 +138,7 @@ function criarApp({
   // atraso progressivo por IP em vez de bloqueio — a senha correta nunca é
   // recusada por causa de erros de outra pessoa no mesmo IP.
   // -----------------------------------------------------------------------
-  const controleTentativas = criarControleTentativas(opcoesTentativas);
   app.locals.controleTentativas = controleTentativas;
-
-  // Retorna { ok, status, erro } — usado por todos os endpoints protegidos.
-  async function verificarSenha(req, senha = req.body?.senha) {
-    return controleTentativas.verificar(req.ip, () => senhaConfere(senha));
-  }
 
   // -----------------------------------------------------------------------
   // PDFs gerados (V-07). Antes eram servidos por express.static sem

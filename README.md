@@ -153,6 +153,8 @@ unidades confirmadas pela Petrobras. O exemplo P-68 da documentação não é
 usado como ponto operacional. Autenticação, limites de uso e altura de medição
 do vento também precisam ser confirmados; o vento OCEANOP só complementa um
 campo ausente quando unidade, definição e altura estiverem homologadas.
+O monitor bruto em `areas.html` usa a senha operacional; PointIDs, coordenadas
+e respostas da fonte não são expostos pela listagem pública de bases.
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório

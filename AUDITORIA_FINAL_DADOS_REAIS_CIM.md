@@ -57,7 +57,7 @@ No D+3, temperatura, umidade, condição, rajada e chuva permanecem prioritariam
 | Clima e Saúde | EHF, classe EHF, risco combinado e GeoSES | `https://clima.saude.gov.br/{uf}/{municipio}?modo=ehf&data=AAAA-MM-DD` | Ministério da Saúde | 15/10/2026, HTTP 200 | **EHF 0,5 / Sem excesso / risco Normal** |
 | COR-Rio | estágio da cidade, nível de calor e comunicados | `https://appcor.cor-rio.work/estagio_cidade`, `/calor_api` e `https://cor.rio/wp-json/wp/v2/posts` | Prefeitura do Rio / COR-Rio | 13/10/2026, HTTP 200 | **Dados reais verificados; contrato dos dois endpoints appcor não documentado publicamente** |
 | ANA Monitor de Secas | competência mensal, mapa, elaboração e descrições por UF | `https://apimsbr.ana.gov.br/rest/cms-msne/mapa-monitor` | Agência Nacional de Águas e Saneamento Básico | competência 2026-08, consulta em 13/10/2026, HTTP 200 | **Produto oficial mensal verificado; não é previsão diária** |
-| OCEANOP | previsão por lista de pontos Petrobras | `POST https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync` | Petrobras | tentativa real em 19/10/2026; DNS não resolveu o host | **ADAPTADOR IMPLEMENTADO / SEM HOMOLOGAÇÃO REAL** |
+| OCEANOP | previsão por lista de pontos Petrobras | `POST https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync` | Petrobras | 19/10/2026: DNS interno e TCP/443 OK, TLS validado pela CA do Windows, POST sem credencial respondeu HTTP 401 | **CONECTIVIDADE CONFIRMADA / AUTENTICAÇÃO E PONTOS AUTORIZADOS PENDENTES** |
 
 ### Condições de uso, documentação e limitações
 
@@ -67,7 +67,7 @@ No D+3, temperatura, umidade, condição, rajada e chuva permanecem prioritariam
 - **Clima e Saúde:** metodologia consultada em <https://clima.saude.gov.br/perguntas-frequentes>. Não foi localizada API/Swagger pública; o parser usa somente o HTML semântico oficial, valida município/UF/data e não reconstrói EHF. O portal não é usado para UV; esse indicador vem do CAMS/Open-Meteo com fonte própria.
 - **ANA:** fonte oficial em <https://monitordesecas.ana.gov.br/dados-sig>. É monitoramento mensal da seca, não previsão meteorológica diária.
 - **COR-Rio:** portal oficial em <https://cor.rio/>. Os dados têm validade exclusiva para o município do Rio de Janeiro.
-- **OCEANOP:** o cliente por lista de pontos está implementado, mas sem PointID autorizado, unidade, fuso, autenticação e contrato confirmados; seus valores não entram nos campos operacionais até a homologação.
+- **OCEANOP:** o cliente por lista de pontos está implementado e alcança o serviço na rede corporativa. O servidor respondeu HTTP 401 sem indicar o esquema no cabeçalho `WWW-Authenticate`; faltam a credencial/mecanismo aprovado, PointIDs autorizados, unidades e fuso confirmados. Seus valores não entram nos campos operacionais até a homologação.
 
 ## B. Windy
 

@@ -11,6 +11,7 @@ const {
   mapearOceanopParaMar,
   mapearOceanopParaVento,
   limparCacheOceanop,
+  obterDiagnosticoOceanop,
 } = require("../src/sources/oceanop");
 
 const UNIDADES = Object.freeze({
@@ -177,9 +178,19 @@ test("deduplica chamadas simultâneas e usa cache temporário", async () => {
   assert.equal(a.previsoes.length, 1);
   assert.equal(b.previsoes.length, 1);
   assert.equal(c.cache, true);
+  assert.deepEqual(obterDiagnosticoOceanop(), {
+    status: "DEGRADADO",
+    ultimaConsulta: "2026-10-19T08:00:00.000Z",
+    ultimaConsultaBemSucedida: "2026-10-19T08:00:00.000Z",
+    localidadesConsultadas: 1,
+    localidadesComDadosValidos: 1,
+    origemDados: "cache_valido",
+    errosRecentes: [],
+  });
 });
 
 test("erros HTTP de autenticação e falhas de conexão não vazam resposta privada", async () => {
+  limparCacheOceanop();
   await assert.rejects(buscarOceanop([ponto()], {
     usarCache: false, tentativas: 1, logger: null,
     fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({ segredo: "não expor" }) }),
@@ -188,4 +199,10 @@ test("erros HTTP de autenticação e falhas de conexão não vazam resposta priv
     usarCache: false, tentativas: 1, logger: null,
     fetchImpl: async () => { throw Object.assign(new TypeError("rede"), { cause: { code: "ENOTFOUND" } }); },
   }), (erro) => erro.tipo === "dns" && erro.code === "ENOTFOUND");
+  const diagnostico = obterDiagnosticoOceanop();
+  assert.equal(diagnostico.status, "INDISPONIVEL");
+  assert.equal(diagnostico.localidadesConsultadas, 1);
+  assert.equal(diagnostico.localidadesComDadosValidos, 0);
+  assert.deepEqual(diagnostico.errosRecentes.map((erro) => erro.codigo), ["ENOTFOUND", "HTTP_403"]);
+  assert.doesNotMatch(JSON.stringify(diagnostico), /segredo/);
 });

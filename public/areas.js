@@ -16,7 +16,7 @@ function clearResults() {
 }
 base.addEventListener('change',()=>{
  clearResults();const selected=areas.find(a=>a.chave===base.value);
- localInput.value=selected?.pointId || '';
+ localInput.value=selected?.habilitado ? 'Ponto autorizado (identificador protegido)' : '';
  document.getElementById('consultar').disabled=!selected?.habilitado;
  document.getElementById('vinculo').textContent=selected?.habilitado ? 'Ponto autorizado associado a esta base na configuração do projeto.' : 'Esta base ainda não possui ponto OCEANOP autorizado e homologado.';
 });
@@ -41,11 +41,11 @@ form.addEventListener('submit',async e=>{
  const button=document.getElementById('consultar');button.disabled=true;button.textContent='Consultando…';
  results.setAttribute('aria-busy','true');statusEl.textContent='Consultando Oceanop…';
  try{
- const params=new URLSearchParams({cidade:base.value});
- const r=await fetch(`/api/oceanop/previsao?${params}`,{signal:request.signal});
+ const r=await fetch('/api/oceanop/previsao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cidade:base.value,senha:document.getElementById('senha').value}),signal:request.signal});
  const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.erro||'Não foi possível consultar o Oceanop.');
  if(controller!==request)return;response=data;
- statusEl.textContent=data.previsoes.length ? `${data.previsoes.length} intervalos retornados pela fonte.` : 'Nenhuma previsão encontrada para este local.';
+ const d=data.diagnostico;
+ statusEl.textContent=data.previsoes.length ? `${data.previsoes.length} intervalos retornados pela fonte. Status ${d?.status||'ATIVO'}; ${d?.localidadesComDadosValidos??1} localidade(s) com dados válidos.` : 'Nenhuma previsão encontrada para este local.';
  if(!data.previsoes.length)return;
  localFilter.innerHTML='<option value="">Todos os locais retornados</option>'+[...new Set(data.previsoes.map(r=>r.local).filter(Boolean))].map(p=>`<option value="${escape(p)}">${escape(p)}</option>`).join('');
  document.getElementById('resultado-titulo').textContent=`Ponto: ${data.consulta.pontos.map(p=>p.ID).join(', ')}`;

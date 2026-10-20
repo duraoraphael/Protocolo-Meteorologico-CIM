@@ -13,7 +13,8 @@
 <p class="intro">Consulte temperatura, vento, chuva e condições marítimas por local e intervalo.</p>
 <form id="consulta" class="query-panel">
 <label>Base atendida<select id="base" required><option value="">Carregando bases…</option></select></label>
-<label>Ponto OCEANOP<input id="local" maxlength="100" readonly placeholder="Ponto não configurado" autocomplete="off" aria-describedby="vinculo"></label>
+<label>Ponto OCEANOP<input id="local" maxlength="100" readonly placeholder="Protegido" autocomplete="off" aria-describedby="vinculo"></label>
+<label>Senha operacional<input id="senha" type="password" maxlength="1024" required autocomplete="current-password"></label>
 <button class="botao-primario" id="consultar" type="submit">Consultar previsão</button>
 <p id="vinculo" class="query-note">Carregando bases cadastradas no projeto.</p>
 </form>

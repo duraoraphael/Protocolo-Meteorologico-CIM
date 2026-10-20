@@ -57,6 +57,56 @@ const LIMITES = Object.freeze({
 const CONDICOES_CLIMA = Object.freeze({ partly_cloudy: "Parcialmente nublado" });
 const cache = new Map();
 const pendentes = new Map();
+const diagnostico = {
+  ultimaConsulta: null,
+  ultimaConsultaBemSucedida: null,
+  localidadesConsultadas: 0,
+  localidadesComDadosValidos: 0,
+  origemDados: null,
+  errosRecentes: [],
+};
+
+function registrarTentativa(pontos, consultadoEm) {
+  diagnostico.ultimaConsulta = consultadoEm;
+  diagnostico.localidadesConsultadas = pontos.length;
+  diagnostico.origemDados = "consulta_oceanop";
+}
+
+function registrarSucesso(resultado) {
+  diagnostico.ultimaConsultaBemSucedida = resultado.consultadoEm;
+  diagnostico.localidadesComDadosValidos = new Set(resultado.previsoes.map((item) => item.pointId)).size;
+  diagnostico.origemDados = "consulta_oceanop";
+}
+
+function registrarUsoCache(resultado) {
+  diagnostico.localidadesConsultadas = resultado.consulta.pontos.length;
+  diagnostico.localidadesComDadosValidos = new Set(resultado.previsoes.map((item) => item.pointId)).size;
+  diagnostico.origemDados = "cache_valido";
+}
+
+function registrarErro(erro, ocorridoEm) {
+  diagnostico.localidadesComDadosValidos = 0;
+  diagnostico.origemDados = "indisponivel";
+  diagnostico.errosRecentes.unshift({
+    ocorridoEm,
+    tipo: erro?.tipo || "unknown",
+    codigo: erro?.code || null,
+    httpStatus: erro?.httpStatus ?? null,
+  });
+  diagnostico.errosRecentes.splice(5);
+}
+
+function obterDiagnosticoOceanop() {
+  const houveFalhaDepoisDoSucesso = diagnostico.ultimaConsulta &&
+    (!diagnostico.ultimaConsultaBemSucedida || diagnostico.ultimaConsulta > diagnostico.ultimaConsultaBemSucedida);
+  const status = houveFalhaDepoisDoSucesso
+    ? "INDISPONIVEL"
+    : diagnostico.localidadesComDadosValidos === 0 ? "INDISPONIVEL"
+      : diagnostico.origemDados === "cache_valido" ||
+        diagnostico.localidadesComDadosValidos < diagnostico.localidadesConsultadas
+        ? "DEGRADADO" : "ATIVO";
+  return { status, ...diagnostico, errosRecentes: diagnostico.errosRecentes.map((erro) => ({ ...erro })) };
+}
 
 function texto(valor, limite = 500) {
   return typeof valor === "string" ? valor.trim().slice(0, limite) : "";
@@ -222,9 +272,11 @@ async function buscarOceanop(pontos, {
   const instante = agora();
   const armazenado = cache.get(chave);
   if (usarCache && armazenado && instante.getTime() - Date.parse(armazenado.consultadoEm) < cacheTtlMs) {
+    registrarUsoCache(armazenado);
     return { ...armazenado, cache: true };
   }
   if (usarCache && pendentes.has(chave)) return pendentes.get(chave);
+  registrarTentativa(payload, instante.toISOString());
   const tarefa = (async () => {
     const json = await buscarJsonComRetentativa(ENDPOINT, {
       nomeFonte: FONTE, fetchImpl, timeoutMs, tentativas, atrasoBaseMs: 1000, esperarFn,
@@ -243,10 +295,15 @@ async function buscarOceanop(pontos, {
       previsoes: normalizarResposta(json, { pontos: payload, fusoPorPonto }), cache: false,
     };
     if (usarCache) cache.set(chave, resultado);
+    registrarSucesso(resultado);
     return resultado;
   })();
   if (usarCache) pendentes.set(chave, tarefa);
   try { return await tarefa; }
+  catch (erro) {
+    registrarErro(erro, agora().toISOString());
+    throw erro;
+  }
   finally { if (pendentes.get(chave) === tarefa) pendentes.delete(chave); }
 }
 
@@ -385,6 +442,14 @@ function mapearOceanopParaVento(resultado, ponto, opcoes = {}) {
 function limparCacheOceanop() {
   cache.clear();
   pendentes.clear();
+  Object.assign(diagnostico, {
+    ultimaConsulta: null,
+    ultimaConsultaBemSucedida: null,
+    localidadesConsultadas: 0,
+    localidadesComDadosValidos: 0,
+    origemDados: null,
+    errosRecentes: [],
+  });
 }
 
 module.exports = {
@@ -392,4 +457,5 @@ module.exports = {
   CACHE_TTL_MS, buscarOceanop, normalizarResposta, validarPonto, validarPontos,
   numero, numeroNoIntervalo, partesDataFonte, instanteDaFonte, mapearOceanopParaMar,
   mapearOceanopParaVento, converterVelocidadeParaKmh, registrosVigentes, limparCacheOceanop,
+  obterDiagnosticoOceanop,
 };

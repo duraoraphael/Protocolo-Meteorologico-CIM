@@ -11,12 +11,14 @@ mostrado na documentação é apenas exemplo e não está cadastrado no sistema.
 - corpo: lista JSON de objetos com exatamente `ID`, `Lat` e `Lon`;
 - rota interna `GET /api/oceanop/areas`: lista as bases CIM e informa quais têm
   ponto autorizado habilitado;
-- rota interna `GET /api/oceanop/previsao?cidade=<chave>`: consulta somente o
-  ponto previamente cadastrado daquela base; o navegador não escolhe ID nem
-  coordenadas arbitrárias;
+- rota interna `POST /api/oceanop/previsao`: exige a senha operacional e
+  consulta somente o ponto previamente cadastrado daquela base; o navegador
+  não escolhe ID nem coordenadas arbitrárias;
 - timeout de 15 segundos, retentativas limitadas, cache de 5 minutos e
   deduplicação de chamadas simultâneas;
-- chamadas somente no backend, sem desativar validação TLS.
+- chamadas somente no backend, sem desativar validação TLS; a rota protegida
+  devolve telemetria sanitizada (última tentativa/sucesso, contagens, origem e
+  códigos dos erros recentes), sem corpo privado de resposta.
 
 ## Cadastro seguro
 
@@ -51,11 +53,14 @@ seis colunas do informativo permanecem preservados.
 
 ## Validação
 
-Em 19/10/2026, a conexão real foi tentada dentro e fora do sandbox e falhou na
-resolução DNS do host (`ENOTFOUND` / HTTP `000`). Isso pode indicar dependência
-de DNS ou VPN corporativa, mas não permite concluir qual autenticação é exigida.
-A integração não deve ser declarada operacional antes de um teste real com um
-ponto autorizado.
+Em 19/10/2026, uma nova verificação na rede corporativa resolveu o host para um
+endereço privado corporativo, confirmou TCP/443 e validou a cadeia TLS com o
+repositório de certificados do Windows. O POST diagnóstico com o ponto P-68 do
+exemplo documental chegou ao IIS da Petrobras, mas recebeu `HTTP 401`, sem corpo
+e sem cabeçalho `WWW-Authenticate`. Isso comprova conectividade, mas também que
+a API exige uma credencial ou mecanismo de autenticação ainda não fornecido ao
+projeto. P-68 não foi associado a nenhuma base CIM. A integração não deve ser
+declarada operacional antes de um teste autenticado com ponto autorizado.
 
 Testes locais:
 
