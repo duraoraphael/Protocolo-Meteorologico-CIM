@@ -11,6 +11,7 @@ const {
   montarPrevisaoProximosDiasInmet,
   obterPrevisaoProximosDias,
   mesclarPrevisaoProximosDias,
+  aplicarRajadasOceanop,
 } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
 const { validadeInformativo, HORARIO_EDICAO_INICIAL } = require("./logic/informativoValidity");
@@ -190,7 +191,10 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   const instantePrevisao = new Date(report.geradoEmISO || Date.now());
   const previsaoInmet3d = montarPrevisaoProximosDiasInmet(cidade, report.inmetPrevisao, { agora: instantePrevisao });
   const previsaoComplementar3d = await obterPrevisaoProximosDias(cidade, { agora: instantePrevisao });
-  report.previsaoProximosDias = mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d);
+  report.previsaoProximosDias = aplicarRajadasOceanop(
+    mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d),
+    report.previsaoOceanopDias
+  );
   if (report.previsaoProximosDias.status === "indisponivel") {
     report.avisosColeta.push("INMET (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
   }

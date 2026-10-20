@@ -217,6 +217,36 @@ function mesclarPrevisaoProximosDias(inmet, complementar) {
   };
 }
 
+/** OCEANOP substitui somente a rajada dos dias em que publicou valor válido. */
+function aplicarRajadasOceanop(previsao, diasOceanop = []) {
+  if (!previsao || !Array.isArray(previsao.dias) || !Array.isArray(diasOceanop) || !diasOceanop.length) return previsao;
+  const porData = new Map(diasOceanop.filter((dia) => Number.isFinite(dia?.rajadaMaxKmh)).map((dia) => [dia.data, dia]));
+  if (!porData.size) return previsao;
+  let utilizou = false;
+  const dias = previsao.dias.map((dia) => {
+    const oceanop = porData.get(dia.data);
+    if (!oceanop) return dia;
+    utilizou = true;
+    return {
+      ...dia,
+      rajadaMaxKmh: oceanop.rajadaMaxKmh,
+      fonteRajada: "Petrobras — OCEANOP",
+      rajadaPrevistaEm: oceanop.rajadaPrevistaEm || null,
+      rajadaLocal: oceanop.local || null,
+    };
+  });
+  return utilizou ? {
+    ...previsao,
+    dias,
+    fontesCampo: {
+      ...previsao.fontesCampo,
+      rajada: dias.every((dia) => !Number.isFinite(dia.rajadaMaxKmh) || dia.fonteRajada === "Petrobras — OCEANOP")
+        ? "Petrobras — OCEANOP"
+        : `Petrobras — OCEANOP / ${previsao.fontesCampo?.rajada || "fonte alternativa"}`,
+    },
+  } : previsao;
+}
+
 /**
  * Converte a resposta diária da Open-Meteo nas linhas da tabela, uma por data
  * esperada. Campos ausentes, não numéricos ou com unidade inesperada ficam
@@ -342,6 +372,7 @@ module.exports = {
   obterPrevisaoProximosDias,
   montarPrevisaoProximosDiasInmet,
   mesclarPrevisaoProximosDias,
+  aplicarRajadasOceanop,
   interpretarResposta,
   proximasDatas,
   dataLocalIso,

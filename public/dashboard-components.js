@@ -85,6 +85,7 @@ const Dashboard = (() => {
   }
   function metrics(r) {
     const gusts = (r.ventoPorPeriodo || []).map(p => p.rajadaMaxKmh).filter(v => v != null);
+    const gustValue = Number.isFinite(r.rajadaMaxKmh) ? r.rajadaMaxKmh : (gusts.length ? Math.max(...gusts) : null);
     const aq = r.qualidadeAr;
     const ar = Number.isFinite(aq?.aqiPm25) && aq?.pm25Classificacao?.nivel
       ? aq.pm25Classificacao.nivel
@@ -110,9 +111,11 @@ const Dashboard = (() => {
     const uvSource = uvReportedSource && uvReportedSource !== 'Indisponível'
       ? uvReportedSource
       : sourceOrPolicy('Open-Meteo Air Quality / CAMS', 'ar.uvMax');
-    const gustSource = sourceOrPolicy('INMET prioritário · Open-Meteo complementar', 'periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh');
-    const gustDetail = !gusts.length
+    const gustSource = sourceOrPolicy('INMET prioritário · Open-Meteo complementar', 'rajadaMaxKmh','periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh');
+    const gustDetail = !Number.isFinite(gustValue)
       ? 'INMET e Open-Meteo não publicaram máxima numérica válida de rajada'
+      : gustSource.includes('OCEANOP')
+        ? `Máxima prevista pela OCEANOP${r.rajadaPrevistaReferencia?.periodoReferencia ? ` · ${r.rajadaPrevistaReferencia.periodoReferencia}` : ''}`
       : gustSource.includes('Open-Meteo')
         ? 'Máxima prevista; Open-Meteo complementa campo numérico não publicado pelo INMET'
         : 'Máxima prevista no produto municipal do INMET';
@@ -135,7 +138,7 @@ const Dashboard = (() => {
     const cards = [
       metric('Temperatura prevista', pair(r.tempMin, r.tempMax, '°'), detalheTemp, 'thermometer', '', sources('tempMin','tempMax')),
       metric('Umidade relativa prevista', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
-      metric('Rajada prevista', gusts.length ? unit(Math.max(...gusts), ' <small>km/h</small>') : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
+      metric('Rajada prevista', Number.isFinite(gustValue) ? unit(gustValue, ' <small>km/h</small>') : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
       ...cardsEmail,
       metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), r.coberturaObservacoesInmet?.parcial ? `Dia civil local · parcial (${r.coberturaObservacoesInmet.amostras || 0}/${r.coberturaObservacoesInmet.horasEsperadas || 0} leituras)` : 'Dia civil local · cobertura completa', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
       metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), r.precipitacaoHoraReferencia ? `Hora de referência: ${escape(r.precipitacaoHoraReferencia)} · INMET` : 'Hora de referência indisponível', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
@@ -161,7 +164,7 @@ const Dashboard = (() => {
     return table('Condições de mar por período', 'waves', ['Período', 'Estado do mar', 'Altura máx.', 'Período de onda', 'Direção', 'Marulho'], (r.mar?.periodos || []).map(p => [escape(p.periodo), escape(p.estadoMar), altura(p), periodo(p), escape(p.direcaoOnda), unit(p.marulhoMaxM,' m')]), 'mar');
   }
   function windRain(r) {
-    const vento = table('Vento por período', 'wind', ['Período', 'Direção', 'Vento (velocidade média)', 'Rajada prevista (máx.)', 'Referência INMET'], (r.ventoPorPeriodo || []).map(v => [
+    const vento = table('Vento por período', 'wind', ['Período', 'Direção', 'Vento (velocidade média)', 'Rajada prevista (máx.)', 'Referência da previsão'], (r.ventoPorPeriodo || []).map(v => [
       `${escape(v.periodo)}${v.janela ? ` <small>${escape(v.janela)}</small>` : ''}`,
       escape(v.direcao),
       v.velocidadeMediaKmh == null ? 'Não disponível' : unit(v.velocidadeMediaKmh, ' km/h'),

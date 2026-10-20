@@ -20,7 +20,7 @@ function registroFonte({
   };
 }
 
-function metadadosMeteorologicos({ cidade, climaSaude, inmetObservacao, inmetPrevisao, openMeteo, geradoEm }) {
+function metadadosMeteorologicos({ cidade, climaSaude, inmetObservacao, inmetPrevisao, openMeteo, oceanopVento, geradoEm }) {
   const observacao = inmetObservacao?.observacao;
   const localidade = `${cidade.nome}/${cidade.uf}`;
   const metadadoInmet = (indicadorDisponivel) => registroFonte({
@@ -86,7 +86,15 @@ function metadadosMeteorologicos({ cidade, climaSaude, inmetObservacao, inmetPre
     chuvaObservada: metadadoInmet(Number.isFinite(observacao?.chuvaUltimaHoraMm)),
     vento: metadadoPrevisaoComFallback(ventoInmetDisponivel, ventoComplementar,
       "Direção, intensidade e valores numéricos previstos para o vento."),
-    rajadaPrevista: metadadoPrevisaoComFallback(rajadaPrevista, rajadaComplementar,
+    rajadaPrevista: Number.isFinite(oceanopVento?.rajadaMaxKmh) ? registroFonte({
+      fonte: "Petrobras — OCEANOP",
+      instanteMedicao: oceanopVento.rajadaPrevistaEm,
+      ultimaAtualizacao: oceanopVento.dataEscrita || geradoEm || null,
+      localidade: oceanopVento.local || localidade,
+      natureza: "previsto",
+      status: "operacional",
+      detalhe: `Rajada máxima na janela operacional${oceanopVento.periodoReferencia ? ` (${oceanopVento.periodoReferencia})` : ""}.`,
+    }) : metadadoPrevisaoComFallback(rajadaPrevista, rajadaComplementar,
       "Rajada máxima numérica prevista."),
     ventoObservado: metadadoInmet([observacao?.ventoVelocidadeKmh, observacao?.ventoDirecaoGraus, observacao?.rajadaKmh].some(Number.isFinite)),
     previsaoTextual: registroFonte({

@@ -68,7 +68,8 @@ function renderAlertEmailHtml(base) {
   const apenasCalorEhf = alertas.every((alerta) => alerta.assinatura === 'calor-ehf');
   const temTransicao = alertas.some((alerta) => normalizarGrau(alerta.grauAnterior));
   const rajadas = (r.ventoPorPeriodo || []).map((periodo) => periodo?.rajadaMaxKmh).filter(Number.isFinite);
-  const rajada = rajadas.length ? `${Math.max(...rajadas)} km/h` : "—";
+  const rajadaMax = Number.isFinite(r.rajadaMaxKmh) ? r.rajadaMaxKmh : rajadas.length ? Math.max(...rajadas) : null;
+  const rajada = Number.isFinite(rajadaMax) ? `${rajadaMax} km/h` : "—";
 
   return `<!doctype html>
 <html lang="pt-BR">

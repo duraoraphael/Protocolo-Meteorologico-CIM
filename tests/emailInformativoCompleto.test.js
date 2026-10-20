@@ -81,6 +81,22 @@ test('e-mail identifica Petrobras — OCEANOP somente quando a fonte entrou no r
   assert.match(html, /Petrobras — OCEANOP/);
 });
 
+test('card de e-mail usa a máxima OCEANOP da janela, não outra rajada fora dela', () => {
+  const html = semImagem(renderEmailHtml(relatorio({
+    rajadaMaxKmh: 43.2,
+    rajadaPrevistaReferencia: { periodoReferencia: '28/09/2026 12:00:00 a 28/09/2026 12:59:59' },
+    ventoPorPeriodo: [
+      { periodo: 'Tarde', janela: '12h–18h', rajadaMaxKmh: 43.2 },
+      { periodo: 'Noite', janela: '18h–00h', rajadaMaxKmh: 80 },
+    ],
+    fontesPorCampo: { ...relatorio().fontesPorCampo, rajadaMaxKmh: 'Petrobras — OCEANOP' },
+  })));
+  const $ = cheerio.load(html);
+  const card = $('div').filter((_, elemento) => $(elemento).text().trim() === 'RAJADA PREVISTA').first().closest('td');
+  assert.match(card.text(), /43\.2 km\/h/);
+  assert.doesNotMatch(card.text(), /80 km\/h/);
+});
+
 test('informativos de 05h e 15h exibem exatamente a lista institucional de fontes', () => {
   const fontesEsperadas = 'INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)';
   for (const horarioAgendado of ['05:00', '15:00']) {

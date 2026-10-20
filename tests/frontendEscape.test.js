@@ -115,3 +115,22 @@ test("painel aplica INMET a chuva/vento/rajada e Open-Meteo a UV/mar", () => {
   assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>[\s\S]*Open-Meteo Marine/);
   assert.doesNotMatch(html, /O portal Clima e Saúde não publica índice UV/);
 });
+
+test("painel usa rajada OCEANOP consolidada e identifica horário/fonte", () => {
+  const painel = carregarPainel();
+  const home = painel.executar("Dashboard.home");
+  const html = home({
+    cidade: { chave: "macae", nome: "Macaé", uf: "RJ" },
+    rajadaMaxKmh: 43.2,
+    rajadaPrevistaReferencia: { periodoReferencia: "20/10/2026 12:00:00 a 20/10/2026 12:59:59" },
+    ventoPorPeriodo: [
+      { periodo: "Tarde", rajadaMaxKmh: 43.2 },
+      { periodo: "Noite", rajadaMaxKmh: 80 },
+    ],
+    fontesPorCampo: { rajadaMaxKmh: "Petrobras — OCEANOP" },
+    monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
+  });
+  assert.match(html, /Rajada prevista[\s\S]*43\.2 <small>km\/h<\/small>/);
+  assert.match(html, /Petrobras — OCEANOP/);
+  assert.match(html, /20\/10\/2026 12:00:00/);
+});

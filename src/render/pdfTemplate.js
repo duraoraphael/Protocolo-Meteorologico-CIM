@@ -322,7 +322,7 @@ function tabelaVento(periodos) {
   if (!periodos?.length) return "";
   return `<table class="tabela-periodo tabela-vento-periodo">
     <colgroup><col style="width:14%"><col style="width:12%"><col style="width:19%"><col style="width:19%"><col style="width:36%"></colgroup>
-    <thead><tr><th>Período</th><th>Direção</th><th>Vento (velocidade média)</th><th>Rajada prevista (máx.)</th><th>Referência INMET</th></tr></thead>
+    <thead><tr><th>Período</th><th>Direção</th><th>Vento (velocidade média)</th><th>Rajada prevista (máx.)</th><th>Referência da previsão</th></tr></thead>
     <tbody>
       ${periodos
         .map(
@@ -856,7 +856,7 @@ function blocosPrevisao(r) {
     tabela: tabelaVento(r.ventoPorPeriodo),
     fonte: fonteVento === "Dado indisponível" || fonteVento === "INMET — previsão oficial"
       ? "Fonte de dados: INMET. A intensidade qualitativa oficial não é convertida em velocidade numérica; campos não publicados aparecem como Não disponível."
-      : `Fonte de dados: ${fonteVento}. A intensidade qualitativa oficial não é convertida em velocidade numérica; o Open-Meteo apenas completa campos não publicados pelo INMET.`,
+      : `Fonte de dados: ${fonteVento}. A intensidade qualitativa oficial não é convertida em velocidade numérica; OCEANOP é prioritária para rajada em área homologada e as demais fontes permanecem identificadas.`,
   });
   const chuvaPeriodo = blocoTabela({
     titulo: `<h4 class="subsecao secao-modelo">Chuva por período</h4>`,

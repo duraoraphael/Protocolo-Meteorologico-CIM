@@ -20,6 +20,7 @@ const {
   buscarOceanop,
   mapearOceanopParaMar,
   mapearOceanopParaVento,
+  mapearOceanopParaProximosDias,
   FONTE: FONTE_OCEANOP,
 } = require("../sources/oceanop");
 const climaSaudeService = require("../sources/climaSaudeService");
@@ -50,6 +51,15 @@ const JANELAS_PROBABILIDADE_EDICAO = Object.freeze({
   "17:00": Object.freeze({ inicioHora: 17, fimHora: 24, janela: "17h–00h" }),
   "20:00": Object.freeze({ inicioHora: 20, fimHora: 24, janela: "20h–00h" }),
 });
+
+// Janela operacional específica solicitada para rajadas OCEANOP. O texto
+// editorial "Previsão até 00h" permanece inalterado no e-mail/PDF.
+function janelaOceanopDaEdicao(horarioAgendado) {
+  if (horarioAgendado === "05:00") return { inicioHora: 5, fimHora: 15, rotulo: "05h–15h" };
+  if (horarioAgendado === "15:00") return { inicioHora: 15, fimHora: 24, rotulo: "15h–00h" };
+  const edicao = edicaoInformativo(horarioAgendado);
+  return { inicioHora: edicao?.inicioHora ?? 5, fimHora: edicao?.fimPrevisaoHora ?? 24, rotulo: edicao?.periodo || "05h–00h" };
+}
 
 function probabilidadeChuvaDaEdicao({ horarioAgendado, inmetPrevisao, openMeteo } = {}) {
   const janela = JANELAS_PROBABILIDADE_EDICAO[horarioAgendado];
@@ -124,8 +134,12 @@ function montarVentoPorPeriodo({ base }) {
         intensidade: p.intensidadeVento || "—",
         velocidadeMediaKmh: p.velocidadeMediaKmh ?? null,
         rajadaMaxKmh: p.rajadaMaxKmh ?? null,
+        rajadaPrevistaEm: p.rajadaPrevistaEm || null,
+        fonteRajada: p.fonteOceanop ? FONTE_OCEANOP : null,
         tipoDado: p.tipoDado || "indisponivel",
-        referenciaInmet: `Previsão municipal INMET · intensidade oficial: ${p.intensidadeVento && p.intensidadeVento !== "—" ? p.intensidadeVento : "não publicada"}${p.fonteOceanop ? ` · complemento numérico: ${FONTE_OCEANOP}` : ""}`,
+        referenciaInmet: p.fonteOceanop
+          ? `${FONTE_OCEANOP} · ${p.localOceanop || "área homologada"}${p.periodoReferenciaOceanop ? ` · ${p.periodoReferenciaOceanop}` : ""}`
+          : `Previsão municipal INMET · intensidade oficial: ${p.intensidadeVento && p.intensidadeVento !== "—" ? p.intensidadeVento : "não publicada"}`,
       };
     });
 }
@@ -186,41 +200,54 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     avisosColeta.push("INMET — Avisos: não foi possível atualizar esta fonte.");
   }
 
-  // Condições de mar: OCEANOP é prioritária somente em ponto autorizado com
-  // unidade, fuso e período válidos. Caso contrário, preserva-se o fallback
-  // Open-Meteo Marine já existente, sem misturar os dois produtos.
+  // OCEANOP é consultada somente quando existe correspondência `local`
+  // homologada. Vento e mar são promovidos separadamente: a falta de unidade
+  // marítima não impede uma rajada válida, e vice-versa.
   let mar = null;
   let marArmazenado = null;
   let marOpenMeteo = null;
   let resultadoOceanop = null;
   let ventoOceanop = null;
+  let previsaoOceanopDias = [];
   let healthMarine = naoAplicavel("Open-Meteo Marine", "Base não costeira.");
   const pontoOceanop = oceanopAreas[cidade.chave];
   let healthOceanop = !pontoOceanop?.habilitado
-    ? naoConfigurada("Oceanop / Petrobras", "Ponto OCEANOP autorizado ainda não vinculado a esta base.")
-    : naoAplicavel("Oceanop / Petrobras", "Base não costeira.");
-  if (cidade.costeira && pontoOceanop?.habilitado) {
+    ? naoConfigurada("Oceanop / Petrobras", "Área OCEANOP homologada ainda não vinculada a esta base.")
+    : naoAplicavel("Oceanop / Petrobras", "Área configurada, aguardando consulta.");
+  if (pontoOceanop?.habilitado) {
     try {
-      resultadoOceanop = await buscarOceanop([pontoOceanop]);
-      mar = mapearOceanopParaMar(resultadoOceanop, pontoOceanop, {
-        agora: dataNow,
-        inicioHora: janelaEdicao?.inicioHora ?? 5,
-        fimHora: janelaEdicao?.fimPrevisaoHora ?? 24,
-      });
-      ventoOceanop = mapearOceanopParaVento(resultadoOceanop, pontoOceanop, {
-        agora: dataNow,
-        inicioHora: janelaEdicao?.inicioHora ?? 5,
-        fimHora: janelaEdicao?.fimPrevisaoHora ?? 24,
-      });
-      healthOceanop = operacional("Oceanop / Petrobras", "Previsão oficial do ponto autorizado recebida e validada.", {
+      resultadoOceanop = await buscarOceanop(pontoOceanop);
+      let erroProduto = null;
+      if (pontoOceanop.usarVento === true) {
+        try {
+          const janelaOceanop = janelaOceanopDaEdicao(horarioAgendado);
+          ventoOceanop = mapearOceanopParaVento(resultadoOceanop, pontoOceanop, {
+            agora: dataNow,
+            inicioHora: janelaOceanop.inicioHora,
+            fimHora: janelaOceanop.fimHora,
+          });
+          previsaoOceanopDias = mapearOceanopParaProximosDias(resultadoOceanop, pontoOceanop, { agora: dataNow });
+        } catch (erro) { erroProduto = erro; }
+      }
+      if (cidade.costeira && pontoOceanop.usarMar === true) {
+        try {
+          mar = mapearOceanopParaMar(resultadoOceanop, pontoOceanop, {
+            agora: dataNow,
+            inicioHora: janelaEdicao?.inicioHora ?? 5,
+            fimHora: janelaEdicao?.fimPrevisaoHora ?? 24,
+          });
+        } catch (erro) { erroProduto ||= erro; }
+      }
+      if (!ventoOceanop && !mar) throw erroProduto || new Error("OCEANOP: nenhum produto homologado para esta área.");
+      healthOceanop = operacional("Oceanop / Petrobras", "Previsão oficial da área homologada recebida e validada.", {
         checkedAt: dataNow.toISOString(),
         lastSuccessAt: resultadoOceanop.consultadoEm,
       });
-      healthMarine = naoAplicavel("Open-Meteo Marine", "OCEANOP forneceu as condições marítimas prioritárias.");
+      if (mar) healthMarine = naoAplicavel("Open-Meteo Marine", "OCEANOP forneceu as condições marítimas prioritárias.");
     } catch (erro) {
       registrarFalha("OCEANOP", erro);
       healthOceanop = indisponivel("Oceanop / Petrobras", erro);
-      avisosColeta.push("Oceanop / Petrobras: previsão do ponto indisponível ou não homologada; utilizando a fonte marítima alternativa.");
+      avisosColeta.push("Oceanop / Petrobras: rajada prevista indisponível ou não homologada; preservadas as fontes meteorológicas alternativas.");
     }
   }
   if (cidade.costeira && !mar) {
@@ -335,8 +362,13 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
         integrado.fontesPorCampo[`periodos.${chave}.velocidadeMediaKmh`] = FONTE_OCEANOP;
         utilizou = true;
       }
-      if (!Number.isFinite(periodo.rajadaMaxKmh) && Number.isFinite(complemento.rajadaMaxKmh)) {
+      // Para rajada prevista, OCEANOP é prioritária quando a área e a janela
+      // estão homologadas. As demais grandezas apenas completam ausências.
+      if (Number.isFinite(complemento.rajadaMaxKmh)) {
         periodo.rajadaMaxKmh = complemento.rajadaMaxKmh;
+        periodo.rajadaPrevistaEm = complemento.rajadaPrevistaEm;
+        periodo.periodoReferenciaOceanop = complemento.periodoReferencia;
+        periodo.localOceanop = complemento.local;
         integrado.fontesPorCampo[`periodos.${chave}.rajadaMaxKmh`] = FONTE_OCEANOP;
         utilizou = true;
       }
@@ -347,11 +379,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       }
       periodo.fonteOceanop = utilizou;
     }
-    const rajadas = Object.values(base.periodos).map((periodo) => periodo.rajadaMaxKmh).filter(Number.isFinite);
-    base.rajadaMaxKmh = rajadas.length ? Math.max(...rajadas) : null;
-    if (rajadas.length) integrado.fontesPorCampo.rajadaMaxKmh = [...new Set(
-      ["manha", "tarde", "noite"].map((chave) => integrado.fontesPorCampo[`periodos.${chave}.rajadaMaxKmh`]).filter((fonte) => fonte && fonte !== "Indisponível")
-    )].join(" / ");
+    if (Number.isFinite(ventoOceanop.resumo?.rajadaMaxKmh)) {
+      base.rajadaMaxKmh = ventoOceanop.resumo.rajadaMaxKmh;
+      base.rajadaOceanopReferencia = ventoOceanop.resumo;
+      integrado.fontesPorCampo.rajadaMaxKmh = FONTE_OCEANOP;
+      integrado.fontesPorCampo.rajadaPrevistaKmh = FONTE_OCEANOP;
+    }
   }
   integrado.atual = base.atual;
   const probabilidadeChuvaEdicao = probabilidadeChuvaDaEdicao({ horarioAgendado, inmetPrevisao, openMeteo });
@@ -459,10 +492,10 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       nome: "Open-Meteo Marine",
       uso: `Ondas, marulho e temperatura da superfície do mar${marOpenMeteo.referenciaPonto ? ` (ponto de referência: ${marOpenMeteo.referenciaPonto})` : ""}`,
     });
-  if (resultadoOceanop && mar?.fonte === FONTE_OCEANOP)
+  if (resultadoOceanop && (mar?.fonte === FONTE_OCEANOP || ventoOceanop))
     fontesAutomatizadas.push({
       nome: FONTE_OCEANOP,
-      uso: `Ondas, ondulação e períodos previstos no ponto autorizado ${mar.pontoOceanop}${ventoOceanop ? "; complemento numérico de vento com unidade e altura homologadas" : ""}`,
+      uso: `${ventoOceanop ? "Rajada prevista prioritária, velocidade média e direção do vento na área homologada" : ""}${ventoOceanop && mar?.fonte === FONTE_OCEANOP ? "; " : ""}${mar?.fonte === FONTE_OCEANOP ? `ondas, ondulação e períodos previstos em ${mar.pontoOceanop}` : ""}`,
     });
   if (arOpenMeteo)
     fontesAutomatizadas.push({
@@ -618,6 +651,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     precipitacaoPeriodoMm: base.precipitacaoPeriodoMm ?? null,
     rajadaMaxKmh: base.rajadaMaxKmh,
     rajadaPrevistaKmh: base.rajadaMaxKmh,
+    rajadaPrevistaReferencia: base.rajadaOceanopReferencia || null,
     rajadaObservadaMaxKmh: base.rajadaObservadaMaxKmh,
     tabelaTemperaturaUmidade,
     ventoPorPeriodo,
@@ -633,6 +667,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       inmetObservacao,
       inmetPrevisao,
       openMeteo,
+      oceanopVento: base.rajadaOceanopReferencia || null,
       geradoEm: dataNow.toISOString(),
     }),
     mar,
@@ -668,6 +703,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     climaSaude,
     inmetPrevisao,
     contextoMeteorologicoSetor,
+    previsaoOceanopDias,
     geradoEmISO: dataNow.toISOString(),
     horarioAgendado,
     tipoDocumento: tipoDocumentoPorHorario(horarioAgendado),

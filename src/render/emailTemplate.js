@@ -47,6 +47,12 @@ function parOuTraco(minimo, maximo, sufixoMin, sufixoMax) {
 }
 
 function rajadaMaxima(r) {
+  if (Number.isFinite(r.rajadaMaxKmh)) {
+    return {
+      valor: r.rajadaMaxKmh,
+      periodo: r.rajadaPrevistaReferencia?.periodoReferencia || null,
+    };
+  }
   const periodos = Array.isArray(r.ventoPorPeriodo) ? r.ventoPorPeriodo : [];
   const validos = periodos.filter((p) => Number.isFinite(p?.rajadaMaxKmh));
   if (!validos.length) return { valor: null, periodo: null };

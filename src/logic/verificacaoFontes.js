@@ -22,7 +22,7 @@ const { competenciaConfigurada, descobrirPublicacao } = require("../sources/moni
 const { tipoErro } = require("../sources/httpJsonClient");
 const { credenciaisConfiguradas, destinoConfigurado } = require("../integrations/sharepointGed");
 const oceanopAreas = require("../config/oceanopAreas");
-const { buscarOceanop, validarPonto } = require("../sources/oceanop");
+const { buscarOceanop, validarConsulta } = require("../sources/oceanop");
 
 const SITUACAO = Object.freeze({
   OK: "ok",
@@ -172,8 +172,8 @@ function verificarConfiguracoes(env) {
     itens.push(item("Oceanop", "Configuração", SITUACAO.NAO_CONFIGURADA, "Nenhum ponto autorizado em src/config/oceanopAreas.js."));
   } else {
     try {
-      pontosOceanop.forEach(validarPonto);
-      itens.push(item("Oceanop", "Configuração", SITUACAO.OK, `${pontosOceanop.length} ponto(s) autorizado(s) com ID e coordenadas válidos.`));
+      pontosOceanop.forEach(validarConsulta);
+      itens.push(item("Oceanop", "Configuração", SITUACAO.OK, `${pontosOceanop.length} área(s) com identificador local homologado.`));
     } catch (erro) {
       itens.push(item("Oceanop", "Configuração", SITUACAO.BLOQUEADA, erro.message));
     }
@@ -227,8 +227,8 @@ async function executarVerificacao({
     verificar("INMET Avisos", "Nacional", () => f.avisosInmet(rio.codigoIbge, opcoes), { avisos: "lista de avisos" }),
     verificarCorRio(f.corRio).catch((erro) => [item("COR-Rio", "Rio de Janeiro", situacaoDoErro(erro), erro.message)]),
     verificarMonitorSecas(f.fetch),
-    ...(pontosOceanop.length ? [verificar("Oceanop", `${pontosOceanop.length} ponto(s) autorizado(s)`,
-      () => f.oceanop(pontosOceanop, { ...opcoes, tentativas: 2 }), { "previsoes.0.pointId": "primeiro PointID retornado" })] : []),
+    ...pontosOceanop.map((area) => verificar("Oceanop", area.referencia || "área homologada",
+      () => f.oceanop(area, { ...opcoes, tentativas: 2 }), { "previsoes.0.local": "área retornada" })),
   ]);
 
   // Por base em sequência: evita disparar dezenas de requisições simultâneas

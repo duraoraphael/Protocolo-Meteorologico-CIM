@@ -1,26 +1,34 @@
-// Cadastre somente pontos autorizados e homologados pela Petrobras/OCEANOP.
-// As chaves devem existir em src/config/cities.js; nunca se infere PointID pelo
-// nome da cidade e nunca se reutiliza o ponto de exemplo da documentação.
+// Mapeamento entre as bases CIM e o parâmetro `local` do endpoint
+// GET /api/v1/previsao/JsonPrevisaoAreaAsync.
 //
-// Formato exigido para promover os dados ao informativo:
-// cidade_chave: {
-//   habilitado: true,
-//   ID: "identificador-autorizado",
-//   latitude: -00.0000,
-//   longitude: -00.0000,
-//   referencia: "descrição operacional do ponto",
-//   fusoHorario: "America/Sao_Paulo", // confirmado com o gestor da API
-//   unidades: {
-//     AlturaOnda: "m", AlturaMaximaOnda: "m",
-//     PeriodoOnda: "s", PeriodoPicoOnda: "s",
-//     DirecaoOnda: "graus", AlturaOndulacao: "m",
-//   },
-//   // Vento só pode ser habilitado depois de confirmar também a altura de
-//   // VelocidadeVento e suas unidades. O padrão seguro é não utilizá-lo.
-//   usarVento: false,
-// }
-//
-// O objeto permanece vazio porque este repositório não contém PointIDs
-// autorizados, unidades ou fuso homologados. Isso mantém o fallback atual sem
-// apresentar o ponto P-68 de exemplo como dado operacional.
-module.exports = {};
+// As velocidades foram confirmadas em km/h. Portanto, o adaptador preserva os
+// valores recebidos, sem multiplicar por 3,6. Os horários são interpretados no
+// fuso operacional de cada base (Manaus tem fuso próprio; as demais usam o
+// horário de Brasília/São Paulo).
+
+const unidadesVentoKmh = Object.freeze({
+  VelocidadeVento: "km/h",
+  VelocidadeVento_10M_Rajada: "km/h",
+  DirecaoVento: "graus",
+});
+
+function area(local, referencia, fusoHorario = "America/Sao_Paulo") {
+  return Object.freeze({
+    habilitado: true,
+    local,
+    referencia,
+    fusoHorario,
+    usarVento: true,
+    unidades: unidadesVentoKmh,
+  });
+}
+
+module.exports = Object.freeze({
+  santos: area("santos", "Santos — SP"),
+  araucaria: area("Araucaria", "Araucária — PR"),
+  manaus: area("manaus", "Manaus — AM", "America/Manaus"),
+  rio_de_janeiro: area("Rio de Janeiro", "Rio de Janeiro — RJ"),
+  macae: area("macaé", "Macaé — RJ"),
+  brasilia: area("Brasilia", "Brasília — DF"),
+  vitoria: area("Vitoria", "Vitória — ES"),
+});

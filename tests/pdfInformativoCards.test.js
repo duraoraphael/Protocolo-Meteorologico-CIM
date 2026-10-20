@@ -33,6 +33,20 @@ test("cabeçalho usa a edição e a previsão na mesma linha", () => {
   }
 });
 
+test("PDF exibe rajada OCEANOP no resumo e na referência da previsão", () => {
+  const $ = cheerio.load(renderPdfHtml(report({
+    previsaoDias: [{ periodo: "Hoje (15h–00h)", condicao: "Nublado", tempMin: 20, tempMax: 28, umidadeMin: 60, umidadeMax: 90, chuvaMm: 0, rajadaKmh: 43.2 }],
+    ventoPorPeriodo: [{
+      periodo: "Tarde", janela: "12h–18h", direcao: "E", velocidadeMediaKmh: 10,
+      rajadaMaxKmh: 43.2, referenciaInmet: "Petrobras — OCEANOP · Área A · 09/10/2026 15:00:00 a 09/10/2026 15:59:59",
+    }],
+    fontesPorCampo: { rajadaMaxKmh: "Petrobras — OCEANOP", "periodos.tarde.rajadaMaxKmh": "Petrobras — OCEANOP" },
+  })));
+  assert.match($.text(), /43,2 km\/h/);
+  assert.match($.text(), /Petrobras — OCEANOP/);
+  assert.match($.text(), /Área A/);
+});
+
 test("condições de mar aparecem imediatamente após qualidade do ar e índice UV", () => {
   const html = renderPdfHtml(report({ qualidadeAr: { pm25Classificacao: {}, uvClassificacao: {} } }));
   const $ = cheerio.load(html);
