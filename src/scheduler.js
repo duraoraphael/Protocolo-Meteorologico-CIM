@@ -1,12 +1,11 @@
 const cron = require("node-cron");
 const { executarPipeline } = require("./pipeline");
 const { CIDADES } = require("./config/cities");
-const { dataBrasilia, lerEstado, gravarEstado, registroHistorico } = require("./logic/scheduledReport");
+const { dataBrasilia, lerEstado, gravarEstado, registroHistorico, adquirirExecucao } = require("./logic/scheduledReport");
 const { BASE_COR_RIO } = require("./config/distributionBases");
 const { HORARIOS_INFORMATIVO, HORARIO_EDICAO_INICIAL, horariosConfigurados } = require("./logic/informativoValidity");
 
-// O aviso COR-Rio mantém por padrão só as edições das 05:00 e 15:00.
-const HORARIOS_COR_RIO_PADRAO = Object.freeze(["05:00", "15:00"]);
+const HORARIOS_COR_RIO_PADRAO = Object.freeze(["08:00", "15:00"]);
 const {
   relatorioDiarioAtivo,
   envioUnicoAgendadoAtivo,
@@ -43,13 +42,17 @@ async function executarHorarioAgendado(horario, {
   salvar = gravarEstado,
   data = dataBrasilia(),
   incluirCorRio = true,
+  adquirir = null,
 } = {}) {
   if (processamentoAgendado) {
     console.warn(`[AGENDADOR] ${horario}: execução anterior ainda em andamento; ciclo sobreposto ignorado.`);
     return;
   }
   processamentoAgendado = true;
-  console.log(`[AGENDADOR] ${horario} iniciado (${data}).`);
+  const adquirirTrava = adquirir || ((carregar !== lerEstado || salvar !== gravarEstado)
+    ? (chave) => ({ adquirida: true, executionId: `teste:${chave}`, concluir() {}, liberar() {} })
+    : adquirirExecucao);
+  console.log(`[AGENDADOR] horárioProgramado=${horario} horárioEfetivo=${new Date().toISOString()} data=${data} status=iniciado.`);
   try {
     const estado = carregar();
     for (const cidadeChave of bases) {
@@ -59,13 +62,18 @@ async function executarHorarioAgendado(horario, {
         console.log(`[AGENDADOR] ${nome}: envio das ${horario} já confirmado; ignorado.`);
         continue;
       }
-      console.log(`[AGENDADOR] ${nome}: iniciando coleta (${horario}).`);
+      const trava = adquirirTrava(chave);
+      if (!trava.adquirida) {
+        console.warn(`[AGENDADOR] execução duplicada bloqueada horario=${horario} localidade="${nome}" chave="${chave}".`);
+        continue;
+      }
+      console.log(`[AGENDADOR] executionId=${trava.executionId} horarioProgramado=${horario} localidade="${nome}" status=coleta_iniciada.`);
       try {
         const resultado = await executar({
           cidadeChave,
           enviarEmail: true,
           horarioAgendado: horario,
-          // Edições posteriores comparam com a edição inicial (05:00) do dia.
+          // A edição das 15h compara com a edição inicial (08:00) do dia.
           comparacaoAnterior: horario !== HORARIO_EDICAO_INICIAL
             ? estado[`${data}|${cidadeChave}|${HORARIO_EDICAO_INICIAL}`]?.resumo || null
             : null,
@@ -73,7 +81,8 @@ async function executarHorarioAgendado(horario, {
         if (!resultado.envio) throw new Error("SMTP não confirmou o envio do relatório.");
         estado[chave] = registroHistorico(resultado.report);
         salvar(estado);
-        console.log(`[AGENDADOR] ${nome}: relatório gerado e e-mail enviado com sucesso (${horario}).`);
+        trava.concluir("enviado", { messageId: resultado.envio?.messageId || null });
+        console.log(`[AGENDADOR] executionId=${trava.executionId} horarioProgramado=${horario} horarioEfetivo=${new Date().toISOString()} localidade="${nome}" status=enviado.`);
         if (alertasAutomaticosAtivos() && process.env.MONITOR_ALERTAS !== "false" && resultado.report.climaSaude?.status === 'operacional') {
           try {
             const { enviarAlertaCalorDoRelatorio } = require('./logic/alertWatcher');
@@ -84,13 +93,19 @@ async function executarHorarioAgendado(horario, {
         }
         onResultado?.(null, resultado);
       } catch (erro) {
-        console.error(`[AGENDADOR] ${nome}: falha às ${horario}: ${erro.message}`);
+        trava.liberar();
+        console.error(`[AGENDADOR] executionId=${trava.executionId} horarioProgramado=${horario} horarioEfetivo=${new Date().toISOString()} localidade="${nome}" status=falha erro="${erro.message}".`);
         onResultado?.(erro, null);
       }
     }
     if (incluirCorRio) {
       const chaveCorRio = `${data}|${BASE_COR_RIO}|${horario}`;
       if (!estado[chaveCorRio]) {
+        const travaCorRio = adquirirTrava(chaveCorRio);
+        if (!travaCorRio.adquirida) {
+          console.warn(`[AGENDADOR] execução duplicada bloqueada horario=${horario} localidade="COR-RIO" chave="${chaveCorRio}".`);
+          return;
+        }
         try {
           const resultado = await executar({
             cidadeChave: "rio_de_janeiro",
@@ -102,12 +117,15 @@ async function executarHorarioAgendado(horario, {
           if (resultado.envio) {
             estado[chaveCorRio] = registroHistorico(resultado.report);
             salvar(estado);
-            console.log(`[AGENDADOR] COR-RIO: aviso enviado com sucesso (${horario}).`);
+            travaCorRio.concluir("enviado", { messageId: resultado.envio?.messageId || null });
+            console.log(`[AGENDADOR] executionId=${travaCorRio.executionId} horarioProgramado=${horario} horarioEfetivo=${new Date().toISOString()} localidade="COR-RIO" status=enviado.`);
             onResultado?.(null, resultado);
           } else {
+            travaCorRio.liberar();
             console.log(`[AGENDADOR] COR-RIO: nenhum destinatário vinculado; envio ignorado (${horario}).`);
           }
         } catch (erro) {
+          travaCorRio.liberar();
           console.error(`[AGENDADOR] COR-RIO: falha às ${horario}: ${erro.message}`);
           onResultado?.(erro, null);
         }
@@ -133,9 +151,9 @@ function lerHorarios(variavel, padrao) {
 
 /**
  * Agenda as edições diárias do informativo para todas as bases, no horário
- * de Brasília. Padrão: 05:00, 09:00, 12:00, 15:00, 17:00 e 20:00.
- *   HORARIOS_INFORMATIVO=05:00,15:00   (opcional; restringe as edições)
- *   HORARIOS_COR_RIO=05:00,15:00       (edições que também enviam o aviso COR-Rio)
+ * de Brasília. Únicos horários regulares: 08:00 e 15:00.
+ *   HORARIOS_INFORMATIVO=08:00,15:00
+ *   HORARIOS_COR_RIO=08:00,15:00
  */
 function iniciarAgendamentoDiario(onResultado, agendar = cron.schedule) {
   if (!relatorioDiarioAtivo()) {
@@ -225,10 +243,78 @@ function agendarEnvioUnicoHoje(onResultado) {
  *   JANELA_MONITOR=06:00-22:00     (faixa horária; fora dela não verifica)
  *   BASES_MONITOR_ALERTAS=a,b      (opcional; padrão: todas)
  *
- * A janela horária existe porque um e-mail às 3h da manhã não gera ação —
- * só ruído. Eventos da madrugada aparecem no informativo das 07:30.
+ * Por padrão o monitor opera 24 horas; uma janela menor pode ser configurada
+ * explicitamente quando houver uma política operacional para isso.
  */
-function iniciarMonitorAlertas(onResultado) {
+async function processarAlertaBase(base, {
+  enviar,
+  listar,
+  enfileirar,
+  assumir,
+  marcarEnviado,
+  marcarFalha,
+  confirmar,
+} = {}) {
+  const enviarEfetivo = enviar || require("./email/sendAlert").enviarAlertaPorEmail;
+  const listarEfetivo = listar || require("./email/sendReport").listaDestinatarios;
+  const fila = require("./logic/alertQueue");
+  const enfileirarEfetivo = enfileirar || fila.enfileirar;
+  const assumirEfetivo = assumir || fila.assumir;
+  const marcarEnviadoEfetivo = marcarEnviado || fila.marcarEnviado;
+  const marcarFalhaEfetivo = marcarFalha || fila.marcarFalha;
+  const confirmarEfetivo = confirmar || require("./logic/alertWatcher").marcarAlertasEnviados;
+  const destinatarios = listarEfetivo(base.chave, { permitirFallback: false });
+  const evento = enfileirarEfetivo(base, destinatarios);
+
+  if (evento.status === "enviado") {
+    confirmarEfetivo(base);
+    return { ignorado: true, motivo: "evento-ja-enviado", eventoId: evento.id, destinatarios };
+  }
+  const assumido = assumirEfetivo(evento.id);
+  if (!assumido) {
+    return { ignorado: true, motivo: "evento-em-processamento-ou-backoff", eventoId: evento.id, destinatarios };
+  }
+
+  try {
+    if (!destinatarios.length) throw new Error(`Nenhum ponto focal cadastrado para "${base.cidade.nome}".`);
+    const envio = await enviarEfetivo(base, {
+      eventoId: evento.id,
+      destinatariosOverride: destinatarios,
+    });
+    marcarEnviadoEfetivo(evento.id, envio);
+    try {
+      confirmarEfetivo(base);
+    } catch (erroEstado) {
+      console.error(`[CIM] SMTP confirmou o alerta ${evento.id}, mas o histórico será reconciliado no próximo ciclo: ${erroEstado.message}`);
+    }
+    return { ...envio, eventoId: evento.id };
+  } catch (erro) {
+    marcarFalhaEfetivo(evento.id, erro);
+    throw erro;
+  }
+}
+
+async function verificarAlertasEEnviarPorBase({ onResultado, verificar } = {}) {
+  const verificarEfetivo = verificar || require("./logic/alertWatcher").verificarAlertas;
+  return verificarEfetivo({
+    onBase: async (base) => {
+      try {
+        const envio = await processarAlertaBase(base);
+        if (envio.ignorado) {
+          console.log(`[CIM] Evento de alerta não reenviado (${base.chave}): ${envio.motivo}.`);
+        } else {
+          console.log(`[CIM] Alerta enviado (${base.chave}): ${base.alertas.map((a) => a.tipo).join(", ")} -> ${envio.destinatarios.length} destinatário(s).`);
+        }
+        onResultado?.(null, { base, envio });
+      } catch (erro) {
+        console.error(`[CIM] Falha ao enviar alerta (${base.chave}):`, erro.message);
+        onResultado?.(erro, null);
+      }
+    },
+  });
+}
+
+function iniciarMonitorAlertas(onResultado, agendar = cron.schedule) {
   if (!alertasAutomaticosAtivos()) {
     console.log("[CIM] Monitor de alertas desativado em src/config/email.js.");
     return null;
@@ -238,18 +324,18 @@ function iniciarMonitorAlertas(onResultado) {
     return null;
   }
 
-  const intervalo = parseInt(process.env.INTERVALO_MONITOR_MIN || "60", 10);
-  if (Number.isNaN(intervalo) || intervalo < 10) {
-    console.warn(`[CIM] INTERVALO_MONITOR_MIN inválido ou muito curto — usando 60 min.`);
+  const intervalo = parseInt(process.env.INTERVALO_MONITOR_MIN || "5", 10);
+  if (Number.isNaN(intervalo) || intervalo < 1) {
+    console.warn(`[CIM] INTERVALO_MONITOR_MIN inválido — usando 5 min.`);
   }
-  const minutos = Number.isNaN(intervalo) || intervalo < 10 ? 60 : intervalo;
+  const minutos = Number.isNaN(intervalo) || intervalo < 1 ? 5 : intervalo;
 
-  const janela = (process.env.JANELA_MONITOR || "06:00-22:00").split("-");
+  const janela = (process.env.JANELA_MONITOR || "00:00-24:00").split("-");
   const [horaIni, horaFim] = janela.map((h) => parseInt(h.split(":")[0], 10));
 
   const expressao = minutos >= 60 ? `0 */${Math.floor(minutos / 60)} * * *` : `*/${minutos} * * * *`;
 
-  const tarefa = cron.schedule(
+  const tarefa = agendar(
     expressao,
     async () => {
       const agora = new Date(
@@ -261,10 +347,7 @@ function iniciarMonitorAlertas(onResultado) {
       }
 
       try {
-        const { verificarAlertas, marcarAlertasEnviados } = require("./logic/alertWatcher");
-        const { enviarAlertaPorEmail } = require("./email/sendAlert");
-
-        const resultado = await verificarAlertas();
+        const resultado = await verificarAlertasEEnviarPorBase({ onResultado });
         for (const falha of resultado.falhas) {
           console.error(`[AGENDADOR] Alerta — ${falha.nome}: falha na coleta: ${falha.erro}`);
         }
@@ -276,29 +359,12 @@ function iniciarMonitorAlertas(onResultado) {
         console.log(
           `[CIM] Monitor: ${resultado.totalNovos} alerta(s) novo(s) em ${resultado.porBase.length} base(s).`
         );
-        for (const base of resultado.porBase) {
-          try {
-            const envio = await enviarAlertaPorEmail(base);
-            marcarAlertasEnviados(base);
-            if (envio.ignorado) {
-              console.log(`[CIM] Normalização registrada (${base.chave}); nenhum Alerta CIM foi enviado.`);
-            } else {
-              console.log(
-                `[CIM] Alerta enviado (${base.chave}): ${base.alertas.map((a) => a.tipo).join(", ")} -> ${envio.destinatarios.length} destinatário(s).`
-              );
-            }
-            onResultado?.(null, { base, envio });
-          } catch (erro) {
-            console.error(`[CIM] Falha ao enviar alerta (${base.chave}):`, erro.message);
-            onResultado?.(erro, null);
-          }
-        }
       } catch (erro) {
         console.error("[CIM] Falha no monitor de alertas:", erro.message);
         onResultado?.(erro, null);
       }
     },
-    { timezone: "America/Sao_Paulo" }
+    { timezone: "America/Sao_Paulo", noOverlap: true }
   );
 
   console.log(
@@ -340,7 +406,7 @@ function iniciarAtualizacaoAutomatica(atualizador, agendar = cron.schedule) {
 
 /**
  * Verificação preventiva das fontes 30 min antes de cada informativo
- * (04:30 e 14:30). Só avisa a equipe técnica (EMAIL_ALERTA_FONTES) quando há
+ * (07:30 e 14:30). Só avisa a equipe técnica (EMAIL_ALERTA_FONTES) quando há
  * problema; sem a variável, registra apenas no log. Controlado por env:
  *   VERIFICACAO_FONTES=false   (desliga; padrão: ligado)
  */
@@ -373,8 +439,8 @@ function iniciarVerificacaoFontes(agendar = cron.schedule) {
     console.log("[FONTES] Verificação preventiva desativada via VERIFICACAO_FONTES=false.");
     return null;
   }
-  const tarefa = agendar("30 4,14 * * *", () => executarVerificacaoFontes(), { timezone: "America/Sao_Paulo" });
-  console.log("[FONTES] Verificação preventiva das fontes às 04:30 e 14:30 (America/Sao_Paulo).");
+  const tarefa = agendar("30 7,14 * * *", () => executarVerificacaoFontes(), { timezone: "America/Sao_Paulo" });
+  console.log("[FONTES] Verificação preventiva das fontes às 07:30 e 14:30 (America/Sao_Paulo).");
   return tarefa;
 }
 
@@ -385,5 +451,7 @@ module.exports = {
   executarHorarioAgendado,
   agendarEnvioUnicoHoje,
   iniciarMonitorAlertas,
+  processarAlertaBase,
+  verificarAlertasEEnviarPorBase,
   iniciarAtualizacaoAutomatica,
 };

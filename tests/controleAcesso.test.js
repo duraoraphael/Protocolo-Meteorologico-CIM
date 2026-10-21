@@ -68,7 +68,7 @@ test("diagnóstico OCEANOP exige senha e a listagem pública não revela identif
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ cidade: "cabiunas", senha: SENHA_TESTE }),
   });
-  assert.equal(r.status, 409, "usuário autorizado recebe apenas o estado de configuração da base");
+  assert.equal(r.status, 400, "base desativada não pode iniciar nova consulta");
 });
 
 test("PDF: 401 sem credencial; 200 com senha (Basic) ou token válido", async (t) => {

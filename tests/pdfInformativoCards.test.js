@@ -42,7 +42,7 @@ test("PDF exibe rajada OCEANOP no resumo e na referência da previsão", () => {
     }],
     fontesPorCampo: { rajadaMaxKmh: "Petrobras — OCEANOP", "periodos.tarde.rajadaMaxKmh": "Petrobras — OCEANOP" },
   })));
-  assert.match($.text(), /43,20 km\/h/);
+  assert.match($.text(), /43 km\/h/);
   assert.match($.text(), /Petrobras — OCEANOP/);
   assert.match($.text(), /Área A/);
 });
@@ -53,9 +53,9 @@ test("PDF exibe o pico diário Tetra Tech sem atribuí-lo a um período", () => 
     previsaoDias: [{ periodo: "Hoje", rajadaKmh: 51.856 }],
     fontesPorCampo: { rajadaMaxKmh: "Tetra Tech/OCEANOP" },
   })));
-  assert.match($.text(), /51,86 km\/h/);
+  assert.match($.text(), /52 km\/h/);
   assert.match($.text(), /Tetra Tech\/OCEANOP/);
-  assert.doesNotMatch($(".tabela-vento-periodo").text(), /51,86 km\/h/);
+  assert.doesNotMatch($(".tabela-vento-periodo").text(), /52 km\/h/);
 });
 
 test("condições de mar aparecem imediatamente após qualidade do ar e índice UV", () => {
@@ -235,7 +235,7 @@ test("vento e chuva por período exibem os números complementares e suas fontes
 
   const vento = $("table.tabela-vento-periodo");
   assert.match(vento.text(), /12,0 km\/h/);
-  assert.match(vento.text(), /29,00 km\/h/);
+  assert.match(vento.text(), /29 km\/h/);
   assert.match(vento.closest("section").find(".fonte-tabela").text(), /INMET — previsão oficial \/ Open-Meteo — previsão complementar/);
 
   const chuva = $("table.tabela-chuva-periodo");

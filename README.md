@@ -8,8 +8,8 @@ um resumo em HTML no corpo da mensagem). Inclui também um **painel para TV**
 da sala de operação, com atualização automática, seletor de base e um botão
 protegido por senha para disparar a geração manual.
 
-**12 bases cadastradas** (seletor no topo do painel): Rio de Janeiro, Macaé,
-Cabiúnas (Terminal), Brasília, Manaus, Santos, Aracaju, Natal, Oiapoque,
+**11 bases cadastradas** (seletor no topo do painel): Rio de Janeiro, Macaé,
+Brasília, Manaus, Santos, Aracaju, Natal, Oiapoque,
 Vitória, Araucária e Salvador — ver `src/config/cities.js`.
 
 ---
@@ -69,13 +69,14 @@ node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))"
 ```
 CIDADE=rio_de_janeiro
 ENVIO_AUTOMATICO_DIARIO=true
+HORARIOS_INFORMATIVO=08:00,15:00
+HORARIOS_COR_RIO=08:00,15:00
 ```
 
-Os horários permanentes são 05:00, 09:00, 12:00, 15:00, 17:00 e 20:00, no
-fuso `America/Sao_Paulo`; cada edição traz a previsão do seu horário até 00h
-e as posteriores às 05:00 comparam com ela. `HORARIOS_INFORMATIVO` restringe
-as edições e `HORARIOS_COR_RIO` define
-em quais delas o aviso COR-RIO é enviado (padrão 05:00 e 15:00).
+Os únicos horários automáticos regulares são 08:00 e 15:00, no fuso
+`America/Sao_Paulo`. A edição das 15h compara com a edição inicial das 08h.
+Valores diferentes em `HORARIOS_INFORMATIVO` são rejeitados e o agendador
+retorna ao padrão seguro 08:00/15:00.
 
 ## 3. Uso
 
@@ -104,7 +105,7 @@ da TV, de preferência em **tela cheia/modo kiosk** (Chrome: `chrome
 --kiosk http://localhost:3210`).
 
 O painel:
-- Tem um **seletor de base** no topo (Rio de Janeiro, Macaé, Cabiúnas,
+- Tem um **seletor de base** no topo (Rio de Janeiro, Macaé,
   Brasília, Manaus, Santos, Aracaju, Natal, Oiapoque, Vitória, Araucária,
   Salvador) — a base escolhida fica salva na URL (`?cidade=chave`), então dá
   pra fixar uma TV numa base específica salvando esse link.
@@ -115,9 +116,9 @@ O painel:
 - Tem um botão (👥, ao lado do ⚙) para cadastrar/remover responsáveis e
   vincular uma ou várias bases. `COR-RIO — RJ` é uma base somente de
   distribuição e pode ser o único vínculo de uma pessoa.
-- Envia automaticamente os informativos às 05:00, 09:00, 12:00, 15:00, 17:00
-  e 20:00 (horário de Brasília) para as bases meteorológicas e, em fluxo
-  separado (05:00 e 15:00), o aviso COR-RIO apenas para seus próprios
+- Envia automaticamente os informativos às 08:00 e 15:00 (horário de
+  Brasília) para as bases meteorológicas e, em fluxo separado nos mesmos
+  horários, o aviso COR-RIO apenas para seus próprios
   destinatários. `REPORT_RECIPIENTS` nunca
   é usado como fallback do aviso COR-RIO.
 
@@ -140,6 +141,7 @@ kiosk também ao iniciar a sessão.
 | **Open-Meteo Weather** | Complemento identificado para temperatura, umidade, condição, chuva, vento e rajada quando o INMET não publicar o valor numérico | Nunca é apresentado como dado oficial do INMET; a origem complementar permanece indicada por campo |
 | **INMET — estação automática** (`apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}`) | Temperatura/umidade atuais e extremos horários; `Chuva acumulada/dia`, `Chuva acumulada/Hora`; medições de vento e rajada usadas somente no monitoramento observacional | `Chuva acumulada/dia` soma as leituras cuja hora de referência pertence ao dia civil local; `Chuva acumulada/Hora` usa a última hora oficial disponível e identifica o intervalo. Uma medição de rajada nunca ocupa o campo de rajada prevista |
 | **INMET — previsão e avisos** (`apiprevmet3.inmet.gov.br`) | Fonte prioritária para chuva, vento e rajada previstos; também fornece condição, temperatura, umidade e avisos de perigo ativos | Direção, intensidade e resumo textual são preservados. Se o produto municipal não publicar um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita |
+| **Climatempo Advisor** (`apiadvisor.climatempo.com.br`) | Acumulado diário previsto e probabilidade diária de chuva para hoje e D+1 a D+3 | Só é ativado com contrato, token e ID oficial por base. Valida ID, município, UF, data e faixas numéricas; em falha mantém INMET/Open-Meteo e registra a fonte efetiva |
 | **OCEANOP / Petrobras** (`GET /api/v1/previsao/JsonPrevisaoAreaAsync?local=...`) | Fonte prioritária de rajada prevista exclusivamente nas áreas autorizadas e homologadas | Consulta server-side por identificador `local`; nunca envia coordenadas. Sem correspondência, unidade ou fuso confirmados, preserva INMET/Open-Meteo e não promove o dado |
 | **Tetra Tech/OCEANOP** (`/api/v1/areas/json` e `/api/v1/bulletins/{idArea}`) | Pico diário de rajada prevista para áreas terrestres autorizadas | A API oficial do portal exige `X-API-Key` ou OAuth. A série de rajada exibida em nós é convertida por `km/h = nós × 1,852`; o horizonte completo é armazenado localmente e continua válido por data quando a sessão expira |
 | **Open-Meteo Marine** (`customer-marine-api.open-meteo.com` em produção) | Fallback identificado para altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Mesma licença/chave comercial; permanece ativo quando não há ponto OCEANOP homologado ou a consulta oficial falha |
@@ -160,7 +162,8 @@ O pico diário do portal Tetra Tech/OCEANOP está preparado para Rio de Janeiro,
 Manaus, Macaé, Brasília, Santos, Vitória, Salvador, Natal e Oiapoque. Configure uma credencial
 oficial conforme `RAJADAS_PORTAIS.md`. Araucária não usa automaticamente a
 página de Wenceslau Bráz sem validação geográfica. Aracaju permanece no fallback:
-os termos públicos do Climatempo vedam robôs e extração automatizada.
+os termos públicos do Climatempo vedam robôs e extração automatizada. A chuva
+do Climatempo usa somente a API Advisor contratada; nunca o HTML público.
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório
@@ -169,7 +172,8 @@ usada nos modelos de referência):
 - **Alerta Rio / CODESAL** — boletins em página web, sem endpoint
   JSON documentado e estável. (O COR-Rio é integrado só para a base Rio de
   Janeiro, veja a tabela acima.)
-- **Climatempo** — sem API pública gratuita.
+- **Climatempo público** — sem scraping; a integração automática exige API
+  Advisor corporativa autorizada e permanece não configurada sem credenciais.
 
 Limitação conhecida do histórico INMET:
 - o endpoint legado `apitempo.inmet.gov.br/estacao/{inicio}/{fim}/{estacao}`
@@ -182,7 +186,8 @@ Limitação conhecida do histórico INMET:
 Regras de indisponibilidade dos campos restritos:
 - temperatura/umidade atuais e extremos horários observados: somente estação INMET;
 - temperatura/umidade mínimas e máximas diárias: somente previsão municipal INMET;
-- chuva observada: somente estação INMET; chuva prevista prioriza a previsão municipal INMET e usa Open-Meteo identificada quando faltar valor numérico;
+- chuva observada: somente estação INMET; chuva diária prevista usa Climatempo
+  Advisor quando autorizado e válido, com INMET/Open-Meteo identificados como fallback;
 - direção, intensidade e rajada previstas priorizam o INMET e recebem complemento identificado da Open-Meteo somente nos campos ausentes; medições da estação ficam separadas e nunca são rotuladas como previsão;
 - condição geral: resumo diário oficial do município INMET vinculado à chave da base; bases do mesmo município podem legitimamente ter a mesma condição;
 - índice UV: Open-Meteo Air Quality/CAMS;
@@ -196,9 +201,8 @@ Fontes **testadas e descartadas** (registrado para não retestar à toa):
   permita dizer se está acima do normal. Sem esse contexto, o número não é
   acionável num painel de operação.
 
-Se no futuro vocês tiverem uma chave de API paga/cadastrada (OpenWeatherMap,
-HG Brasil, Climatempo Corporate etc.), dá para adicionar como mais uma fonte
-em `src/sources/` seguindo o mesmo padrão de `openMeteo.js`.
+Outras fontes contratadas podem ser adicionadas em `src/sources/` seguindo o
+mesmo padrão de validação, procedência e fallback.
 
 ## 5. Como o "evento mais relevante" é decidido
 
@@ -245,6 +249,22 @@ quando existir e as recomendações;
 origem da classificação, explicação do nível CIM e atribuição de Instalações
 não são exibidas no card.
 
+### Monitor de alertas extraordinários
+
+O monitor é independente dos informativos das 08h e 15h. Por padrão, consulta
+as 12 bases em paralelo a cada 5 minutos, durante todo o dia. Cada base concluída
+é processada imediatamente, sem aguardar as demais. Configure com
+`INTERVALO_MONITOR_MIN`, `JANELA_MONITOR` e `BASES_MONITOR_ALERTAS`.
+
+No primeiro ciclo, o estado vigente é registrado como linha de base e não gera
+disparo retroativo. Depois disso, mudanças de grau, novos avisos, atualizações
+materiais de avisos INMET e normalizações previstas pela política são comparadas
+por base e fenômeno. A fila persistente em `data/alertas-fila.json` registra ID,
+base, severidade, destinatários, tentativas, status e confirmação SMTP. Eventos
+iguais não são reenviados; falhas permanecem pendentes com retentativa gradual.
+O alerta usa somente os pontos focais vinculados à base, sem recorrer à lista
+geral dos informativos.
+
 ## 6. Bases cadastradas e como adicionar outra
 
 ### Bases atuais (todas verificadas contra a API oficial do IBGE)
@@ -253,7 +273,6 @@ não são exibidas no card.
 |---|---|---|---|
 | Rio de Janeiro | RJ | 3304557 | sim |
 | Macaé | RJ | 3302403 | sim |
-| Cabiúnas (Terminal) | RJ | 3302403 | sim |
 | Brasília | DF | 5300108 | — |
 | Manaus | AM | 1302603 | — |
 | Santos | SP | 3548500 | sim |
@@ -264,10 +283,9 @@ não são exibidas no card.
 | Araucária | PR | 4101804 | — |
 | Salvador | BA | 2927408 | sim |
 
-Um caso merece atenção ao mexer nesse cadastro:
-- **Cabiúnas** é um distrito de Macaé, não um município. Usa coordenadas
-  próprias do terminal (mais precisas para o modelo numérico) mas o código
-  IBGE de Macaé, porque a previsão oficial do INMET é por município.
+Macaé/RJ é a única base operacional da região. Cabiúnas foi desativada do
+monitoramento; relatórios, logs e vínculos históricos existentes permanecem
+preservados nos respectivos arquivos de dados.
 
 ### Adicionar uma nova base
 
@@ -357,12 +375,10 @@ iframe**.
    [cron-job.org](https://cron-job.org)) fazendo um `POST` diário para
    `/api/gerar-relatorio` com a senha do painel, no horário desejado — me
    avise se quiser ajuda montando isso.
-2. Sem disco persistente (também pago no Render), o cadastro de
-   responsáveis (`data/responsaveis.json`) volta ao vazio a cada novo
-   deploy (`git push`) — recadastre pelo botão 👥 do painel depois de cada
-   deploy. Se no futuro quiserem persistência sem cartão, dá pra trocar por
-   um serviço externo gratuito (Google Sheets, KV store gratuito etc.) —
-   não é o padrão atual do projeto.
+2. Sem disco persistente, o cadastro de responsáveis, o estado notificado e
+   a fila de alertas em `data/` são perdidos em cada deploy. Em produção, use
+   disco persistente ou migre esses registros para armazenamento externo
+   transacional; sem isso, a deduplicação não sobrevive a uma implantação.
 
 Se puderem usar cartão futuramente, o plano `starter` (pago, sem hibernar)
 elimina os dois problemas acima — é só trocar `plan: free` por

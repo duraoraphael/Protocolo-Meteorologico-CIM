@@ -8,8 +8,8 @@
     "emails": "bruno.f@petrobras.com.br;jose.s.araujo.prestserv@petrobras.com.br;marcelomgomes@petrobras.com.br;dschrok@petrobras.com.br;victordeandrade@petrobras.com.br;denerfabricio@petrobras.com.br;breno.gabriel.prestserv@petrobras.com.br;jose.d.macedo.prestserv@petrobras.com.br;leandro.mota@petrobras.com.br;lcastelo@petrobras.com.br;fgbatista@petrobras.com.br;thiagooxavier@petrobras.com.br;frederico_landa@petrobras.com.br;fabiany.neves.prestserv@petrobras.com.br;gustavokt.prestserv@petrobras.com.br;arthur.viana.prestserv@petrobras.com.br;felipo.coelho.EP@petrobras.com.br;virginia.reuter@petrobras.com.br;alex_taian.prestserv@petrobras.com.br;raquel.alves.prestserv@petrobras.com.br;gendias@petrobras.com.br;marcel2.prestserv@petrobras.com.br;leonardo.modesto.prestserv@petrobras.com.br;pablo-andrade.prestserv@petrobras.com.br;carlos.a.rios.prestserv@petrobras.com.br;phsc@petrobras.com.br;fslisboa@petrobras.com.br;hugo.garcia@petrobras.com.br;jefersonsansilva@petrobras.com.br"
   },
   {
-    "local": "Cabiúnas (Terminal)",
-    "emails": "raphael.durao.prestserv@petrobras.com.br;viviany.silva.prestserv@petrobras.com.br;eduardo.santos@normatel.com.br"
+    "local": "Natal",
+    "emails": "raphael.durao.prestserv@petrobras.com.br;viviany.silva.prestserv@petrobras.com.br;eduardo.santos@normatel.com.br; vitorcosta@petrobras.com.br; igor_vinicius@petrobras.com.br; hoffmann.rodrigo@petrobras.com.br; fernandoatila@petrobras.com.br;helio_helin@petrobras.com.br;marcelovictor.prestserv@petrobras.com.br"
   },
   {
     "local": "Brasília",
@@ -38,5 +38,9 @@
   {
     "local": "Salvador",
     "emails": "brunoandrade@petrobras.com.br;carlosbronson@petrobras.com.br;reina.nascimento.prestserv@petrobras.com.br;mcsb@petrobras.com.br;carlos.azeredo@petrobras.com.br;josenaldoalencar@petrobras.com.br;michel.jesus@petrobras.com.br;romulo.c.vieira@petrobras.com.br;diegopimentel@petrobras.com.br"
+  },
+  {
+    "local": "Oipoque",
+    "emails": "raphael.durao.prestserv@petrobras.com.br;viviany.silva.prestserv@petrobras.com.br;eduardo.santos@normatel.com.br; vitorcosta@petrobras.com.br; igor_vinicius@petrobras.com.br; hoffmann.rodrigo@petrobras.com.br; fernandoatila@petrobras.com.br;helio_helin@petrobras.com.br;marcelovictor.prestserv@petrobras.com.br"
   }
 ]

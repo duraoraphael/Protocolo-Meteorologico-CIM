@@ -94,7 +94,10 @@ comitados no repositório**):
 | `SHAREPOINT_PASTA_DESTINO` | `Protocolo Meteorológico CIM` |
 | `DASHBOARD_PASSWORD` | **defina uma senha nova** — não reaproveite valor de teste |
 | `ENVIO_AUTOMATICO_DIARIO` | `true` |
-| `HORA_ENVIO_DIARIO` | `07:30` |
+| `HORARIOS_INFORMATIVO` | `08:00,15:00` |
+| `HORARIOS_COR_RIO` | `08:00,15:00` |
+| `CLIMATEMPO_API_TOKEN` | *(token do contrato Advisor, se autorizado)* |
+| `CLIMATEMPO_LOCALE_ID_*` | *(ID oficial de cada uma das 12 bases; não inferir da página pública)* |
 | `MONITOR_ALERTAS` | `true` |
 
 Demais variáveis (bases monitoradas e integrações opcionais) já vêm com

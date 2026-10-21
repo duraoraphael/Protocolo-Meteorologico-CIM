@@ -7,6 +7,7 @@ const AlertTitle = require("../../public/alert-title");
 const { calorPorData, dataLocal, ROTULOS_CALOR } = require("../logic/calorPorData");
 const { TIPOS_DOCUMENTO, alertaExibivel } = require("../logic/alertPresentation");
 const { edicaoInformativo } = require("../logic/informativoValidity");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
 // bgcolor + background) para que nenhum cliente herde áreas escuras. Só o
@@ -153,7 +154,7 @@ function valorCalor(r) {
 
 function resumoMeteorologico(r) {
   const rajada = rajadaMaxima(r);
-  const rajadaValor = Number.isFinite(rajada.valor) ? numeroUnidade(rajada.valor, "km/h", 2) : "Dado indisponível";
+  const rajadaValor = Number.isFinite(rajada.valor) ? formatarRajadaPrevista(rajada.valor) : "Dado indisponível";
   const chuvaPrevista = chuvaPrevistaAcumulada(r);
   const probabilidade = probabilidadeChuvaPrevista(r);
   const ar = Number.isFinite(r.qualidadeAr?.aqiPm25) && presente(r.qualidadeAr?.pm25Classificacao?.nivel)

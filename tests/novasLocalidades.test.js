@@ -16,6 +16,7 @@ test("Natal e Oiapoque usam cadastro operacional exato", () => {
     latitude: -5.8115,
     longitude: -35.2415,
     codigoIbge: "2408102",
+    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_NATAL", municipio: "Natal" },
     climaSaudeUrl: "https://clima.saude.gov.br/rn/natal?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/2408102",
@@ -31,6 +32,7 @@ test("Natal e Oiapoque usam cadastro operacional exato", () => {
     latitude: 3.861224,
     longitude: -51.796699,
     codigoIbge: "1600501",
+    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_OIAPOQUE", municipio: "Oiapoque" },
     climaSaudeUrl: "https://clima.saude.gov.br/ap/oiapoque?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/1600501",
@@ -47,7 +49,7 @@ test("Anchieta e Linhares deixam todos os cadastros operacionais ativos", () => 
   }
   assert.ok(BASES_DISTRIBUICAO.natal);
   assert.ok(BASES_DISTRIBUICAO.oiapoque);
-  assert.equal(Object.keys(CIDADES).length, 12);
+  assert.equal(Object.keys(CIDADES).length, 11);
 });
 
 test("OCEANOP por área não inventa identificadores e Tetra Tech usa áreas confirmadas", () => {

@@ -7,6 +7,7 @@ const localFilter = document.getElementById('local-retornado');
 let areas = [], response = null, controller = null;
 const escape = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const value = v => v == null || v === '' ? '—' : typeof v === 'number' ? new Intl.NumberFormat('pt-BR',{maximumFractionDigits:8}).format(v) : escape(v);
+const gustValue = v => WeatherFormat.formatarRajadaNumero(v, '—');
 function clearResults() {
  controller?.abort();controller=null;response=null;results.hidden=true;
  document.getElementById('consultar').disabled=false;
@@ -33,7 +34,7 @@ async function loadAreas(){
 function render(){
  if(!response)return;
  const rows=response.previsoes.filter(r=>!localFilter.value||r.local===localFilter.value);
- document.getElementById('previsoes').innerHTML=rows.map(r=>`<tr><td>${escape(r.local)||'—'}<small>Escrita na fonte: ${escape(r.escritoEm)||'—'}</small></td><td>${escape(r.inicio)||'—'}</td><td>${escape(r.fim)||'—'}</td>${['Temperatura','VelocidadeVento','VelocidadeVento_10M_Rajada','AlturaMaximaOnda','Precipitacao'].map(k=>`<td>${value(r.valores[k])}</td>`).join('')}<td><details><summary>Ver parâmetros</summary><dl>${response.campos.map(c=>`<div><dt>${escape(c.rotulo)}</dt><dd>${value(r.valores[c.chave])}</dd></div>`).join('')}</dl></details></td></tr>`).join('');
+ document.getElementById('previsoes').innerHTML=rows.map(r=>`<tr><td>${escape(r.local)||'—'}<small>Escrita na fonte: ${escape(r.escritoEm)||'—'}</small></td><td>${escape(r.inicio)||'—'}</td><td>${escape(r.fim)||'—'}</td>${['Temperatura','VelocidadeVento','VelocidadeVento_10M_Rajada','AlturaMaximaOnda','Precipitacao'].map(k=>`<td>${k==='VelocidadeVento_10M_Rajada'?gustValue(r.valores[k]):value(r.valores[k])}</td>`).join('')}<td><details><summary>Ver parâmetros</summary><dl>${response.campos.map(c=>`<div><dt>${escape(c.rotulo)}</dt><dd>${c.chave==='VelocidadeVento_10M_Rajada'?gustValue(r.valores[c.chave]):value(r.valores[c.chave])}</dd></div>`).join('')}</dl></details></td></tr>`).join('');
 }
 localFilter.addEventListener('change',render);
 form.addEventListener('submit',async e=>{

@@ -12,6 +12,7 @@ const {
 } = require("./emailComponents");
 const { ordenarEventosParaExibicao, prioridadeNivel } = require("./eventOrdering");
 const { TIPOS_DOCUMENTO, deveExibirNoDocumento } = require("../logic/alertPresentation");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 function alertasCimExibiveis(alertas) {
   return ordenarEventosParaExibicao((Array.isArray(alertas) ? alertas : []).filter((alerta) =>
@@ -69,7 +70,7 @@ function renderAlertEmailHtml(base) {
   const temTransicao = alertas.some((alerta) => normalizarGrau(alerta.grauAnterior));
   const rajadas = (r.ventoPorPeriodo || []).map((periodo) => periodo?.rajadaMaxKmh).filter(Number.isFinite);
   const rajadaMax = Number.isFinite(r.rajadaMaxKmh) ? r.rajadaMaxKmh : rajadas.length ? Math.max(...rajadas) : null;
-  const rajada = Number.isFinite(rajadaMax) ? `${rajadaMax} km/h` : "—";
+  const rajada = Number.isFinite(rajadaMax) ? formatarRajadaPrevista(rajadaMax) : "—";
 
   return `<!doctype html>
 <html lang="pt-BR">

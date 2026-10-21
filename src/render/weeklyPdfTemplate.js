@@ -1,5 +1,6 @@
 const brand = require("./brand");
 const { cabecalhoPdfCss, cabecalhoPdfHtml } = require("./pdfTemplate");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 const {
   svgTemperaturaEChuva,
   svgPanoramaSemana,
@@ -78,7 +79,7 @@ function tabelaDiasBase(base) {
           <td>${esc(d.condicao)}</td>
           <td>${d.tempMin == null ? "—" : d.tempMin + "°"} / ${d.tempMax == null ? "—" : d.tempMax + "°"}</td>
           <td>${d.precipitacaoMm == null ? "—" : d.precipitacaoMm + " mm"}${d.probabilidadeChuva != null ? ` <span class="suave">(${d.probabilidadeChuva}%)</span>` : ""}</td>
-          <td>${d.rajadaMaxKmh == null ? "—" : d.rajadaMaxKmh + " km/h"}</td>
+          <td>${d.rajadaMaxKmh == null ? "—" : formatarRajadaPrevista(d.rajadaMaxKmh)}</td>
           <td>${d.uvMax == null ? "—" : d.uvMax}</td>
           ${temMar ? `<td>${d.mar?.alturaMaxM == null ? "—" : d.mar.alturaMaxM + " m"}</td>` : ""}
           <td><span class="pastilha" style="background:${d.severidade.cor};">${esc(d.severidade.rotulo)}</span></td>
@@ -101,7 +102,7 @@ function secaoBase(base, indice) {
         <div class="base-resumo">
           ${valor(base.tempMinSemana, "°C")} a ${valor(base.tempMaxSemana, "°C")} &nbsp;·&nbsp;
           ${valor(base.chuvaTotalSemana, " mm")} na semana &nbsp;·&nbsp;
-          rajada prevista ${valor(base.rajadaMaxSemana, " km/h")} &nbsp;·&nbsp;
+          rajada prevista ${formatarRajadaPrevista(base.rajadaMaxSemana, "—")} &nbsp;·&nbsp;
           UV máx. ${valor(base.uvMaxSemana)}
           ${Number.isFinite(base.ondaMaxSemana) ? ` &nbsp;·&nbsp; onda máx. ${base.ondaMaxSemana} m` : ""}
         </div>
@@ -282,7 +283,7 @@ function renderWeeklyPdfHtml(r) {
       ? `<div class="destaque-dia">
     <strong>Dia de maior atenção:</strong> ${esc(r.diaMaisCritico.diaSemana)}, ${esc(r.diaMaisCritico.diaMes)} —
     ${r.diaMaisCritico.basesCriticas} base(s) em situação crítica e ${r.diaMaisCritico.basesAtencao} em atenção,
-    com rajadas de até ${Number.isFinite(r.diaMaisCritico.rajadaMaxKmh) ? `${r.diaMaisCritico.rajadaMaxKmh} km/h` : "valor indisponível"} e média de ${Number.isFinite(r.diaMaisCritico.chuvaMediaMm) ? `${r.diaMaisCritico.chuvaMediaMm} mm` : "valor indisponível"} de chuva entre as bases.
+    com rajadas de até ${formatarRajadaPrevista(r.diaMaisCritico.rajadaMaxKmh, "valor indisponível")} e média de ${Number.isFinite(r.diaMaisCritico.chuvaMediaMm) ? `${r.diaMaisCritico.chuvaMediaMm} mm` : "valor indisponível"} de chuva entre as bases.
   </div>`
       : ""
   }

@@ -54,7 +54,7 @@ test('cabeçalho, indicadores e rodapé usam dados e fontes do relatório', () =
     'CIM', 'Centro Integrado', 'de Monitoramento', 'COMPARTILHADO',
     'INFORMATIVO METEOROLÓGICO', 'Hora da consulta:', '10:09',
     'PREVISÃO TEMP. MÍN/MÁX', '21° / 33°C', 'PREVISÃO UMIDADE MÍN/MÁX', '55% / 100%',
-    'QUALIDADE DO AR', 'Boa', 'RAJADA PREVISTA', '36,00 km/h',
+    'QUALIDADE DO AR', 'Boa', 'RAJADA PREVISTA', '36 km/h',
     'CHUVA ACUMULADA/DIA', '0 mm', 'PROBABILIDADE DE CHUVA', '85%', 'CALOR', 'Dado indisponível',
     'MAR — ALTURA MÁX. DE ONDA', '0.7 m', 'CONDIÇÃO GERAL',
     'Fontes de dados:', 'INMET', 'Clima e Saúde — Ministério da Saúde',
@@ -87,7 +87,7 @@ test('e-mail identifica Tetra Tech/OCEANOP quando usa o pico diário do portal',
   r.rajadaPrevistaReferencia = { periodoReferencia: 'pico diário de 2026-10-20' };
   r.fontesPorCampo = { ...r.fontesPorCampo, rajadaMaxKmh: 'Tetra Tech/OCEANOP' };
   const html = renderEmailHtml(r);
-  assert.match(html, /51,86 km\/h/);
+  assert.match(html, /52 km\/h/);
   assert.match(html, /pico diário de 2026-10-20/);
   assert.match(html, /Tetra Tech\/OCEANOP/);
 });
@@ -104,7 +104,7 @@ test('card de e-mail usa a máxima OCEANOP da janela, não outra rajada fora del
   })));
   const $ = cheerio.load(html);
   const card = $('div').filter((_, elemento) => $(elemento).text().trim() === 'RAJADA PREVISTA').first().closest('td');
-  assert.match(card.text(), /43,20 km\/h/);
+  assert.match(card.text(), /43 km\/h/);
   assert.doesNotMatch(card.text(), /80 km\/h/);
 });
 
@@ -194,7 +194,7 @@ test('previsão de todas as edições fica à direita, até 00h e com escrita pa
     const $ = cheerio.load(html);
     const card = $('div').filter((_, elemento) => $(elemento).text().trim() === 'RAJADA PREVISTA').first().closest('td');
     const textoCard = card.text().replace(/\s+/g, ' ').trim();
-    assert.equal(textoCard, 'RAJADA PREVISTA 36,00 km/h');
+    assert.equal(textoCard, 'RAJADA PREVISTA 36 km/h');
     const celulaFrase = $('td').filter((_, el) => $(el).text().trim() === frase);
     assert.equal(celulaFrase.length, 1);
     assert.equal(celulaFrase.attr('width'), '33.33%');

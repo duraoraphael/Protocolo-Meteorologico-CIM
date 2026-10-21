@@ -11,6 +11,16 @@ const EDICOES_INFORMATIVO = Object.freeze({
     validadeFimDia: 1,
     validadeFimHora: 0,
   }),
+  "08:00": Object.freeze({
+    codigo: "08h",
+    papel: "inicial",
+    inicioHora: 8,
+    fimPrevisaoHora: 24,
+    previsaoAte: "00h",
+    periodo: "hoje, das 08h até 00h do dia seguinte",
+    validadeFimDia: 0,
+    validadeFimHora: 15,
+  }),
   "09:00": Object.freeze({
     codigo: "09h",
     papel: "atualizacao",
@@ -39,7 +49,7 @@ const EDICOES_INFORMATIVO = Object.freeze({
     previsaoAte: "00h",
     periodo: "hoje, das 15h até 00h do dia seguinte",
     validadeFimDia: 1,
-    validadeFimHora: 5,
+    validadeFimHora: 8,
   }),
   "17:00": Object.freeze({
     codigo: "17h",
@@ -63,10 +73,9 @@ const EDICOES_INFORMATIVO = Object.freeze({
   }),
 });
 
-// Edições do dia em ordem cronológica. A das 05h é a inicial; as demais são
-// atualizações comparadas com ela.
-const HORARIOS_INFORMATIVO = Object.freeze(Object.keys(EDICOES_INFORMATIVO).sort());
-const HORARIO_EDICAO_INICIAL = "05:00";
+// Únicas edições automáticas regulares autorizadas para o CIM.
+const HORARIOS_INFORMATIVO = Object.freeze(["08:00", "15:00"]);
+const HORARIO_EDICAO_INICIAL = "08:00";
 
 /**
  * Lista de horários a partir de texto "HH:MM,HH:MM" (ex.: variável de
@@ -77,8 +86,8 @@ function horariosConfigurados(valor, padrao = HORARIOS_INFORMATIVO) {
   const texto = String(valor ?? "").trim();
   if (!texto) return [...padrao];
   const lista = [...new Set(texto.split(",").map((h) => h.trim()).filter(Boolean))];
-  const invalido = lista.find((h) => !EDICOES_INFORMATIVO[h]);
-  if (invalido) throw new Error(`Horário de informativo inválido: "${invalido}". Use: ${HORARIOS_INFORMATIVO.join(", ")}.`);
+  const invalido = lista.find((h) => !HORARIOS_INFORMATIVO.includes(h));
+  if (invalido) throw new Error(`Horário automático de informativo inválido: "${invalido}". Use somente: ${HORARIOS_INFORMATIVO.join(", ")}.`);
   return lista.sort();
 }
 

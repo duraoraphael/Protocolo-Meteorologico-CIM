@@ -35,5 +35,37 @@ services:
         value: rio_de_janeiro
       - key: ENVIO_AUTOMATICO_DIARIO
         value: "true"
-      - key: HORA_ENVIO_DIARIO
-        value: "07:30"
+      - key: HORARIOS_INFORMATIVO
+        value: "08:00,15:00"
+      - key: HORARIOS_COR_RIO
+        value: "08:00,15:00"
+      - key: MONITOR_ALERTAS
+        value: "true"
+      - key: INTERVALO_MONITOR_MIN
+        value: "5"
+      - key: JANELA_MONITOR
+        value: "00:00-24:00"
+      - key: CLIMATEMPO_API_TOKEN
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_RIO_DE_JANEIRO
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_MACAE
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_BRASILIA
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_MANAUS
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_SANTOS
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_ARACAJU
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_NATAL
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_OIAPOQUE
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_VITORIA
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_ARAUCARIA
+        sync: false
+      - key: CLIMATEMPO_LOCALE_ID_SALVADOR
+        sync: false

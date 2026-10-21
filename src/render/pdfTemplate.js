@@ -7,6 +7,7 @@ const CorRio = require("../../public/cor-rio-compartilhado");
 const { comunicadoDoDia } = require("./corRioEmail");
 const { informativoProgramado, tipoDocumentoDoRelatorio } = require("../logic/alertPresentation");
 const { calorPorData, fonteCalor, DESCRICAO_CALOR } = require("../logic/calorPorData");
+const { formatarRajadaNumero, formatarRajadaPrevista } = require("../../public/weather-format");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -328,7 +329,7 @@ function tabelaVento(periodos) {
         .map(
           (p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
             <td><strong>${celulaPeriodo(p)}</strong></td><td>${textoOuIndisponivel(p.direcao)}</td><td>${Number.isFinite(p.velocidadeMediaKmh) ? `${numeroBr(p.velocidadeMediaKmh, 1)} km/h` : "Não disponível"}</td>
-            <td>${Number.isFinite(p.rajadaMaxKmh) ? `${numeroBr(p.rajadaMaxKmh, 2)} km/h` : "Não disponível"}</td><td>${textoOuIndisponivel(p.referenciaInmet)}</td>
+            <td>${Number.isFinite(p.rajadaMaxKmh) ? formatarRajadaPrevista(p.rajadaMaxKmh) : "Não disponível"}</td><td>${textoOuIndisponivel(p.referenciaInmet)}</td>
           </tr>`
         )
         .join("")}
@@ -714,7 +715,7 @@ function blocoPrevisaoAgendada(r, tituloSecao = "") {
       <span>${Number.isFinite(dia.chuvaMm) ? `${numeroBr(dia.chuvaMm, 1)} mm` : "—"}</span>
       <small><strong>Probabilidade de chuva:</strong> ${Number.isFinite(r.probabilidadeChuvaPrevista) ? `${numeroBr(r.probabilidadeChuvaPrevista, 0)}%` : "Indisponível"}</small>
     </td>
-    <td>${Number.isFinite(dia.rajadaKmh) ? `${numeroBr(dia.rajadaKmh, 2)} km/h` : "—"}</td>
+    <td>${Number.isFinite(dia.rajadaKmh) ? formatarRajadaPrevista(dia.rajadaKmh) : "—"}</td>
     <td>${celulaCalor(r.climaSaude, dia.data)}</td>
   </tr>`).join("");
   return blocoTabela({
@@ -772,7 +773,7 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
       <td class="p3d-data"><strong>${esc(dataD3ComAnoCurto(d.dataFormatada))}</strong><span>${esc(d.diaSemana)}</span></td>
       <td class="p3d-num">${temperatura}</td>
       <td class="p3d-num">${Number.isFinite(d.umidadeMinPct) || Number.isFinite(d.umidadeMaxPct) ? `${celulaNumero(d.umidadeMinPct)} / ${celulaNumero(d.umidadeMaxPct)}` : NAO_DISPONIVEL}</td>
-      <td class="p3d-num">${celulaNumero(d.rajadaMaxKmh, 2)}</td>
+      <td class="p3d-num">${formatarRajadaNumero(d.rajadaMaxKmh, NAO_DISPONIVEL)}</td>
       <td class="p3d-num">${celulaNumero(d.chuvaMm, 1)}</td>
       <td class="p3d-num">${Number.isFinite(d.probabilidadeChuvaPct) ? `${numeroBr(d.probabilidadeChuvaPct, 0)}%` : `<span class="p3d-nd">—</span>`}</td>
       <td class="p3d-num">${celulaNumero(d.uvMax, 1)}</td>
@@ -819,7 +820,7 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
 
 function blocoMudancasDia(r) {
   if (!r.mudancasDia) return "";
-  return `<section class="bloco-lista"><h4 class="subsecao">Mudanças do dia em relação ao relatório das 05:00</h4>${listaHtml(r.mudancasDia)}</section>`;
+  return `<section class="bloco-lista"><h4 class="subsecao">Mudanças do dia em relação ao relatório das 08:00</h4>${listaHtml(r.mudancasDia)}</section>`;
 }
 
 // Fontes efetivas de um campo nos três períodos (normalmente uma só).

@@ -12,6 +12,7 @@ const {
   obterPrevisaoProximosDias,
   mesclarPrevisaoProximosDias,
   aplicarRajadasOceanop,
+  aplicarChuvaClimatempo,
 } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
 const { validadeInformativo, HORARIO_EDICAO_INICIAL } = require("./logic/informativoValidity");
@@ -156,7 +157,7 @@ async function executarPipelineCorRio({ enviarEmail = true, horarioAgendado = nu
   return { report, arquivoPdf: null, caminhoArquivo: null, envio, ged: null };
 }
 
-async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false, tipoEnvio = "informativo", permitirSemDestinatarios = false } = {}) {
+async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false, tipoEnvio = "informativo", permitirSemDestinatarios = false, destinatariosTeste = null } = {}) {
   if (tipoEnvio === "cor_rio") {
     return executarPipelineCorRio({ enviarEmail, horarioAgendado, teste, permitirSemDestinatarios });
   }
@@ -193,7 +194,10 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   const previsaoComplementar3d = await obterPrevisaoProximosDias(cidade, { agora: instantePrevisao });
   report.previsaoProximosDias = aplicarRajadasOceanop(
     aplicarRajadasOceanop(
-      mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d),
+      aplicarChuvaClimatempo(
+        mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d),
+        report.climatempoChuva
+      ),
       report.previsaoOceanopDias
     ),
     report.previsaoRajadaPortalDias,
@@ -247,7 +251,9 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
     console.log("[RELATORIO] Preparando e-mail");
     console.log("[RELATORIO] Enviando SMTP");
     try {
-      envio = await enviarRelatorioPorEmail(report, pdfAnexoEmail);
+      envio = await enviarRelatorioPorEmail(report, pdfAnexoEmail, {
+        destinatariosOverride: destinatariosTeste,
+      });
     } catch (erro) {
       throw erroDaEtapa("email", "SMTP", "enviarRelatorioPorEmail", erro);
     }

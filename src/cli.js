@@ -6,13 +6,13 @@
 //   node src/cli.js
 //   node src/cli.js --sem-email      (gera o PDF em /output mas não envia)
 //   node src/cli.js --cidade=salvador
-//   node src/cli.js --teste --horario=05:00,15:00 --todas-bases
+//   node src/cli.js --teste --horario=08:00 --cidade=rio_de_janeiro --enviar-para=voce@empresa.com
+//   node src/cli.js --teste --horario=08:00,15:00 --todas-bases
 //                                    (envio de TESTE dos informativos agendados:
-//                                     assunto "[TESTE 05:00]", PDF *_TESTE, sem
+//                                     assunto "[TESTE 08:00]", PDF *_TESTE, sem
 //                                     histórico do agendador e sem GED; as
-//                                     edições após 05h comparam com a das 05h
-//                                     deste teste). Edições: 05:00, 09:00,
-//                                     12:00, 15:00, 17:00, 20:00 ou "todas".
+//                                     edição das 15h compara com a das 08h
+//                                     deste teste). Edições: 08:00, 15:00 ou "todas".
 
 require("dotenv").config();
 require("./security/certificados");
@@ -28,7 +28,8 @@ function lerArgumento(nome) {
 }
 
 async function enviarTeste(enviarEmail) {
-  const argumento = lerArgumento("horario") || "05:00,15:00";
+  const argumento = lerArgumento("horario") || "08:00,15:00";
+  const destinoTeste = lerArgumento("enviar-para");
   const horarios = horariosConfigurados(argumento === "todas" ? "" : argumento);
   const bases = process.argv.includes("--todas-bases") ? Object.keys(CIDADES) : [lerArgumento("cidade") || process.env.CIDADE];
   let falhas = 0;
@@ -36,7 +37,14 @@ async function enviarTeste(enviarEmail) {
     let anterior = null;
     for (const horarioAgendado of horarios) {
       try {
-        const r = await executarPipeline({ cidadeChave, enviarEmail, horarioAgendado, teste: true, comparacaoAnterior: anterior });
+        const r = await executarPipeline({
+          cidadeChave,
+          enviarEmail,
+          horarioAgendado,
+          teste: true,
+          comparacaoAnterior: anterior,
+          destinatariosTeste: destinoTeste ? [destinoTeste] : null,
+        });
         if (horarioAgendado === HORARIO_EDICAO_INICIAL) anterior = resumo(r.report);
         console.log(`[CIM][TESTE ${horarioAgendado}] ${r.report.cidade.nome}: ${r.envio ? `enviado para ${r.envio.destinatarios.join(", ")}` : "e-mail não enviado (--sem-email)"} | ${r.arquivoPdf}`);
       } catch (erro) {

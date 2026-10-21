@@ -249,6 +249,53 @@ function aplicarRajadasOceanop(previsao, diasOceanop = [], fontePadrao = "Petrob
   } : previsao;
 }
 
+/** Substitui apenas chuva/probabilidade nas datas publicadas pelo Advisor. */
+function aplicarChuvaClimatempo(previsao, climatempo) {
+  if (!previsao || !Array.isArray(previsao.dias) || climatempo?.status !== "operacional") return previsao;
+  const porData = new Map((climatempo.dias || []).map((dia) => [dia.data, dia]));
+  let usouChuva = false;
+  let usouProbabilidade = false;
+  const dias = previsao.dias.map((dia) => {
+    const fonte = porData.get(dia.data);
+    if (!fonte) return dia;
+    const chuvaMm = Number.isFinite(fonte.chuvaAcumuladaPrevistaMm) ? fonte.chuvaAcumuladaPrevistaMm : dia.chuvaMm;
+    const probabilidadeChuvaPct = Number.isFinite(fonte.probabilidadeChuvaPercentual)
+      ? fonte.probabilidadeChuvaPercentual
+      : dia.probabilidadeChuvaPct;
+    if (Number.isFinite(fonte.chuvaAcumuladaPrevistaMm)) usouChuva = true;
+    if (Number.isFinite(fonte.probabilidadeChuvaPercentual)) usouProbabilidade = true;
+    return {
+      ...dia,
+      chuvaMm,
+      probabilidadeChuvaPct,
+      fonteChuva: Number.isFinite(fonte.chuvaAcumuladaPrevistaMm)
+        ? "Climatempo Advisor"
+        : dia.fonteChuva || previsao.fontesCampo?.chuva,
+      fonteProbabilidadeChuva: Number.isFinite(fonte.probabilidadeChuvaPercentual)
+        ? "Climatempo Advisor"
+        : dia.fonteProbabilidadeChuva || previsao.fontesCampo?.probabilidadeChuva,
+    };
+  });
+  const fonteComFallback = (campo, fonteDia, usouClimatempo) => {
+    if (!usouClimatempo) return previsao.fontesCampo?.[campo];
+    const fontes = [...new Set(dias
+      .filter((dia) => Number.isFinite(dia[campo === "chuva" ? "chuvaMm" : "probabilidadeChuvaPct"]))
+      .map((dia) => dia[fonteDia] || previsao.fontesCampo?.[campo])
+      .filter(Boolean))];
+    return fontes.join(" / ") || "Climatempo Advisor";
+  };
+  return {
+    ...previsao,
+    dias,
+    fonte: [previsao.fonte, (usouChuva || usouProbabilidade) ? "Climatempo Advisor" : null].filter(Boolean).join(" / "),
+    fontesCampo: {
+      ...(previsao.fontesCampo || {}),
+      chuva: fonteComFallback("chuva", "fonteChuva", usouChuva),
+      probabilidadeChuva: fonteComFallback("probabilidadeChuva", "fonteProbabilidadeChuva", usouProbabilidade),
+    },
+  };
+}
+
 /**
  * Converte a resposta diária da Open-Meteo nas linhas da tabela, uma por data
  * esperada. Campos ausentes, não numéricos ou com unidade inesperada ficam
@@ -375,6 +422,7 @@ module.exports = {
   montarPrevisaoProximosDiasInmet,
   mesclarPrevisaoProximosDias,
   aplicarRajadasOceanop,
+  aplicarChuvaClimatempo,
   interpretarResposta,
   proximasDatas,
   dataLocalIso,

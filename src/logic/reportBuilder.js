@@ -2,6 +2,12 @@ const { mapearFontesDoRelatorio } = require('./sourceProvenance');
 const { registrarDocumentoOperacional } = require('./documentProvenance');
 const { buscarOpenMeteo, PERIODOS: PERIODOS_HOJE } = require("../sources/openMeteo");
 const {
+  obterChuvaDiariaClimatempo,
+  diaClimatempo,
+  dataLocalIso: dataLocalClimatempo,
+  FONTE_CLIMATEMPO,
+} = require("../sources/climatempoDaily");
+const {
   buscarPrevisaoInmet,
   buscarAvisosInmet,
   deduplicarAvisosInmet,
@@ -33,6 +39,7 @@ const {
 const {
   criarHealthCheck,
   operacional,
+  degradado,
   indisponivel,
   naoConfigurada,
   naoAplicavel,
@@ -50,6 +57,7 @@ function agora() { return new Date(); }
 const PERIODO_COBERTO_AGENDADO = "definido pela edição do informativo";
 const JANELAS_PROBABILIDADE_EDICAO = Object.freeze({
   "05:00": Object.freeze({ inicioHora: 5, fimHora: 24, janela: "05h–00h" }),
+  "08:00": Object.freeze({ inicioHora: 8, fimHora: 24, janela: "08h–00h" }),
   "09:00": Object.freeze({ inicioHora: 9, fimHora: 24, janela: "09h–00h" }),
   "12:00": Object.freeze({ inicioHora: 12, fimHora: 24, janela: "12h–00h" }),
   "15:00": Object.freeze({ inicioHora: 15, fimHora: 24, janela: "15h–00h" }),
@@ -60,7 +68,7 @@ const JANELAS_PROBABILIDADE_EDICAO = Object.freeze({
 // Janela operacional específica solicitada para rajadas OCEANOP. O texto
 // editorial "Previsão até 00h" permanece inalterado no e-mail/PDF.
 function janelaOceanopDaEdicao(horarioAgendado) {
-  if (horarioAgendado === "05:00") return { inicioHora: 5, fimHora: 15, rotulo: "05h–15h" };
+  if (horarioAgendado === "08:00") return { inicioHora: 8, fimHora: 15, rotulo: "08h–15h" };
   if (horarioAgendado === "15:00") return { inicioHora: 15, fimHora: 24, rotulo: "15h–00h" };
   const edicao = edicaoInformativo(horarioAgendado);
   return { inicioHora: edicao?.inicioHora ?? 5, fimHora: edicao?.fimPrevisaoHora ?? 24, rotulo: edicao?.periodo || "05h–00h" };
@@ -162,6 +170,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     ? climaSaudeService.consultar(cidade)
     : Promise.resolve(climaSaudeService.lerArmazenado(cidade));
   let inmetPrevisao, inmetAvisos, inmetObservacao, openMeteo;
+  let climatempoChuva = { status: "nao_configurada", fonte: FONTE_CLIMATEMPO, dias: [] };
 
   const janelaEdicao = edicaoInformativo(horarioAgendado);
 
@@ -232,6 +241,15 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     falhasApi.openMeteo = erro;
     registrarFalha("OPEN-METEO-WEATHER", erro);
     avisosColeta.push("Open-Meteo Weather: previsão complementar indisponível nesta atualização.");
+  }
+
+  try {
+    climatempoChuva = await obterChuvaDiariaClimatempo(cidade);
+  } catch (erro) {
+    falhasApi.climatempo = erro;
+    registrarFalha("CLIMATEMPO-ADVISOR", erro);
+    climatempoChuva = { status: "indisponivel", fonte: FONTE_CLIMATEMPO, dias: [], erro: erro.message };
+    avisosColeta.push("Climatempo Advisor: chuva diária indisponível; mantidas as fontes alternativas autorizadas.");
   }
 
   inmetObservacao = await buscarObservacaoInmet(cidade, {
@@ -404,6 +422,19 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     inmetObservacao,
     fontesPorCampo: integrado.fontesPorCampo,
   });
+  const dataHojeLocal = dataLocalClimatempo(dataNow, cidade.fusoHorario || "America/Sao_Paulo");
+  const chuvaClimatempoHoje = diaClimatempo(climatempoChuva, dataHojeLocal);
+  if (Number.isFinite(chuvaClimatempoHoje?.chuvaAcumuladaPrevistaMm)) {
+    base.precipitacaoTotalMm = chuvaClimatempoHoje.chuvaAcumuladaPrevistaMm;
+    integrado.fontesPorCampo.precipitacaoTotalMm = FONTE_CLIMATEMPO;
+  }
+  if (Number.isFinite(chuvaClimatempoHoje?.probabilidadeChuvaPercentual)) {
+    base.probabilidadeChuvaMax = chuvaClimatempoHoje.probabilidadeChuvaPercentual;
+    integrado.fontesPorCampo.probabilidadeChuvaMax = FONTE_CLIMATEMPO;
+  }
+  if (climatempoChuva.status === "operacional" && !chuvaClimatempoHoje) {
+    avisosColeta.push(`Climatempo Advisor: resposta sem previsão para ${dataHojeLocal}; mantidas as fontes alternativas.`);
+  }
   if (ventoOceanop) {
     for (const chave of ["manha", "tarde", "noite"]) {
       const periodo = base.periodos?.[chave];
@@ -457,7 +488,14 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     integrado.fontesPorCampo.rajadaPrevistaKmh = FONTE_TETRATECH;
   }
   integrado.atual = base.atual;
-  const probabilidadeChuvaEdicao = probabilidadeChuvaDaEdicao({ horarioAgendado, inmetPrevisao, openMeteo });
+  const probabilidadeChuvaEdicao = Number.isFinite(chuvaClimatempoHoje?.probabilidadeChuvaPercentual)
+    ? {
+        valor: chuvaClimatempoHoje.probabilidadeChuvaPercentual,
+        fonte: FONTE_CLIMATEMPO,
+        janela: "no dia civil local (00h–24h)",
+        regra: "probabilidade diária publicada pela fonte",
+      }
+    : probabilidadeChuvaDaEdicao({ horarioAgendado, inmetPrevisao, openMeteo });
   integrado.fontesPorCampo.probabilidadeChuvaPrevista = probabilidadeChuvaEdicao.fonte;
   if (mar?.fonte === "Open-Meteo Marine" && cidade.pontoMar?.referencia) mar.referenciaPonto = cidade.pontoMar.referencia;
   // A coleta preserva os registros oficiais distintos para auditoria. Na
@@ -557,6 +595,11 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       nome: "Open-Meteo Weather",
       uso: "Complemento identificado de temperatura/umidade e condição quando ausentes; não preenche chuva, vento ou rajada",
     });
+  if (climatempoChuva.status === "operacional")
+    fontesAutomatizadas.push({
+      nome: FONTE_CLIMATEMPO,
+      uso: "Acumulado e probabilidade de chuva previstos por dia, obtidos pela API corporativa autorizada",
+    });
   if (marOpenMeteo)
     fontesAutomatizadas.push({
       nome: "Open-Meteo Marine",
@@ -596,7 +639,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       nome: "CODESAL",
       uso: "Defesa Civil de Salvador — sem API pública estável",
     });
-  if (cidade.links?.climatempo)
+  if (cidade.links?.climatempo && climatempoChuva.status !== "operacional")
     fontesManuais.push({
       nome: "Climatempo",
       uso: "Cruzamento comercial — sem API pública gratuita",
@@ -675,6 +718,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       healthDaColeta("INMET — Avisos", Boolean(inmetAvisos), falhasApi.inmetAvisos, `${avisosInmet.length} aviso(s) vigente(s) para a base`)),
     paraMonitoramento("open-meteo-weather", "Open-Meteo Weather",
       healthDaColeta("Open-Meteo Weather", Boolean(openMeteo), falhasApi.openMeteo, "Previsão complementar recebida")),
+    paraMonitoramento("climatempo-advisor", FONTE_CLIMATEMPO,
+      climatempoChuva.status === "operacional"
+        ? operacional(FONTE_CLIMATEMPO, "Previsão diária de chuva recebida e validada.", { checkedAt, lastSuccessAt: climatempoChuva.consultadoEm })
+        : climatempoChuva.status === "nao_configurada"
+          ? naoConfigurada(FONTE_CLIMATEMPO, climatempoChuva.motivo || "Token/ID de localidade não configurado.")
+          : indisponivel(FONTE_CLIMATEMPO, falhasApi.climatempo || climatempoChuva.erro || "Fonte indisponível.")),
     paraMonitoramento("open-meteo-marine", "Open-Meteo Marine", healthMarine),
     paraMonitoramento("open-meteo-air", "Open-Meteo Air Quality",
       healthDaColeta("Open-Meteo Air Quality", Boolean(arOpenMeteo), falhasApi.airQuality, "Qualidade do ar e UV previstos recebidos")),
@@ -778,6 +827,18 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     monitoramentoApis,
     climaSaude,
     inmetPrevisao,
+    climatempoChuva,
+    chuvaDiaria: chuvaClimatempoHoje ? {
+      cidade: cidade.nome,
+      estado: cidade.uf,
+      data: chuvaClimatempoHoje.data,
+      chuvaAcumuladaPrevistaMm: chuvaClimatempoHoje.chuvaAcumuladaPrevistaMm,
+      probabilidadeChuvaPercentual: chuvaClimatempoHoje.probabilidadeChuvaPercentual,
+      fonte: FONTE_CLIMATEMPO,
+      tipo: "previsao_diaria",
+      consultadoEm: climatempoChuva.consultadoEm,
+      evidencia: climatempoChuva.evidencia,
+    } : null,
     contextoMeteorologicoSetor,
     previsaoOceanopDias,
     previsaoRajadaPortalDias,
@@ -795,6 +856,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       umidadeMin: base.umidadeMin,
       umidadeMax: base.umidadeMax,
       chuvaMm: base.precipitacaoTotalMm,
+      probabilidadeChuvaPct: probabilidadeChuvaEdicao.valor,
       rajadaKmh: base.rajadaMaxKmh,
       condicao: base.condicaoGeral,
       janela: janelaEdicao?.periodo || "Hoje",

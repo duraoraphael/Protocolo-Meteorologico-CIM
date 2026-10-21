@@ -10,6 +10,7 @@
 const brand = require("./brand");
 const { barraHtml, fitaSeveridadeHtml } = require("./charts");
 const { renderEmailHeader, renderEmailHeaderStyles } = require("./emailComponents");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 function esc(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -51,7 +52,7 @@ function linhaBase(base, chuvaMaxRef, rajadaMaxRef) {
           <strong>${esc(base.cidade.nome)}</strong>
           <span style="color:#888;font-size:11px;">${esc(base.cidade.uf)}</span>
           <div style="color:#777;font-size:11px;margin-top:1px;">
-            ${valor(base.tempMinSemana)}–${valor(base.tempMaxSemana, "°C")} · ${valor(base.chuvaTotalSemana, " mm")} · rajada prevista ${valor(base.rajadaMaxSemana, " km/h")}${Number.isFinite(base.ondaMaxSemana) ? ` · onda ${base.ondaMaxSemana} m` : ""}
+            ${valor(base.tempMinSemana)}–${valor(base.tempMaxSemana, "°C")} · ${valor(base.chuvaTotalSemana, " mm")} · rajada prevista ${formatarRajadaPrevista(base.rajadaMaxSemana, "—")}${Number.isFinite(base.ondaMaxSemana) ? ` · onda ${base.ondaMaxSemana} m` : ""}
           </div>
         </td>
         <td width="130" align="right" valign="middle">

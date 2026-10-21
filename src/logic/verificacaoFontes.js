@@ -1,5 +1,5 @@
 // Verificação preventiva das fontes externas, executada antes dos informativos
-// das 05h e 15h. Não gera PDF, não envia informativo e não altera o estado do
+// das 08h e 15h. Não gera PDF, não envia informativo e não altera o estado do
 // agendador: só consulta cada fonte e confere se os campos que o informativo
 // usa vieram preenchidos.
 //
@@ -23,6 +23,7 @@ const { tipoErro } = require("../sources/httpJsonClient");
 const { credenciaisConfiguradas, destinoConfigurado } = require("../integrations/sharepointGed");
 const oceanopAreas = require("../config/oceanopAreas");
 const { buscarOceanop, validarConsulta } = require("../sources/oceanop");
+const { obterChuvaDiariaClimatempo } = require("../sources/climatempoDaily");
 
 const SITUACAO = Object.freeze({
   OK: "ok",
@@ -126,6 +127,25 @@ function verificarClimaSaude(cidade, consultar) {
   });
 }
 
+async function verificarClimatempo(cidade, consultar, { env, fetchImpl }) {
+  const resultado = await consultar(cidade, { env, fetchImpl, salvarEvidencia: false });
+  if (resultado.status === "nao_configurada") {
+    return item("Climatempo Advisor", cidade.nome, SITUACAO.NAO_CONFIGURADA,
+      resultado.motivo || "Token ou ID oficial da localidade não configurado.");
+  }
+  if (resultado.status !== "operacional") {
+    return item("Climatempo Advisor", cidade.nome, SITUACAO.INDISPONIVEL,
+      resultado.erro || "A API não retornou uma resposta operacional.");
+  }
+  const diasValidos = (resultado.dias || []).filter((dia) =>
+    Number.isFinite(dia?.chuvaAcumuladaPrevistaMm) || Number.isFinite(dia?.probabilidadeChuvaPercentual));
+  return diasValidos.length
+    ? item("Climatempo Advisor", cidade.nome, SITUACAO.OK,
+      `${diasValidos.length} dia(s) com chuva acumulada ou probabilidade diária validada(s).`)
+    : item("Climatempo Advisor", cidade.nome, SITUACAO.CAMPOS_AUSENTES,
+      "Resposta sem chuva acumulada e probabilidade diária válidas.");
+}
+
 async function verificarCorRio(criarServico) {
   const servico = criarServico({
     carregar: () => ({}), salvar: () => {}, ttlMs: 0, tentativas: 2, timeoutMs: 15000,
@@ -207,6 +227,7 @@ async function executarVerificacao({
     climaSaude: climaSaude.consultar,
     corRio: criarServicoCorRio,
     oceanop: buscarOceanop,
+    climatempo: obterChuvaDiariaClimatempo,
     fetch: globalThis.fetch,
     ...fontes,
   };
@@ -236,7 +257,7 @@ async function executarVerificacao({
   const porBase = [];
   for (const cidade of cidades) {
     const opcoesCidade = { ...opcoes, fuso: cidade.fusoHorario || "America/Sao_Paulo" };
-    const [openMeteo, inmet, observacao, clima] = await Promise.all([
+    const [openMeteo, inmet, observacao, clima, climatempo] = await Promise.all([
       verificar("Open-Meteo Weather", cidade.nome, () => f.openMeteo(cidade.latitude, cidade.longitude, opcoesCidade), {
         tempMin: "temperatura mínima", tempMax: "temperatura máxima",
         umidadeMin: "umidade mínima", umidadeMax: "umidade máxima",
@@ -245,8 +266,10 @@ async function executarVerificacao({
       verificar("INMET Previsão", cidade.nome, () => f.previsaoInmet(cidade.codigoIbge, opcoes), CAMPOS_INMET),
       verificar("INMET Observação", cidade.nome, () => f.observacaoInmet(cidade, opcoes), CAMPOS_INMET_OBSERVACAO),
       verificarClimaSaude(cidade, f.climaSaude).catch((erro) => item("Clima e Saúde", cidade.nome, situacaoDoErro(erro), erro.message)),
+      verificarClimatempo(cidade, f.climatempo, { env, fetchImpl: f.fetch })
+        .catch((erro) => item("Climatempo Advisor", cidade.nome, situacaoDoErro(erro), erro.message)),
     ]);
-    porBase.push(openMeteo, inmet, observacao, clima);
+    porBase.push(openMeteo, inmet, observacao, clima, climatempo);
   }
 
   const itens = [...gerais.flat(), ...porBase, ...verificarConfiguracoes(env)];
