@@ -43,7 +43,7 @@ function agora() { return new Date(); }
 
 const PERIODO_COBERTO_AGENDADO = "definido pela edição do informativo";
 const JANELAS_PROBABILIDADE_EDICAO = Object.freeze({
-  "05:00": Object.freeze({ inicioHora: 5, fimHora: 24, janela: "05h–00h" }),
+  "08:00": Object.freeze({ inicioHora: 8, fimHora: 24, janela: "08h–00h" }),
   "09:00": Object.freeze({ inicioHora: 9, fimHora: 24, janela: "09h–00h" }),
   "12:00": Object.freeze({ inicioHora: 12, fimHora: 24, janela: "12h–00h" }),
   "15:00": Object.freeze({ inicioHora: 15, fimHora: 24, janela: "15h–00h" }),
@@ -406,7 +406,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     umidadeMin: base.umidadeMin,
     umidadeMax: base.umidadeMax,
   }];
-  // No PDF das duas edições, o vento cobre sempre o dia operacional inteiro
+  // No PDF, o vento cobre sempre o dia operacional inteiro
   // (05h–00h); apenas os cards consolidados permanecem limitados à edição.
   const ventoPorPeriodo = montarVentoPorPeriodo({ base });
 

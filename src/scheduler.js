@@ -5,8 +5,8 @@ const { dataBrasilia, lerEstado, gravarEstado, registroHistorico } = require("./
 const { BASE_COR_RIO } = require("./config/distributionBases");
 const { HORARIOS_INFORMATIVO, HORARIO_EDICAO_INICIAL, horariosConfigurados } = require("./logic/informativoValidity");
 
-// O aviso COR-Rio mantém por padrão só as edições das 05:00 e 15:00.
-const HORARIOS_COR_RIO_PADRAO = Object.freeze(["05:00", "15:00"]);
+// O aviso COR-Rio mantém por padrão só as edições das 08:00 e 15:00.
+const HORARIOS_COR_RIO_PADRAO = Object.freeze(["08:00", "15:00"]);
 const {
   relatorioDiarioAtivo,
   envioUnicoAgendadoAtivo,
@@ -65,7 +65,7 @@ async function executarHorarioAgendado(horario, {
           cidadeChave,
           enviarEmail: true,
           horarioAgendado: horario,
-          // Edições posteriores comparam com a edição inicial (05:00) do dia.
+          // Edições posteriores comparam com a edição inicial (08:00) do dia.
           comparacaoAnterior: horario !== HORARIO_EDICAO_INICIAL
             ? estado[`${data}|${cidadeChave}|${HORARIO_EDICAO_INICIAL}`]?.resumo || null
             : null,
@@ -133,9 +133,9 @@ function lerHorarios(variavel, padrao) {
 
 /**
  * Agenda as edições diárias do informativo para todas as bases, no horário
- * de Brasília. Padrão: 05:00, 09:00, 12:00, 15:00, 17:00 e 20:00.
- *   HORARIOS_INFORMATIVO=05:00,15:00   (opcional; restringe as edições)
- *   HORARIOS_COR_RIO=05:00,15:00       (edições que também enviam o aviso COR-Rio)
+ * de Brasília. Padrão: 08:00 e 15:00.
+ *   HORARIOS_INFORMATIVO=08:00,15:00   (opcional; restringe as edições)
+ *   HORARIOS_COR_RIO=08:00,15:00       (edições que também enviam o aviso COR-Rio)
  */
 function iniciarAgendamentoDiario(onResultado, agendar = cron.schedule) {
   if (!relatorioDiarioAtivo()) {
@@ -340,7 +340,7 @@ function iniciarAtualizacaoAutomatica(atualizador, agendar = cron.schedule) {
 
 /**
  * Verificação preventiva das fontes 30 min antes de cada informativo
- * (04:30 e 14:30). Só avisa a equipe técnica (EMAIL_ALERTA_FONTES) quando há
+ * (07:30 e 14:30). Só avisa a equipe técnica (EMAIL_ALERTA_FONTES) quando há
  * problema; sem a variável, registra apenas no log. Controlado por env:
  *   VERIFICACAO_FONTES=false   (desliga; padrão: ligado)
  */
@@ -373,8 +373,8 @@ function iniciarVerificacaoFontes(agendar = cron.schedule) {
     console.log("[FONTES] Verificação preventiva desativada via VERIFICACAO_FONTES=false.");
     return null;
   }
-  const tarefa = agendar("30 4,14 * * *", () => executarVerificacaoFontes(), { timezone: "America/Sao_Paulo" });
-  console.log("[FONTES] Verificação preventiva das fontes às 04:30 e 14:30 (America/Sao_Paulo).");
+  const tarefa = agendar("30 7,14 * * *", () => executarVerificacaoFontes(), { timezone: "America/Sao_Paulo" });
+  console.log("[FONTES] Verificação preventiva das fontes às 07:30 e 14:30 (America/Sao_Paulo).");
   return tarefa;
 }
 

@@ -94,7 +94,7 @@ comitados no repositório**):
 | `SHAREPOINT_PASTA_DESTINO` | `Protocolo Meteorológico CIM` |
 | `DASHBOARD_PASSWORD` | **defina uma senha nova** — não reaproveite valor de teste |
 | `ENVIO_AUTOMATICO_DIARIO` | `true` |
-| `HORA_ENVIO_DIARIO` | `07:30` |
+| `HORARIOS_INFORMATIVO` | `08:00,15:00` |
 | `MONITOR_ALERTAS` | `true` |
 
 Demais variáveis (bases monitoradas e integrações opcionais) já vêm com

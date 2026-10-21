@@ -81,9 +81,9 @@ test('e-mail identifica Petrobras — OCEANOP somente quando a fonte entrou no r
   assert.match(html, /Petrobras — OCEANOP/);
 });
 
-test('informativos de 05h e 15h exibem exatamente a lista institucional de fontes', () => {
+test('informativos de 08h e 15h exibem exatamente a lista institucional de fontes', () => {
   const fontesEsperadas = 'INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)';
-  for (const horarioAgendado of ['05:00', '15:00']) {
+  for (const horarioAgendado of ['08:00', '15:00']) {
     const $ = cheerio.load(renderEmailHtml(relatorio({ horarioAgendado, previsaoAte: '00h' })));
     const linhaFontes = $('strong').filter((_, elemento) => $(elemento).text() === 'Fontes de dados:').parent();
     assert.equal(linhaFontes.find('strong').text(), 'Fontes de dados:');
@@ -160,7 +160,7 @@ test('chuva acumulada/dia usa apenas previsão e nunca o acumulado observado', (
 });
 
 test('previsão de todas as edições fica à direita, até 00h e com escrita padronizada', () => {
-  for (const horarioAgendado of ['05:00', '09:00', '12:00', '15:00', '17:00', '20:00']) {
+  for (const horarioAgendado of ['08:00', '09:00', '12:00', '15:00', '17:00', '20:00']) {
     const horaExibida = horarioAgendado.replace(':00', 'h');
     const frase = 'Previsão até 00h';
     const html = semImagem(renderEmailHtml(relatorio({ horarioAgendado, horaConsulta: horarioAgendado, previsaoAte: '00h' })));
@@ -192,9 +192,9 @@ test('previsão de todas as edições fica à direita, até 00h e com escrita pa
   }
 });
 
-test('fallback da probabilidade das 05h considera também o período da noite', () => {
+test('fallback da probabilidade das 08h considera também o período da noite', () => {
   assert.equal(probabilidadeChuvaPrevista(relatorio({
-    horarioAgendado: '05:00',
+    horarioAgendado: '08:00',
     probabilidadeChuvaPrevista: null,
     chuvaPorPeriodo: [
       { periodo: 'Manhã', janela: '05h–12h', probabilidade: 20 },
@@ -420,10 +420,10 @@ test('aviso INMET usa a cor do seu nível e a linha dinâmica fica escura sobre 
 
 test('e-mail omite completamente as previsões dos próximos dias', () => {
   const quatroDias = ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01'].map((data, i) => ({
-    data, periodo: i ? `Dia +${i}` : 'Hoje (05:00–00:00)',
+    data, periodo: i ? `Dia +${i}` : 'Hoje (08:00–00:00)',
     tempMin: 21 + i, tempMax: 33 + i, condicao: i ? 'Condição futura exclusiva' : 'Condição do dia', chuvaMm: i, rajadaKmh: 30 + i,
   }));
-  const manha = semImagem(renderEmailHtml(relatorio({ horarioAgendado: '05:00', previsaoDias: quatroDias, periodoCoberto: 'Hoje, das 05:00 até 00:00, mais os três dias seguintes' })));
+  const manha = semImagem(renderEmailHtml(relatorio({ horarioAgendado: '08:00', previsaoDias: quatroDias, periodoCoberto: 'Hoje, das 08:00 até 00:00, mais os três dias seguintes' })));
   const tarde = semImagem(renderEmailHtml(relatorio({ horarioAgendado: '15:00', previsaoDias: quatroDias.slice(0, 2), periodoCoberto: 'Hoje, das 15:00 até 00:00, mais o dia seguinte', mudancasDia: ['Grau geral: ATENÇÃO → ALERTA.'] })));
   for (const html of [manha, tarde]) {
     assert.ok(!html.includes('Previsão para os próximos dias'));

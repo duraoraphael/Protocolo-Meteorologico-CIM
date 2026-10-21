@@ -10,7 +10,7 @@ const {
 } = require("../src/sources/previsaoProximosDias");
 
 (async () => {
-  for (const horario of ["05:00", "15:00"]) {
+  for (const horario of ["08:00", "15:00"]) {
     const relatorio = await montarRelatorio(getCidade("rio_de_janeiro"), {
       horarioAgendado: horario,
       atualizarClimaSaude: true,

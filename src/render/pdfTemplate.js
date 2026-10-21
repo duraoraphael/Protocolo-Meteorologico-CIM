@@ -819,7 +819,7 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
 
 function blocoMudancasDia(r) {
   if (!r.mudancasDia) return "";
-  return `<section class="bloco-lista"><h4 class="subsecao">Mudanças do dia em relação ao relatório das 05:00</h4>${listaHtml(r.mudancasDia)}</section>`;
+  return `<section class="bloco-lista"><h4 class="subsecao">Mudanças do dia em relação ao relatório das 08:00</h4>${listaHtml(r.mudancasDia)}</section>`;
 }
 
 // Fontes efetivas de um campo nos três períodos (normalmente uma só).

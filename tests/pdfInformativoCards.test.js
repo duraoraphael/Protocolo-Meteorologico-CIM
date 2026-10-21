@@ -24,7 +24,7 @@ function report(extra = {}) {
 }
 
 test("cabeçalho usa a edição e a previsão na mesma linha", () => {
-  for (const horarioAgendado of ["05:00", "09:00", "12:00", "15:00", "17:00", "20:00"]) {
+  for (const horarioAgendado of ["08:00", "09:00", "12:00", "15:00", "17:00", "20:00"]) {
     const horaExibida = horarioAgendado.replace(":00", "h");
     const $ = cheerio.load(renderPdfHtml(report({ horarioAgendado, horaConsulta: horarioAgendado })));
     const referencia = $(".referencia-edicao").text().replace(/\s+/g, " ");
@@ -96,7 +96,7 @@ test("qualidade do ar sem AQI oficial não atribui classificação CAMS", () => 
 });
 
 test("temperatura e umidade usam quatro colunas previstas e deixam a fonte na nota", () => {
-  for (const horarioAgendado of ["05:00", "15:00"]) {
+  for (const horarioAgendado of ["08:00", "15:00"]) {
     const $ = cheerio.load(renderPdfHtml(report({
       horarioAgendado,
       tabelaTemperaturaUmidade: [{ fonte: "INMET — previsão oficial", natureza: "Previsão diária oficial", tempMin: 23.2, tempMax: 38, umidadeMin: 84, umidadeMax: 97 }],
@@ -112,14 +112,14 @@ test("temperatura e umidade usam quatro colunas previstas e deixam a fonte na no
   }
 });
 
-test("PDFs de 05h e 15h preservam as três tabelas no modelo aprovado", () => {
+test("PDFs de 08h e 15h preservam as três tabelas no modelo aprovado", () => {
   const ventoPorPeriodo = [
     { periodo: "Manhã", janela: "05h–12h", direcao: "NW-N", velocidadeMediaKmh: null, rajadaMaxKmh: null, referenciaInmet: "Previsão municipal INMET - intensidade oficial: Fraco/Moderado" },
     { periodo: "Tarde", janela: "12h–18h", direcao: "S-SW", velocidadeMediaKmh: null, rajadaMaxKmh: null, referenciaInmet: "Previsão municipal INMET - intensidade oficial: Fraco/Moderado com Rajadas" },
     { periodo: "Noite", janela: "18h–00h", direcao: "SW-S", velocidadeMediaKmh: null, rajadaMaxKmh: null, referenciaInmet: "Previsão municipal INMET - intensidade oficial: Fraco/Moderado com Rajadas" },
   ];
 
-  for (const horarioAgendado of ["05:00", "15:00"]) {
+  for (const horarioAgendado of ["08:00", "15:00"]) {
     const $ = cheerio.load(renderPdfHtml(report({ horarioAgendado, ventoPorPeriodo })));
     const temperatura = $("table.tabela-temp-umidade");
     const vento = $("table.tabela-vento-periodo");

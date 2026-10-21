@@ -47,10 +47,10 @@ test("probabilidade da edição usa o máximo entre seu horário e 00h", () => {
   });
   const openMeteo = { chuvaHoraria };
 
-  assert.deepEqual(probabilidadeChuvaDaEdicao({ horarioAgendado: "05:00", openMeteo }), {
+  assert.deepEqual(probabilidadeChuvaDaEdicao({ horarioAgendado: "08:00", openMeteo }), {
     valor: 92,
     fonte: "Open-Meteo — previsão complementar",
-    janela: "05h–00h",
+    janela: "08h–00h",
     regra: "probabilidade máxima prevista no período",
   });
   assert.deepEqual(probabilidadeChuvaDaEdicao({ horarioAgendado: "15:00", openMeteo }), {
@@ -60,18 +60,18 @@ test("probabilidade da edição usa o máximo entre seu horário e 00h", () => {
     regra: "probabilidade máxima prevista no período",
   });
   assert.deepEqual(probabilidadeChuvaDaEdicao({
-    horarioAgendado: "05:00",
-    inmetPrevisao: { periodos: { manha: { probabilidadeChuva: 95 } } },
+    horarioAgendado: "08:00",
+    inmetPrevisao: { periodos: { tarde: { probabilidadeChuva: 95 } } },
     openMeteo,
   }), {
     valor: 95,
     fonte: "INMET — previsão oficial",
-    janela: "05h–00h",
+    janela: "08h–00h",
     regra: "probabilidade máxima prevista no período",
   });
 });
 
-test("edições usam janelas efetivas 05h–00h e 15h–00h", { concurrency: false }, async () => {
+test("edições usam janelas efetivas 08h–00h e 15h–00h", { concurrency: false }, async () => {
   const anterior = global.fetch;
   const urls = [];
   global.fetch = async (url) => {
@@ -79,19 +79,19 @@ test("edições usam janelas efetivas 05h–00h e 15h–00h", { concurrency: fal
     return { ok: true, json: async () => dadosOpenMeteo() };
   };
   try {
-    const manha = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 5, fimHora: 24, agregarJanela: true });
+    const manha = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 8, fimHora: 24, agregarJanela: true });
     const tarde = await buscarOpenMeteo(-22.9, -43.2, { inicioHora: 15, fimHora: 24, agregarJanela: true });
     const painel = await buscarOpenMeteo(-22.9, -43.2);
-    assert.equal(manha.precipitacaoTotalMm, 17);
+    assert.equal(manha.precipitacaoTotalMm, 10);
     assert.equal(tarde.precipitacaoTotalMm, 5);
-    assert.equal(manha.periodos.manha.precipitacaoMm, 8);
+    assert.equal(manha.periodos.manha.precipitacaoMm, 1);
     assert.equal(manha.periodos.noite.disponivel, true);
     assert.equal(tarde.periodos.manha.disponivel, false);
     assert.equal(manha.periodosDiaCompleto.noite.disponivel, true);
     assert.equal(tarde.periodosDiaCompleto.manha.precipitacaoMm, 8);
     assert.equal(manha.tempMin, 20);
     assert.equal(manha.previsaoDias.length, 4, "a fixture traz 4 dias; o relatório usa só o primeiro");
-    assert.equal(manha.janelaHoje.rotulo, "05h–00h");
+    assert.equal(manha.janelaHoje.rotulo, "08h–00h");
     assert.equal(tarde.janelaHoje.rotulo, "15h–00h");
     assert.deepEqual(
       { fonte: manha.atual.fonte, previsao: manha.atual.previsao },
@@ -122,7 +122,7 @@ test("vento e rajada são grandezas distintas: intensidade vem da velocidade mé
   }
 });
 
-test("vento por período cobre 05h–00h nas edições das 05h e 15h", () => {
+test("vento por período cobre 05h–00h nas edições das 08h e 15h", () => {
   const periodo = (periodo, janela, rajadaMaxKmh) => ({
     periodo, janela, direcao: "SE", intensidadeVento: "Moderado (até 20 km/h)",
     velocidadeMaxKmh: 20, rajadaMaxKmh, disponivel: true,

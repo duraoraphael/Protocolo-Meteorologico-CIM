@@ -117,7 +117,7 @@ test('coleta válida persiste e risco combinado não altera grau EHF', async () 
   assert.match(urlConsultada, /data=2026-09-29/);
 });
 
-test('05h→15h informa mudança e alerta de calor só em transição', () => {
+test('08h→15h informa mudança e alerta de calor só em transição', () => {
   const baixo = interpretarHtml(pagina({ ehf: 'Baixo' }), parametros);
   const severo = interpretarHtml(pagina({ ehf: 'Severo' }), parametros);
   const base = { severidade: { grau: 'NORMAL', eventos: [] }, climaSaude: { status: 'operacional', dados: baixo } };

@@ -1,13 +1,13 @@
 const FUSO_INFORMATIVOS = "America/Sao_Paulo";
 
 const EDICOES_INFORMATIVO = Object.freeze({
-  "05:00": Object.freeze({
-    codigo: "05h",
+  "08:00": Object.freeze({
+    codigo: "08h",
     papel: "inicial",
-    inicioHora: 5,
+    inicioHora: 8,
     fimPrevisaoHora: 24,
     previsaoAte: "00h",
-    periodo: "hoje, das 05h até 00h do dia seguinte",
+    periodo: "hoje, das 08h até 00h do dia seguinte",
     validadeFimDia: 1,
     validadeFimHora: 0,
   }),
@@ -19,7 +19,7 @@ const EDICOES_INFORMATIVO = Object.freeze({
     previsaoAte: "00h",
     periodo: "hoje, das 09h até 00h do dia seguinte",
     validadeFimDia: 1,
-    validadeFimHora: 5,
+    validadeFimHora: 8,
   }),
   "12:00": Object.freeze({
     codigo: "12h",
@@ -29,7 +29,7 @@ const EDICOES_INFORMATIVO = Object.freeze({
     previsaoAte: "00h",
     periodo: "hoje, das 12h até 00h do dia seguinte",
     validadeFimDia: 1,
-    validadeFimHora: 5,
+    validadeFimHora: 8,
   }),
   "15:00": Object.freeze({
     codigo: "15h",
@@ -39,7 +39,7 @@ const EDICOES_INFORMATIVO = Object.freeze({
     previsaoAte: "00h",
     periodo: "hoje, das 15h até 00h do dia seguinte",
     validadeFimDia: 1,
-    validadeFimHora: 5,
+    validadeFimHora: 8,
   }),
   "17:00": Object.freeze({
     codigo: "17h",
@@ -49,7 +49,7 @@ const EDICOES_INFORMATIVO = Object.freeze({
     previsaoAte: "00h",
     periodo: "hoje, das 17h até 00h do dia seguinte",
     validadeFimDia: 1,
-    validadeFimHora: 5,
+    validadeFimHora: 8,
   }),
   "20:00": Object.freeze({
     codigo: "20h",
@@ -59,14 +59,15 @@ const EDICOES_INFORMATIVO = Object.freeze({
     previsaoAte: "00h",
     periodo: "hoje, das 20h até 00h do dia seguinte",
     validadeFimDia: 1,
-    validadeFimHora: 5,
+    validadeFimHora: 8,
   }),
 });
 
-// Edições do dia em ordem cronológica. A das 05h é a inicial; as demais são
-// atualizações comparadas com ela.
-const HORARIOS_INFORMATIVO = Object.freeze(Object.keys(EDICOES_INFORMATIVO).sort());
-const HORARIO_EDICAO_INICIAL = "05:00";
+// Apenas as edições das 08h e 15h são enviadas automaticamente. As demais
+// regras permanecem disponíveis para consultar históricos já produzidos.
+const HORARIOS_SUPORTADOS = Object.freeze(Object.keys(EDICOES_INFORMATIVO).sort());
+const HORARIOS_INFORMATIVO = Object.freeze(["08:00", "15:00"]);
+const HORARIO_EDICAO_INICIAL = "08:00";
 
 /**
  * Lista de horários a partir de texto "HH:MM,HH:MM" (ex.: variável de
@@ -78,7 +79,7 @@ function horariosConfigurados(valor, padrao = HORARIOS_INFORMATIVO) {
   if (!texto) return [...padrao];
   const lista = [...new Set(texto.split(",").map((h) => h.trim()).filter(Boolean))];
   const invalido = lista.find((h) => !EDICOES_INFORMATIVO[h]);
-  if (invalido) throw new Error(`Horário de informativo inválido: "${invalido}". Use: ${HORARIOS_INFORMATIVO.join(", ")}.`);
+  if (invalido) throw new Error(`Horário de informativo inválido: "${invalido}". Use: ${HORARIOS_SUPORTADOS.join(", ")}.`);
   return lista.sort();
 }
 

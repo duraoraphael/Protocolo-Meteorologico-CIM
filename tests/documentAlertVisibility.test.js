@@ -51,13 +51,13 @@ function evento(grau, tipo = "Vento") {
 }
 
 test("tipo explícito do documento prevalece sobre horário de geração", () => {
-  assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_05H }), TIPOS_DOCUMENTO.INFORMATIVO_05H);
+  assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_08H }), TIPOS_DOCUMENTO.INFORMATIVO_08H);
   assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_15H }), TIPOS_DOCUMENTO.INFORMATIVO_15H);
-  assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO, horarioAgendado: "05:00" }), TIPOS_DOCUMENTO.EXTRAORDINARIO);
+  assert.equal(tipoDocumentoDoRelatorio({ tipoDocumento: TIPOS_DOCUMENTO.EXTRAORDINARIO, horarioAgendado: "08:00" }), TIPOS_DOCUMENTO.EXTRAORDINARIO);
   assert.equal(tipoDocumentoDoRelatorio({}), TIPOS_DOCUMENTO.EXTRAORDINARIO);
 });
 
-for (const tipoDocumento of [TIPOS_DOCUMENTO.INFORMATIVO_05H, TIPOS_DOCUMENTO.INFORMATIVO_15H]) {
+for (const tipoDocumento of [TIPOS_DOCUMENTO.INFORMATIVO_08H, TIPOS_DOCUMENTO.INFORMATIVO_15H]) {
   test(`${tipoDocumento}: NORMAL, ATENÇÃO, ALERTA e EMERGÊNCIA são elegíveis`, () => {
     for (const nivel of ["NORMAL", "ATENÇÃO", "ALERTA", "EMERGÊNCIA"]) {
       assert.equal(deveExibirNoDocumento({ nivel, tipoDocumento }), true, nivel);
@@ -128,8 +128,8 @@ test("PDF programado também omite todos os cards de alerta", () => {
     evento("ATENÇÃO", "Chuva"),
   ];
   const html = renderPdfHtml(report({
-    tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_05H,
-    horarioAgendado: "05:00",
+    tipoDocumento: TIPOS_DOCUMENTO.INFORMATIVO_08H,
+    horarioAgendado: "08:00",
     severidade: { grau: "EMERGÊNCIA", eventos: alertas },
   }));
   assert.doesNotMatch(html, /class="card-alerta"|CALOR \/ RISCO À SAÚDE — EMERGÊNCIA|VENTO — ALERTA|CHUVA INTENSA — ATENÇÃO|UMIDADE — NORMAL/);

@@ -71,11 +71,11 @@ CIDADE=rio_de_janeiro
 ENVIO_AUTOMATICO_DIARIO=true
 ```
 
-Os horários permanentes são 05:00, 09:00, 12:00, 15:00, 17:00 e 20:00, no
-fuso `America/Sao_Paulo`; cada edição traz a previsão do seu horário até 00h
-e as posteriores às 05:00 comparam com ela. `HORARIOS_INFORMATIVO` restringe
+Os horários permanentes são 08:00 e 15:00, no fuso `America/Sao_Paulo`; cada
+edição traz a previsão do seu horário até 00h e a das 15:00 compara com a das
+08:00. `HORARIOS_INFORMATIVO` restringe
 as edições e `HORARIOS_COR_RIO` define
-em quais delas o aviso COR-RIO é enviado (padrão 05:00 e 15:00).
+em quais delas o aviso COR-RIO é enviado (padrão 08:00 e 15:00).
 
 ## 3. Uso
 
@@ -115,9 +115,9 @@ O painel:
 - Tem um botão (👥, ao lado do ⚙) para cadastrar/remover responsáveis e
   vincular uma ou várias bases. `COR-RIO — RJ` é uma base somente de
   distribuição e pode ser o único vínculo de uma pessoa.
-- Envia automaticamente os informativos às 05:00, 09:00, 12:00, 15:00, 17:00
-  e 20:00 (horário de Brasília) para as bases meteorológicas e, em fluxo
-  separado (05:00 e 15:00), o aviso COR-RIO apenas para seus próprios
+- Envia automaticamente os informativos às 08:00 e 15:00 (horário de
+  Brasília) para as bases meteorológicas e, em fluxo
+  separado (08:00 e 15:00), o aviso COR-RIO apenas para seus próprios
   destinatários. `REPORT_RECIPIENTS` nunca
   é usado como fallback do aviso COR-RIO.
 

@@ -14,7 +14,7 @@ function relatorio(extra = {}) {
   return {
     cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
     dataFormatadaLonga: "sexta-feira, 2 de outubro de 2026", dataFormatadaCurta: "02/10/2026", horaConsulta: "11:00",
-    horarioAgendado: "05:00",
+    horarioAgendado: "08:00",
     tabelaTemperaturaUmidade: [], ventoPorPeriodo: [], chuvaPorPeriodo: [], mar: null, qualidadeAr: null,
     severidade: { grau: "NORMAL", eventos: [] },
     avisosInmet: [{ descricao: "Tempestade", severidade: "Perigo Potencial", inicio: "02/10/2026 09:00", fim: "02/10/2026 23:59", riscos: ["Chuva."], instrucoes: ["Abrigue-se."] }],

@@ -49,9 +49,9 @@ function registroHistorico(report, enviadoEmISO = new Date().toISOString()) {
   };
 }
 
-// Compara uma edição posterior do dia com a edição inicial (05:00).
+// Compara uma edição posterior do dia com a edição inicial (08:00).
 function compararComManha(anterior, atual, horarioAtual = "15:00") {
-  if (!anterior) return ["Relatório das 05:00 indisponível para comparação nesta base."];
+  if (!anterior) return ["Relatório das 08:00 indisponível para comparação nesta base."];
   const mudancas = [];
   for (const [campo, nome] of [["grau", "Grau geral"], ["vento", "Gatilho de vento"], ["chuva", "Gatilho de chuva"]]) {
     if (anterior[campo] !== atual[campo]) mudancas.push(`${nome}: ${anterior[campo]} → ${atual[campo]}.`);
@@ -62,14 +62,14 @@ function compararComManha(anterior, atual, horarioAtual = "15:00") {
   }
   for (const [campo, nome, unidade] of [["rajadaMaxKmh", "Rajada prevista", "km/h"], ["precipitacaoTotalMm", "Chuva prevista", "mm"]]) {
     if (Number.isFinite(anterior[campo]) && Number.isFinite(atual[campo]) && anterior[campo] !== atual[campo]) {
-      mudancas.push(`${nome} (previsão das 05:00 → previsão das ${horarioAtual}): ${anterior[campo]} ${unidade} → ${atual[campo]} ${unidade}.`);
+      mudancas.push(`${nome} (previsão das 08:00 → previsão das ${horarioAtual}): ${anterior[campo]} ${unidade} → ${atual[campo]} ${unidade}.`);
     }
   }
   const antes = anterior.fenomenos || [];
   const agora = atual.fenomenos || [];
   for (const fenomeno of agora.filter((valor) => !antes.includes(valor))) mudancas.push(`Novo enquadramento: ${fenomeno}.`);
   for (const fenomeno of antes.filter((valor) => !agora.includes(valor))) mudancas.push(`Enquadramento anterior encerrado: ${fenomeno}.`);
-  return mudancas.length ? mudancas : ["Sem mudança relevante em relação ao relatório das 05:00."];
+  return mudancas.length ? mudancas : ["Sem mudança relevante em relação ao relatório das 08:00."];
 }
 
 module.exports = { ARQUIVO, dataBrasilia, lerEstado, gravarEstado, resumo, registroHistorico, compararComManha };

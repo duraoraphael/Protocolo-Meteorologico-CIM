@@ -1,5 +1,5 @@
 // Verificação preventiva das fontes externas, executada antes dos informativos
-// das 05h e 15h. Não gera PDF, não envia informativo e não altera o estado do
+// das 08h e 15h. Não gera PDF, não envia informativo e não altera o estado do
 // agendador: só consulta cada fonte e confere se os campos que o informativo
 // usa vieram preenchidos.
 //

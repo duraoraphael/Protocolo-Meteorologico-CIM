@@ -25,7 +25,7 @@ Temperatura, umidade, condição, chuva, vento e rajada permanecem prioritariame
 - `src/logic/verificacaoFontes.js` passou a verificar Weather e UV e deixou de exigir umidade do Clima e Saúde, campo que o portal não publica.
 - `src/sources/previsaoProximosDias.js` e `src/pipeline.js` priorizam chuva/rajada D+3 do INMET e usam complemento identificado da Open-Meteo, além da Open-Meteo para UV.
 - `src/logic/weatherSourceMetadata.js`, `sourceProvenance.js`, `scheduledReport.js` e `src/render/pdfTemplate.js` registram natureza, fonte, período e textos coerentes.
-- `artifacts/verify-live-weather.cjs` executa as edições 05h/15h sem enviar e-mail e confere a presença dos valores no HTML das duas superfícies.
+- `artifacts/verify-live-weather.cjs` executa as edições 08h/15h sem enviar e-mail e confere a presença dos valores no HTML das duas superfícies.
 
 Resultado real no Rio, em 15/10/2026: INMET 22–29 °C e 70–100%; direção/intensidade do vento pelo INMET; rajada e chuva numéricas indisponíveis no produto municipal; UV 8,4 pelo CAMS/Open-Meteo; mar máximo de 0,5 m pelo Open-Meteo Marine; Clima e Saúde EHF `Sem excesso`.
 
@@ -313,7 +313,7 @@ O mesmo título oficial passa pelo painel, cards, detalhes, monitoramento, PDF, 
 
 - testes focados de INMET, painel, e-mail e PDF: **59/59 aprovados**;
 - suíte completa: **365/365 aprovados**, zero falhas;
-- informativos reais de teste gerados para Rio de Janeiro às 05h e às 15h com `--sem-email`;
+- informativos reais de teste gerados para Rio de Janeiro às 08h e às 15h com `--sem-email`;
 - os dois PDFs têm 8 páginas e foram renderizados integralmente em imagem; não foram encontrados cortes, sobreposições ou texto truncado;
 - a última página reserva espaço por causa da quebra natural do bloco de referências da ANA, sem perda de informação;
 - nenhum e-mail, upload GED ou deploy foi executado.

@@ -35,5 +35,5 @@ services:
         value: rio_de_janeiro
       - key: ENVIO_AUTOMATICO_DIARIO
         value: "true"
-      - key: HORA_ENVIO_DIARIO
-        value: "07:30"
+      - key: HORARIOS_INFORMATIVO
+        value: "08:00,15:00"
