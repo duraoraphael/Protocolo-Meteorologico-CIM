@@ -74,7 +74,7 @@ async function executarHorarioAgendado(horario, {
           enviarEmail: true,
           horarioAgendado: horario,
           // A edição das 15h compara com a edição inicial (08:00) do dia.
-          comparacaoAnterior: horario !== HORARIO_EDICAO_INICIAL
+          comparacaoAnterior: horario === "15:00"
             ? estado[`${data}|${cidadeChave}|${HORARIO_EDICAO_INICIAL}`]?.resumo || null
             : null,
         });

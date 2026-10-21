@@ -79,6 +79,23 @@ function fingerprintAlerta(alerta) {
   return crypto.createHash("sha256").update(JSON.stringify(material)).digest("hex");
 }
 
+// O fingerprint da medição identifica o conteúdo atual. O fingerprint da
+// transição também incorpora o estado confirmado anterior. Isso é essencial
+// para distinguir dois ciclos legítimos iguais, por exemplo:
+// NORMAL -> ATENÇÃO -> NORMAL -> ATENÇÃO. Sem o marcador do estado anterior,
+// a fila confundiria o segundo agravamento com o primeiro e não enviaria.
+function fingerprintTransicao(alerta, anterior, motivo) {
+  const material = {
+    atual: fingerprintAlerta(alerta),
+    assinatura: alerta.assinatura,
+    grau: alerta.grau,
+    motivo,
+    grauAnterior: anterior?.grau || anterior?.gravidade || null,
+    estadoAnteriorEm: anterior?.emISO || anterior?.fingerprint || null,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(material)).digest("hex");
+}
+
 // ---------------------------------------------------------------------------
 // Detecção
 // ---------------------------------------------------------------------------
@@ -240,11 +257,13 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
     const fingerprint = fingerprintAlerta(alerta);
 
     if (!anterior) {
+      const motivo = "novo";
       novos.push({
         ...alerta,
-        fingerprint,
+        fingerprint: fingerprintTransicao(alerta, null, motivo),
+        conteudoFingerprint: fingerprint,
         chaveEstado: chave,
-        motivo: "novo",
+        motivo,
         ...(alerta.assinatura.startsWith("inmet:") ? { grauAnterior: "NORMAL" } : {}),
       });
       continue;
@@ -253,19 +272,23 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
     const antes = GRAVIDADE[anterior.gravidade] ?? 0;
     const agora = GRAVIDADE[alerta.gravidade] ?? 0;
     if (agora !== antes) {
+      const motivo = agora > antes ? "agravou" : "reduziu";
       novos.push({
         ...alerta,
-        fingerprint,
+        fingerprint: fingerprintTransicao(alerta, anterior, motivo),
+        conteudoFingerprint: fingerprint,
         chaveEstado: chave,
-        motivo: agora > antes ? "agravou" : "reduziu",
+        motivo,
         grauAnterior: anterior.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[anterior.gravidade],
       });
     } else if (alerta.assinatura.startsWith("inmet:") && anterior.fingerprint && anterior.fingerprint !== fingerprint) {
+      const motivo = "atualizou";
       novos.push({
         ...alerta,
-        fingerprint,
+        fingerprint: fingerprintTransicao(alerta, anterior, motivo),
+        conteudoFingerprint: fingerprint,
         chaveEstado: chave,
-        motivo: "atualizou",
+        motivo,
         grauAnterior: anterior.grau || alerta.grau,
       });
     }
@@ -295,7 +318,11 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
       naturezaDado: avisoOficial ? "Aviso oficial" : anterior.naturezaDado,
       recomendacoes: [],
     };
-    novos.push({ ...normalizacao, fingerprint: fingerprintAlerta(normalizacao) });
+    novos.push({
+      ...normalizacao,
+      fingerprint: fingerprintTransicao(normalizacao, anterior, "normalizou"),
+      conteudoFingerprint: fingerprintAlerta(normalizacao),
+    });
   }
   return novos;
 }
@@ -313,7 +340,10 @@ function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salva
       fonteDados: alerta.fonteDados,
       naturezaDado: alerta.naturezaDado,
       janela: alerta.janela,
-      fingerprint: alerta.fingerprint || fingerprintAlerta(alerta),
+      // O estado compara o conteúdo meteorológico; a fila usa o fingerprint
+      // da transição para deduplicar cada episódio separadamente.
+      fingerprint: alerta.conteudoFingerprint || fingerprintAlerta(alerta),
+      eventoFingerprint: alerta.fingerprint || null,
       emISO,
     };
   }

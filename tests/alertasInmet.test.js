@@ -278,7 +278,7 @@ test("aviso oficial mantém a fonte INMET e explica todos os riscos oficiais sem
   assert.equal((html.match(/Chuva entre 30 e 60 mm\/h/g) || []).length, 1);
 });
 
-test("normalização oficial isolada não renderiza Alerta CIM", () => {
+test("normalização oficial isolada comunica encerramento validado pelo INMET", () => {
   const html = renderAlertEmailHtml({
     cidade: { nome: "Rio de Janeiro", uf: "RJ" },
     report: { dataFormatadaCurta: "30/09/2026", horaConsulta: "15:00", ventoPorPeriodo: [] },
@@ -295,7 +295,9 @@ test("normalização oficial isolada não renderiza Alerta CIM", () => {
     }],
   });
 
-  assert.equal(html, "");
+  assert.match(html, /NORMALIZAÇÃO DAS CONDIÇÕES METEOROLÓGICAS/);
+  assert.match(html, /NORMALIZAÇÃO:<\/strong> ALERTA → NORMAL/);
+  assert.match(html, /não consta mais entre os avisos ativos do INMET/);
 });
 
 test("e-mail de alerta mostra identidade CIM e cor do grau comunicado", () => {

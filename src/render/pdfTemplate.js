@@ -695,7 +695,7 @@ function dataCurta(dataIso) {
 
 const grausC = (valor) => (Number.isFinite(valor) ? `${Math.round(valor)}°C` : "—");
 
-// Tabela da previsão de hoje (05h–00h), sem título próprio: abre a seção
+// Tabela da previsão de hoje na janela da edição, sem título próprio: abre a seção
 // "1. Previsão" e fica no mesmo bloco que o título da seção. Os dias
 // seguintes têm seção própria no fim do informativo.
 function blocoPrevisaoAgendada(r, tituloSecao = "") {
@@ -819,7 +819,10 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
 }
 
 function blocoMudancasDia(r) {
-  if (!r.mudancasDia) return "";
+  // Defesa no template: mesmo que um relatório antigo/cacheado carregue o
+  // campo, a edição das 08h nunca exibe comparação. A seção pertence
+  // exclusivamente à atualização regular das 15h.
+  if (r.horarioAgendado !== "15:00" || !r.mudancasDia) return "";
   return `<section class="bloco-lista"><h4 class="subsecao">Mudanças do dia em relação ao relatório das 08:00</h4>${listaHtml(r.mudancasDia)}</section>`;
 }
 

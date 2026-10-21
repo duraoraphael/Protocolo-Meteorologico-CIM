@@ -15,7 +15,7 @@ const {
   aplicarChuvaClimatempo,
 } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
-const { validadeInformativo, HORARIO_EDICAO_INICIAL } = require("./logic/informativoValidity");
+const { validadeInformativo } = require("./logic/informativoValidity");
 const { TIPOS_DOCUMENTO } = require("./logic/alertPresentation");
 const {
   registrarDocumentoOperacional,
@@ -172,7 +172,11 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   console.log("[RELATORIO] Dados obtidos");
   if (horarioAgendado) {
     report.nomeArquivoBase += `_${horarioAgendado.replace(":", "")}`;
-    if (horarioAgendado !== HORARIO_EDICAO_INICIAL) {
+    // A edição inicial das 08h é uma fotografia autônoma. Removemos
+    // explicitamente qualquer comparação que possa ter vindo de objeto
+    // reutilizado/cache e só permitimos a comparação regular 08h -> 15h.
+    delete report.mudancasDia;
+    if (horarioAgendado === "15:00") {
       report.mudancasDia = compararComManha(comparacaoAnterior, resumo(report), horarioAgendado);
     }
   }

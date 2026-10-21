@@ -114,6 +114,76 @@ test("cenários F e G: falha permanece pendente e reinício não reenvia evento 
   }
 });
 
+test("novo ciclo após normalização recebe outro ID e não é descartado como duplicado", () => {
+  const estado = estadoBase("macae", "ALERTA", "alto");
+  estado["macae|chuva"].emISO = "2026-10-21T10:00:00.000Z";
+
+  const [normalizacao] = filtrarNovidades("macae", [], estado, () => true);
+  marcarAlertasEnviados(
+    { chave: "macae", alertas: [normalizacao] },
+    { carregar: () => estado, salvar: () => {} }
+  );
+
+  const [reativacao] = filtrarNovidades("macae", [{
+    assinatura: "chuva", tipo: "Chuva", grau: "ALERTA", gravidade: "alto",
+  }], estado);
+
+  assert.equal(normalizacao.motivo, "normalizou");
+  assert.equal(reativacao.motivo, "agravou");
+  assert.equal(reativacao.grauAnterior, "NORMAL");
+  assert.notEqual(normalizacao.fingerprint, reativacao.fingerprint);
+  assert.notEqual(
+    fila.idEvento({ chave: "macae", alertas: [normalizacao] }),
+    fila.idEvento({ chave: "macae", alertas: [reativacao] })
+  );
+});
+
+test("normaliza um fenômeno sem encerrar outro risco ativo da mesma base", () => {
+  const estado = {
+    ...estadoBase("macae", "ATENÇÃO", "atencao"),
+    "macae|vento": {
+      grau: "ALERTA", gravidade: "alto", tipo: "Vento",
+      fonteDados: "OCEANOP", emISO: "2026-10-21T10:00:00.000Z",
+    },
+  };
+  const chuvaAtiva = {
+    assinatura: "chuva", tipo: "Chuva", grau: "ATENÇÃO", gravidade: "atencao",
+  };
+  const novidades = filtrarNovidades("macae", [chuvaAtiva], estado, () => true);
+  assert.deepEqual(novidades.map((evento) => [evento.assinatura, evento.motivo]), [["vento", "normalizou"]]);
+  assert.equal(estado["macae|chuva"].grau, "ATENÇÃO");
+});
+
+test("histórico persistente registra os campos auditáveis da transição", () => {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), "cim-alerta-historico-"));
+  const arquivo = path.join(pasta, "fila.json");
+  try {
+    const base = {
+      chave: "vitoria", cidade: { nome: "Vitória", uf: "ES" },
+      alertas: [{
+        assinatura: "vento", tipo: "Rajadas de vento", grauAnterior: "ALERTA",
+        grau: "ATENÇÃO", gravidade: "atencao", motivo: "reduziu",
+        fonteDados: "OCEANOP", janela: "15h–00h", naturezaDado: "Classificação interna",
+        fingerprint: "transicao-1",
+      }],
+    };
+    const evento = fila.enfileirar(base, ["focal.vitoria@exemplo.com"], {
+      arquivo, agora: new Date("2026-10-21T18:00:00Z"),
+    });
+    const salvo = fila.carregarFila(arquivo).eventos[evento.id];
+    assert.equal(salvo.base, "vitoria");
+    assert.deepEqual(salvo.destinatarios, ["focal.vitoria@exemplo.com"]);
+    assert.deepEqual(salvo.transicoes[0], {
+      assinatura: "vento", fenomeno: "Rajadas de vento", severidadeAnterior: "ALERTA",
+      severidadeAtual: "ATENÇÃO", tipoAlteracao: "reduziu",
+      fonteMeteorologica: "OCEANOP", periodoReferencia: "15h–00h",
+      naturezaDado: "Classificação interna", fingerprint: "transicao-1",
+    });
+  } finally {
+    fs.rmSync(pasta, { recursive: true, force: true });
+  }
+});
+
 test("cenário H: atualização material do mesmo aviso INMET gera nova versão", () => {
   const relatorio = (risco, atualizadoEm) => ({
     ...reportComNivel("ATENÇÃO"),
