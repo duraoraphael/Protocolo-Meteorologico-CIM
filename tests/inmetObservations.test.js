@@ -5,6 +5,7 @@ const {
   normalizarObservacao,
   agregarObservacoes,
   direcaoCardeal,
+  atualizarHistorico,
   TIMEOUT_MS,
   TENTATIVAS,
 } = require("../src/sources/inmetObservations");
@@ -94,6 +95,45 @@ test("histórico agrupa somente o dia local e identifica cobertura parcial", () 
   assert.equal(agregado.cobertura.amostras, 3);
   assert.equal(agregado.coberturaTemperatura.amostras, 3);
   assert.equal(agregado.coberturaUmidade.amostras, 3);
+});
+
+test("extremos horários respeitam a virada do dia local, futuro e cobertura parcial", () => {
+  const ponto = (medidoEm, minima, maxima, umidadeMin, umidadeMax) => ({
+    medidoEm, temperaturaMinC: minima, temperaturaMaxC: maxima,
+    umidadeMinPct: umidadeMin, umidadeMaxPct: umidadeMax,
+  });
+  const agregado = agregarObservacoes([
+    ponto("2026-10-23T03:00:00Z", 5, 40, 10, 100), // 00h: intervalo do dia anterior
+    ponto("2026-10-23T04:00:00Z", 21, 24, 60, 80),
+    ponto("2026-10-23T17:00:00Z", 23, 27, 55, 82),
+    ponto("2026-10-23T18:00:00Z", 10, 50, 20, 99), // leitura futura
+    ponto("2026-10-22T17:00:00Z", 2, 55, 5, 100),
+  ], { agora: new Date("2026-10-23T17:30:00Z"), fuso: "America/Sao_Paulo" });
+  assert.deepEqual([agregado.temperaturaMinC, agregado.temperaturaMaxC], [21, 27]);
+  assert.deepEqual([agregado.umidadeMinPct, agregado.umidadeMaxPct], [55, 82]);
+  assert.deepEqual(agregado.coberturaTemperatura, { amostras: 2, horasEsperadas: 14, parcial: true });
+});
+
+test("descarta extremos inválidos e não combina histórico de estações distintas", () => {
+  const bruto = payload({ tempMin: "9999", tempMax: "", tempAtual: "24" });
+  bruto.dados.UMD_MIN = "95";
+  bruto.dados.UMD_MAX = "20";
+  const obs = normalizarObservacao(bruto, { cidade, consultadoEm: "2026-10-14T13:30:00Z" });
+  assert.equal(obs.temperaturaMinC, null);
+  assert.equal(obs.temperaturaMaxC, null);
+  assert.equal(obs.umidadeMinPct, null);
+  assert.equal(obs.umidadeMaxPct, null);
+  const cache = { versao: 1, bases: { rio_de_janeiro: { historico: [{ medidoEm: "2026-10-14T12:00:00Z", estacao: { codigo: "A627" }, temperaturaMinC: 12 }] } } };
+  atualizarHistorico(cache, cidade, obs, Date.parse("2026-10-14T13:30:00Z"));
+  assert.equal(cache.bases.rio_de_janeiro.historico.length, 1);
+  assert.equal(cache.bases.rio_de_janeiro.historico[0].estacao.codigo, "A636");
+});
+
+test("rejeita divergência entre código da leitura e estação retornada", () => {
+  const bruto = payload();
+  bruto.estacao.CODIGO = "A627";
+  assert.throws(() => normalizarObservacao(bruto, { cidade, consultadoEm: "2026-10-14T13:30:00Z" }),
+    (erro) => erro.code === "INMET_STATION_MISMATCH");
 });
 
 test("serviço usa endpoints oficiais, persiste histórico e não chama provedor alternativo", async () => {

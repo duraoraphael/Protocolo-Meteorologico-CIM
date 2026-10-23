@@ -11,6 +11,7 @@ function relatorio(sobrescritas = {}) {
     dataFormatadaCurta: '28/09/2026', horaConsulta: '10:09',
     condicaoGeral: 'Muitas nuvens com pancadas de chuva',
     tempMin: 21, tempMax: 33, umidadeMin: 55, umidadeMax: 100,
+    inmetPrevisao: { data: '28/09/2026', dias: [{ dataBr: '28/09/2026', tempMin: 21, tempMax: 33, umidadeMin: 55, umidadeMax: 100 }] },
     precipitacaoTotalMm: 0, precipitacaoDiariaMm: 0, probabilidadeChuvaPrevista: 85,
     ventoPorPeriodo: [
       { periodo: 'Manhã', janela: '05h–12h', direcao: 'N', velocidadeMediaKmh: null, rajadaMaxKmh: 24, referenciaInmet: 'Previsão municipal INMET' },
@@ -23,7 +24,7 @@ function relatorio(sobrescritas = {}) {
       { periodo: 'Noite', janela: '18h–00h', probabilidade: null, precipitacaoMm: null, resumoInmet: 'Muitas nuvens' },
     ],
     previsaoDias: [{ chuvaMm: 0 }],
-    qualidadeAr: { fonte: 'Qualidade do ar estimada — Open-Meteo/CAMS', iqar: 18, classificacao: { nivel: 'Boa', exibicao: 'Boa (Normal)', cor: '#00843D' }, referenciaEm: '2026-09-28T10:00', pm25Medio: 14.5, pm25Periodo: 'média diária', uvMax: 11.2, uvClassificacao: { nivel: 'Extremo' } },
+    qualidadeAr: { fonte: 'Qualidade do ar estimada — Open-Meteo/CAMS', iqar: 18, classificacao: { nivel: 'Normal', exibicao: 'NORMAL', cor: '#00843D' }, referenciaEm: '2026-09-28T10:00', pm25Medio: 14.5, pm25Periodo: 'média diária', uvMax: 11.2, uvClassificacao: { nivel: 'Extremo' } },
     mar: { fonte: 'Open-Meteo Marine', alturaMaxDiaM: 0.7, estadoMarDia: 'Leve' },
     fontesPorCampo: {
       condicaoGeral: 'INMET — previsão oficial', tempMin: 'INMET — previsão oficial', tempMax: 'INMET — previsão oficial',
@@ -54,8 +55,8 @@ test('cabeçalho, indicadores e rodapé usam dados e fontes do relatório', () =
     'CIM', 'Centro Integrado', 'de Monitoramento', 'COMPARTILHADO',
     'INFORMATIVO METEOROLÓGICO', 'Hora da consulta:', '10:09',
     'PREVISÃO TEMP. MÍN/MÁX', '21° / 33°C', 'PREVISÃO UMIDADE MÍN/MÁX', '55% / 100%',
-    'QUALIDADE DO AR', 'Boa', 'RAJADA PREVISTA', '36 km/h',
-    'CHUVA ACUMULADA/DIA', '0 mm', 'PROBABILIDADE DE CHUVA', '85%', 'CALOR', 'Dado indisponível',
+    'QUALIDADE DO AR', 'NORMAL', 'RAJADA PREVISTA', '36 km/h',
+    'CHUVA PREVISTA/DIA', '0 mm', 'PROBABILIDADE DE CHUVA', '85%', 'CALOR', 'Dado indisponível',
     'MAR — ALTURA MÁX. DE ONDA', '0.7 m', 'CONDIÇÃO GERAL',
     'Fontes de dados:', 'INMET', 'Clima e Saúde — Ministério da Saúde',
     'Petrobras — OCEANOP', 'Tetra Tech (quando autorizado)',
@@ -68,6 +69,31 @@ test('cabeçalho, indicadores e rodapé usam dados e fontes do relatório', () =
   assert.ok(!html.includes('Rajada prevista/registrada'));
   assert.ok(!html.includes('QUALIDADE DO AR (PM2,5)') && !html.includes('14.5 µg/m³'));
   assert.ok(!html.includes('display:grid') && !html.includes('display:flex'));
+});
+
+test('cards de temperatura e umidade exibem previsão INMET, mesmo quando observações diferem', () => {
+  const $ = cheerio.load(renderEmailHtml(relatorio({
+    tempMin: 24, tempMax: 28, umidadeMin: 70, umidadeMax: 90,
+    inmetPrevisao: { data: '28/09/2026', dias: [
+      { dataBr: '28/09/2026', tempMin: 19, tempMax: 32, umidadeMin: 40, umidadeMax: 88 },
+    ] },
+  })));
+  const cards = $('[data-email-metric-row="1"]').first().find('td');
+  assert.match(cards.eq(0).text(), /PREVISÃO TEMP\. MÍN\/MÁX\s*19° \/ 32°C/);
+  assert.match(cards.eq(1).text(), /PREVISÃO UMIDADE MÍN\/MÁX\s*40% \/ 88%/);
+  assert.doesNotMatch(cards.eq(0).text(), /24° \/ 28°C/);
+  assert.doesNotMatch(cards.eq(1).text(), /70% \/ 90%/);
+});
+
+test('previsão INMET ausente para a data não é preenchida com observação', () => {
+  const $ = cheerio.load(renderEmailHtml(relatorio({
+    inmetPrevisao: { data: '28/09/2026', dias: [
+      { dataBr: '29/09/2026', tempMin: 19, tempMax: 32, umidadeMin: 40, umidadeMax: 88 },
+    ] },
+  })));
+  const cards = $('[data-email-metric-row="1"]').first().find('td');
+  assert.match(cards.eq(0).text(), /Dado indisponível/);
+  assert.match(cards.eq(1).text(), /Dado indisponível/);
 });
 
 test('e-mail identifica Petrobras — OCEANOP somente quando a fonte entrou no relatório', () => {
@@ -131,8 +157,9 @@ test('indicadores formam uma única grade 3–3–2 sem tabelas técnicas no cor
   assert.deepEqual(linhas.eq(1).children('td').map((_, td) => $(td).attr('colspan')).get(), ['2', '2', '2']);
   const chuva = linhas.eq(1).children('td').eq(1);
   assert.deepEqual(chuva.find('[data-email-rain-metric]').map((_, td) => $(td).attr('data-email-rain-metric')).get(), ['acumulado', 'probabilidade']);
-  assert.match(chuva.text(), /CHUVA ACUMULADA\/DIA/);
+  assert.match(chuva.text(), /CHUVA PREVISTA\/DIA/);
   assert.match(chuva.text(), /PROBABILIDADE DE CHUVA/);
+  assert.doesNotMatch(chuva.text(), /ESTIMATIVA OPEN-METEO|\d{4}-\d{2}-\d{2}T\d{2}:/);
   assert.deepEqual(linhas.eq(2).children('td').map((_, td) => $(td).attr('colspan')).get(), ['3', '3']);
   assert.deepEqual(linhas.eq(2).children('td').map((_, td) => $(td).attr('width')).get(), ['50%', '50%']);
   assert.deepEqual(linhas.eq(2).children('td').map((_, td) => $(td).attr('valign')).get(), ['middle', 'middle']);
@@ -159,14 +186,15 @@ test('terceira linha mantém alinhamento e quebra uma condição geral longa', (
   }
 });
 
-test('chuva acumulada/dia usa apenas previsão e nunca o acumulado observado', () => {
+test('card de chuva usa apenas previsão e nunca o acumulado observado', () => {
   const html = semImagem(renderEmailHtml(relatorio({
     precipitacaoDiariaMm: 91,
     precipitacaoTotalMm: 91,
+    chuvaPrevistaDiaMm: 4.7,
     previsaoDias: [{ chuvaMm: 4.7 }],
   })));
   const $ = cheerio.load(html);
-  const chuva = $('div').filter((_, elemento) => $(elemento).text().trim() === 'CHUVA ACUMULADA/DIA').first().closest('[data-email-rain-card]');
+  const chuva = $('div').filter((_, elemento) => $(elemento).text().trim() === 'CHUVA PREVISTA/DIA').first().closest('[data-email-rain-card]');
 
   assert.match(chuva.text(), /4\.7 mm/);
   assert.match(chuva.text(), /PROBABILIDADE DE CHUVA/);
@@ -176,12 +204,13 @@ test('chuva acumulada/dia usa apenas previsão e nunca o acumulado observado', (
   const indisponivel = semImagem(renderEmailHtml(relatorio({
     precipitacaoDiariaMm: 91,
     precipitacaoTotalMm: 91,
-    previsaoDias: [],
+    chuvaPrevistaDiaMm: null,
+    previsaoDias: [{ chuvaMm: 91 }],
     probabilidadeChuvaPrevista: null,
-    chuvaPorPeriodo: [{ periodo: 'Manhã', precipitacaoMm: null }],
+    chuvaPorPeriodo: [{ periodo: 'Manhã', precipitacaoMm: 91 }],
   })));
   const $indisponivel = cheerio.load(indisponivel);
-  const cardIndisponivel = $indisponivel('div').filter((_, elemento) => $indisponivel(elemento).text().trim() === 'CHUVA ACUMULADA/DIA').first().closest('[data-email-rain-card]');
+  const cardIndisponivel = $indisponivel('div').filter((_, elemento) => $indisponivel(elemento).text().trim() === 'CHUVA PREVISTA/DIA').first().closest('[data-email-rain-card]');
   assert.match(cardIndisponivel.text(), /Dado indisponível/);
   assert.doesNotMatch(cardIndisponivel.text(), /91 mm/);
 });
@@ -232,17 +261,39 @@ test('fallback da probabilidade das 05h considera também o período da noite', 
 });
 
 test('card de qualidade do ar exibe somente a classificação dinâmica', () => {
+  for (const [iqar, exibicao, cor] of [[18, 'NORMAL', '#00843D'], [59, 'MODERADO', '#F2C500'], [151, 'RUIM', '#D92828']]) {
+    const html = semImagem(renderEmailHtml(relatorio({
+      qualidadeAr: {
+        fonte: 'Open-Meteo Air Quality / CAMS', iqar, pm25: 27.4, pm10: 42,
+        classificacao: { nivel: exibicao, exibicao, cor, gravidadeOriginal: 'Moderada' },
+        referenciaEm: '2026-09-28T10:00', modoLicenca: 'avaliacao_local',
+      },
+    })));
+    const $ = cheerio.load(html);
+    const ar = $('[data-email-metric-row="2"]').children('td').eq(0);
+    assert.equal(ar.text().replace(/\s+/g, ' ').trim(), `QUALIDADE DO AR ${exibicao}`);
+    assert.match(ar.html(), new RegExp(`color:${cor}`, 'i'));
+    assert.doesNotMatch(ar.text(), /AQI|CAMS|Open-Meteo|licença|avaliação|\d{4}-\d{2}-\d{2}|27\.4|42/);
+  }
+});
+
+test('card de chuva mostra só previsão e percentual recebido, sem estimativas auxiliares', () => {
   const html = semImagem(renderEmailHtml(relatorio({
-    qualidadeAr: {
-      fonte: 'Open-Meteo Air Quality', pm25Medio: 27.4, pm25Periodo: 'média diária',
-      iqar: 42, classificacao: { nivel: 'Moderada', exibicao: 'Moderada', cor: '#F2C500' }, referenciaEm: '2026-09-28T10:00', uvMax: 5,
-      uvClassificacao: { nivel: 'Moderado' },
+    probabilidadeChuvaPrevista: 69,
+    previsaoDias: [{ chuvaMm: 4.7 }],
+    classificacaoDados: {
+      chuvaEstimadaDia: { valor: 3.1, referenciaEm: '2026-09-28T10:00' },
+      chuvaEstimadaHora: { valor: 0.4, referenciaEm: '2026-09-28T10:00' },
+      chuvaEstimada24h: { valor: 5.3, referenciaEm: '2026-09-28T10:00' },
     },
   })));
-  assert.ok(html.includes('QUALIDADE DO AR'));
-  assert.ok(html.includes('Moderada'));
-  assert.ok(!html.includes('QUALIDADE DO AR (PM2,5)'));
-  assert.ok(!html.includes('27.4 µg/m³'));
+  const $ = cheerio.load(html);
+  const chuva = $('[data-email-rain-card="true"]');
+  assert.equal(chuva.find('[data-email-rain-metric]').length, 2);
+  assert.deepEqual(chuva.find('[data-email-rain-metric]').map((_, el) => $(el).text().replace(/\s+/g, ' ').trim()).get(), [
+    'CHUVA PREVISTA/DIA 4.7 mm', 'PROBABILIDADE DE CHUVA 69%',
+  ]);
+  assert.doesNotMatch(chuva.text(), /ESTIMATIVA OPEN-METEO|ÚLTIMA HORA|24 H|2026-09-28T10:00|3\.1|0\.4|5\.3/);
 });
 
 test('card de qualidade do ar não classifica concentração sem IQAr válido', () => {
@@ -264,7 +315,7 @@ test('CALOR é a última célula e alertas ficam em severidade decrescente com e
   const tabela = $('div').filter((_, elemento) => $(elemento).text().trim() === 'PREVISÃO TEMP. MÍN/MÁX').first().closest('table');
   const segundaLinha = tabela.children('tbody').children('tr').eq(1).children('td').map((_, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
   assert.match(segundaLinha[0], /^QUALIDADE DO AR/);
-  assert.match(segundaLinha[1], /^CHUVA ACUMULADA\/DIA/);
+  assert.match(segundaLinha[1], /^CHUVA PREVISTA\/DIA/);
   assert.match(segundaLinha[2], /^CALOR/);
   assert.doesNotMatch(segundaLinha.join(' '), /ÍNDICE UV|11\.2/, 'o card não usa o índice UV');
   const vento = html.indexOf('VENTO — ATENÇÃO');
@@ -310,7 +361,7 @@ test('card CALOR usa somente o EHF oficial, sem ser elevado por temperatura ou U
 
 test('dados ausentes mostram Dado indisponível sem fabricar números nem fontes', () => {
   const html = semImagem(renderEmailHtml(relatorio({
-    condicaoGeral: null, tempMin: null, tempMax: null, umidadeMin: null, umidadeMax: null,
+    condicaoGeral: null, tempMin: null, tempMax: null, umidadeMin: null, umidadeMax: null, inmetPrevisao: null,
     precipitacaoTotalMm: null, ventoPorPeriodo: [], chuvaPorPeriodo: [], previsaoDias: [],
     qualidadeAr: null, mar: null, climaSaude: null,
     fontesPorCampo: {},
@@ -318,10 +369,10 @@ test('dados ausentes mostram Dado indisponível sem fabricar números nem fontes
   const $ = cheerio.load(html);
   const grade = $('[data-email-metrics="true"]');
   assert.ok(html.includes('RAJADA PREVISTA'));
-  assert.ok(html.includes('CHUVA ACUMULADA/DIA'));
+  assert.ok(html.includes('CHUVA PREVISTA/DIA'));
   for (const rotulo of [
     'PREVISÃO TEMP. MÍN/MÁX', 'PREVISÃO UMIDADE MÍN/MÁX', 'RAJADA PREVISTA',
-    'QUALIDADE DO AR', 'CHUVA ACUMULADA/DIA', 'CALOR',
+    'QUALIDADE DO AR', 'CHUVA PREVISTA/DIA', 'CALOR',
     'MAR — ALTURA MÁX. DE ONDA', 'CONDIÇÃO GERAL',
   ]) {
     const card = grade.find('div').filter((_, elemento) => $(elemento).text().trim() === rotulo).first().closest('td');

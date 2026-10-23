@@ -9,10 +9,12 @@ const { resumo, compararComManha } = require("./logic/scheduledReport");
 const { obterMonitorSecas } = require("./sources/monitorSecas");
 const {
   montarPrevisaoProximosDiasOpenMeteo,
+  usarTemperaturaUmidadeInmet,
   aplicarRajadasOceanop,
 } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
 const { validadeInformativo } = require("./logic/informativoValidity");
+const { validarDadosRelatorio } = require("./logic/meteorologicalValidity");
 const { TIPOS_DOCUMENTO } = require("./logic/alertPresentation");
 const {
   registrarDocumentoOperacional,
@@ -192,16 +194,17 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // — falha da fonte vira "Não disponível" na tabela e aviso de coleta.
   const instantePrevisao = new Date(report.geradoEmISO || Date.now());
   const previsaoOpenMeteo3d = montarPrevisaoProximosDiasOpenMeteo(cidade, report.previsaoOpenMeteoDias, { agora: instantePrevisao });
+  const previsao3d = usarTemperaturaUmidadeInmet(previsaoOpenMeteo3d, report.inmetPrevisao);
   report.previsaoProximosDias = aplicarRajadasOceanop(
     aplicarRajadasOceanop(
-      previsaoOpenMeteo3d,
+      previsao3d,
       report.previsaoOceanopDias
     ),
     report.previsaoRajadaPortalDias,
     "Tetra Tech/OCEANOP"
   );
   if (report.previsaoProximosDias.status === "indisponivel") {
-    report.avisosColeta.push("Open-Meteo (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
+    report.avisosColeta.push("INMET/Open-Meteo (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
   }
 
   // COR-Rio (só município do Rio): mesmo serviço/cache do painel, então site,
@@ -209,6 +212,7 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   await anexarCorRioAoRelatorio(report, cidade);
 
   atualizarAssinaturaDocumentoOperacional(report);
+  validarDadosRelatorio(report);
   validarDocumentoOperacional(report, "geração do documento operacional", { exigirCamposCriticos: true });
 
   let pdfBuffer;
@@ -245,6 +249,7 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
 
   let envio = null;
   if (enviarEmail) {
+    validarDadosRelatorio(report);
     console.log("[RELATORIO] Preparando e-mail");
     console.log("[RELATORIO] Enviando SMTP");
     try {

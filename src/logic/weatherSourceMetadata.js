@@ -7,7 +7,7 @@ function registroFonte({ fonte, instanteMedicao = null, ultimaAtualizacao = null
   };
 }
 
-function metadadosMeteorologicos({ cidade, inmetObservacao, inmetPrevisao, openMeteo, rajadaPrioritaria, oceanopVento, geradoEm }) {
+function metadadosMeteorologicos({ cidade, inmetObservacao, inmetPrevisao, openMeteo, temperaturaObservada = [], umidadeObservada = [], coberturaTemperatura, coberturaUmidade, rajadaPrioritaria, oceanopVento, geradoEm }) {
   const observacao = inmetObservacao?.observacao;
   const localidade = `${cidade.nome}/${cidade.uf}`;
   const periodos = Object.values(openMeteo?.periodos || {});
@@ -20,22 +20,35 @@ function metadadosMeteorologicos({ cidade, inmetObservacao, inmetPrevisao, openM
     status: disponivel ? "operacional" : "indisponivel",
     detalhe: disponivel ? detalhe : `${detalhe} Informação indisponível na fonte autorizada.`,
   });
-  const observado = (disponivel, detalhe) => registroFonte({
+  const observado = (disponivel, detalhe, cobertura) => registroFonte({
     fonte: "INMET — estação automática",
     instanteMedicao: observacao?.medidoEm || null,
     ultimaAtualizacao: observacao?.atualizadoEm || geradoEm || null,
     localidade: observacao?.estacao?.nome || localidade,
     estacao: observacao?.estacao?.codigo || null,
     natureza: "observado",
-    status: disponivel ? (inmetObservacao?.status || "operacional") : "indisponivel",
-    detalhe,
+    status: inmetObservacao?.status === "degradado" || observacao?.desatualizado
+      ? "desatualizado" : disponivel ? cobertura?.parcial ? "parcial" : "operacional" : "indisponivel",
+    detalhe: cobertura?.parcial ? `${detalhe} Cobertura parcial: ${cobertura.amostras}/${cobertura.horasEsperadas} leituras.` : detalhe,
   });
   const prioridadeRajada = rajadaPrioritaria || oceanopVento;
   return {
-    temperatura: previsto(periodos.some((p) => Number.isFinite(p?.tempMin) || Number.isFinite(p?.tempMax)), "Mínima e máxima previstas para o dia."),
-    umidade: previsto(periodos.some((p) => Number.isFinite(p?.umidadeMin) || Number.isFinite(p?.umidadeMax)), "Mínima e máxima previstas para o dia."),
+    temperatura: observado(temperaturaObservada.some(Number.isFinite), "Mínima e máxima horárias observadas no dia civil local.", coberturaTemperatura),
+    umidade: observado(umidadeObservada.some(Number.isFinite), "Mínima e máxima horárias observadas no dia civil local.", coberturaUmidade),
     chuva: previsto(Number.isFinite(openMeteo?.precipitacaoTotalMm), "Chuva prevista para a janela operacional."),
     chuvaPrevista: previsto(periodos.some((p) => Number.isFinite(p?.precipitacaoMm)), "Acumulado numérico previsto para o período."),
+    chuvaEstimada: registroFonte({
+      fonte: "Open-Meteo — estimativa de modelo",
+      instanteMedicao: openMeteo?.estimativaChuva?.referenciaEm || null,
+      ultimaAtualizacao: openMeteo?.estimativaChuva?.consultadoEm || geradoEm || null,
+      localidade,
+      natureza: "estimado",
+      status: Number.isFinite(openMeteo?.estimativaChuva?.diaMm)
+        ? openMeteo.estimativaChuva.coberturaDia?.parcial ? "parcial" : "operacional"
+        : "indisponivel",
+      detalhe: openMeteo?.estimativaChuva?.motivoIndisponibilidade ||
+        "Acumulados históricos modelados, independentes da medição INMET.",
+    }),
     chuvaObservada: observado(Number.isFinite(observacao?.chuvaUltimaHoraMm), "Chuva horária medida pela estação selecionada."),
     vento: previsto(periodos.some((p) => p?.direcao || p?.intensidadeVento || Number.isFinite(p?.velocidadeMediaKmh)), "Direção, intensidade e velocidade previstas."),
     rajadaPrevista: Number.isFinite(prioridadeRajada?.rajadaMaxKmh)

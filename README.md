@@ -140,10 +140,11 @@ kiosk também ao iniciar a sessão.
 |---|---|---|
 | **INMET — estação automática** (`apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}`) | Temperatura/umidade atuais e extremos horários; `Chuva acumulada/dia`, `Chuva acumulada/Hora`; medições de vento e rajada usadas somente no monitoramento observacional | `Chuva acumulada/dia` soma as leituras cuja hora de referência pertence ao dia civil local; `Chuva acumulada/Hora` usa a última hora oficial disponível e identifica o intervalo. Uma medição de rajada nunca ocupa o campo de rajada prevista |
 | **INMET — previsão e avisos** (`apiprevmet3.inmet.gov.br`) | Avisos meteorológicos oficiais e contexto textual municipal | Os avisos oficiais mantêm precedência operacional; observação e previsão não são misturadas |
-| **Open-Meteo Forecast** (`api.open-meteo.com/v1/forecast`) | Condição, temperatura, umidade, chuva, probabilidade, vento médio, direção e índice UV | `wind_speed_unit=kmh`; não solicita nem usa rajada. Produção exige licença/chave Customer |
+| **Open-Meteo Forecast** (`api.open-meteo.com/v1/forecast`) | Condição, temperatura, umidade, chuva prevista, acumulados estimados desde 00h, na última hora completa e em 24 h, probabilidade, vento médio, direção, rajada prevista e índice UV | `past_hours=30` consulta a série histórica modelada; `precipitation` já inclui `rain` e `showers`, que não são somados novamente. O horário da amostra marca o fim da hora acumulada. Previsão, estimativa histórica e medição INMET permanecem separados. `wind_speed_unit=kmh`; `wind_gusts_10m` é usado apenas para rajada prevista. Produção exige licença/chave Customer |
+| **Open-Meteo Air Quality** (`air-quality-api.open-meteo.com/v1/air-quality`) | US AQI e concentrações modeladas de PM2,5/PM10 | Solicita `current=us_aqi,pm2_5,pm10` e usa `hourly` válido como reserva. Estimativa, não medição oficial; classificação resumida Normal/Moderado/Ruim preserva a gravidade original do US AQI. Sem chave, a API pública funciona somente para avaliação local e o painel identifica esse modo. Em `NODE_ENV=production`, a consulta exige licença/chave Customer |
 | **Open-Meteo Marine** (`marine-api.open-meteo.com/v1/marine`) | Altura, direção e período de ondas, onda de vento e swell | Somente para bases costeiras e pontos marítimos cadastrados; bases interiores recebem “Não se aplica” |
-| **OCEANOP / Petrobras** (`POST /api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync`) | Fonte alternativa de rajada por coordenada apenas onde não houver tabela terrestre habilitada | Requer acesso corporativo autorizado e valida localidade, fuso e unidade |
-| **Tetra Tech — portal TTForecast** (`/api/v1/areas/json` e `/api/v1/bulletins/{idArea}`) | Fonte exclusiva de rajada prevista nas bases cobertas; picos por dia, período e janela da edição | A API oficial exige `X-API-Key` ou OAuth. O retorno bruto em m/s é normalizado para km/h; a equivalência exibida em nós usa `km/h = nós × 1,852` |
+| **OCEANOP / Petrobras** (`POST /api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync`) | Fonte de rajada por coordenada quando a tabela terrestre não fornece pico válido | Requer acesso corporativo autorizado e valida localidade, fuso e unidade |
+| **Tetra Tech — portal TTForecast** (`/api/v1/areas/json` e `/api/v1/bulletins/{idArea}`) | Fonte prioritária de rajada prevista nas bases cobertas; picos por dia, período e janela da edição | A API oficial exige `X-API-Key` ou OAuth. O retorno bruto em m/s é normalizado para km/h; a equivalência exibida em nós usa `km/h = nós × 1,852` |
 | **Clima e Saúde — Ministério da Saúde** ([Excesso de Calor](https://clima.saude.gov.br/)) | EHF, risco combinado e GeoSES | Consulta server-side do HTML oficial, com validação de município, UF e data. Indisponibilidade nunca é convertida em nível Normal |
 | **Monitor de Secas — ANA** ([portal](https://monitordesecas.ana.gov.br/) e [tabela S0–S4](https://monitordesecas.ana.gov.br/tabela-de-classificacao)) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
 | **COR-Rio** ([Centro de Operações e Resiliência](https://cor.rio/), `appcor.cor-rio.work/estagio_cidade` e `cor.rio/wp-json/wp/v2/posts`) | Painel "Comunicados COR-Rio", seção técnica no PDF disponível para consulta e aviso de e-mail exclusivo da base lógica `COR-RIO — RJ` — somente para o município do Rio de Janeiro (`integracaoCorRio`) | Públicas, sem chave. O aviso por e-mail usa apenas os destinatários vinculados a `cor_rio`; responsáveis da base meteorológica `rio_de_janeiro` não o recebem automaticamente. O endpoint de estágio é o mesmo que o widget da página cor.rio consulta; última coleta válida em `data/cor-rio.json` |
@@ -185,12 +186,14 @@ Limitação conhecida do histórico INMET:
 Regras de indisponibilidade dos campos restritos:
 - temperatura/umidade atuais e extremos horários observados: somente estação INMET;
 - temperatura, umidade, condição, chuva prevista, probabilidade, vento médio e direção previstos: Open-Meteo Forecast;
+- chuva acumulada estimada desde 00h, na última hora completa e nas últimas 24 h: horas históricas de `precipitation` da Open-Meteo, identificadas como **ESTIMATIVA OPEN-METEO**, com referência e cobertura. Esses valores não preenchem os campos de observação INMET;
 - chuva observada e medições meteorológicas: estação INMET, sempre separadas da previsão;
-- rajada máxima prevista: portal Tetra Tech nas dez bases cobertas; falha resulta em “Rajada prevista indisponível”, sem fallback silencioso da Open-Meteo;
-- índice UV: Open-Meteo Forecast (`uv_index`/`uv_index_max`); qualidade do ar permanece indisponível enquanto não houver fonte autorizada integrada;
+- rajada máxima prevista: portal Tetra Tech quando publicar valor atual, depois OCEANOP homologado, depois Open-Meteo `wind_gusts_10m` com fonte explícita; velocidade média nunca substitui rajada;
+- índice UV: Open-Meteo Forecast (`uv_index`/`uv_index_max`); qualidade do ar: Open-Meteo Air Quality em avaliação local pela API pública ou, em produção, com chave Customer; indisponível quando não houver dado válido ou autorização exigida;
 - mar e ondas: Open-Meteo Marine no ponto marítimo validado da base; não se aplica às bases interiores;
-- falha atual do INMET usa apenas a última observação INMET válida, com data e
-  estado `armazenado/desatualizado`; sem cache válido, mostra `Indisponível`;
+- falha atual do INMET conserva a última observação somente para diagnóstico,
+  com data e estado `armazenado/desatualizado`; valores antigos não ocupam os
+  cards de chuva observada nem são distribuídos como medição atual;
 - o Climatempo permanece removido e não participa de fallback.
 
 Outras fontes contratadas podem ser adicionadas em `src/sources/` seguindo o
@@ -224,7 +227,7 @@ ao título oficial, como transformar `Tempestade` em `Tempestade com raios`.
 | Baixa umidade | ≤ 20% | calibração operacional |
 | Índice UV alto | Atenção ≥ 8; Alerta ≥ 11 por padrão, com nível configurável | faixas da OMS |
 | Condição do mar | Atenção ≥ 1,5 m; Alerta ≥ 2,5 m | referência operacional marítima |
-| Qualidade do ar | Atenção > 60; Alerta > 80; Emergência > 100 no European AQI de PM2,5 | somente quando uma fonte autorizada fornecer o indicador; atualmente indisponível |
+| Qualidade do ar | Atenção US AQI > 100 até 150; Alerta > 150 até 200; Emergência > 200 | Open-Meteo/CAMS, estimativa modelada; avaliação local identificada no painel e uso em produção condicionado à licença Customer |
 
 Não altere esses limites de forma isolada: mantenha a implementação, a tabela
 acima e os testes de fronteira sincronizados.

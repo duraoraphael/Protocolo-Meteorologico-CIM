@@ -61,7 +61,7 @@ test("conteúdo do painel usa exatamente os valores e cards do e-mail", () => {
   const ce = conteudoEmailPainel(r);
   const htmlEmail = renderEmailHtml(r);
   assert.equal(ce.chuvaPrevistaMm, 1.1);
-  assert.match(htmlEmail, /CHUVA ACUMULADA\/DIA<\/div>\s*<div[^>]*>1\.1 mm/);
+  assert.match(htmlEmail, /CHUVA PREVISTA\/DIA<\/div>\s*<div[^>]*>1\.1 mm/);
   assert.equal(ce.probabilidadeChuva, 88);
   assert.match(htmlEmail, /PROBABILIDADE DE CHUVA<\/div>\s*<div[^>]*>88%/);
   assert.equal(ce.frasePrevisao, "Previsão até 00h", "fora das edições agendadas o painel cobre até 00h");

@@ -37,9 +37,9 @@ test("Climatempo removido não permanece no código ativo nem na configuração"
   assert.deepEqual(ocorrencias, []);
 });
 
-test("Open-Meteo está ativo sem ser usado como fonte de rajada prevista", () => {
+test("Open-Meteo consulta a série própria de rajada prevista", () => {
   const conteudo = fs.readFileSync(path.join(RAIZ, "src", "sources", "openMeteo.js"), "utf8");
   assert.match(conteudo, /uv_index/);
   assert.match(conteudo, /precipitation_probability/);
-  assert.doesNotMatch(conteudo, /wind_gusts_10m/);
+  assert.match(conteudo, /wind_gusts_10m/);
 });

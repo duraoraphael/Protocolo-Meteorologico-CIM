@@ -33,10 +33,10 @@ function relatorioBase(sobrescritas = {}) {
   };
 }
 
-test("informativo do e-mail mostra chuva acumulada/dia e onda em cards distintos", () => {
+test("informativo do e-mail mostra chuva prevista/dia e onda em cards distintos", () => {
   const html = renderEmailHtml(relatorioBase());
 
-  assert.match(html, /Chuva acumulada\/dia/i);
+  assert.match(html, /Chuva prevista\/dia/i);
   assert.match(html, /12\.4 mm/);
   assert.doesNotMatch(html, /Mar — onda máx\./i);
   assert.match(html, /MAR — ALTURA MÁX\. DE ONDA/);

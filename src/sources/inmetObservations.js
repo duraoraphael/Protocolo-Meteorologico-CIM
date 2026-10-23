@@ -106,6 +106,14 @@ function normalizarObservacao(payload, { cidade, consultadoEm = new Date().toISO
     erro.name = "ParserError";
     throw erro;
   }
+  if ((dados.CD_ESTACAO && estacaoApi.CODIGO && String(dados.CD_ESTACAO).trim() !== String(estacaoApi.CODIGO).trim()) ||
+      (cadastro?.uf && estacaoApi.UF && cadastro.uf !== estacaoApi.UF) ||
+      (cadastro && haversineKm(latitude, longitude, cadastro.latitude, cadastro.longitude) > 5)) {
+    const erro = new Error(`Metadados da estação ${codigo} divergem do catálogo INMET.`);
+    erro.name = "ParserError";
+    erro.code = "INMET_STATION_MISMATCH";
+    throw erro;
+  }
   if (distanciaKm !== null && distanciaKm > DISTANCIA_MAXIMA_KM) {
     const erro = new Error(`Estação INMET mais próxima está a ${distanciaKm} km, fora do limite de representatividade de ${DISTANCIA_MAXIMA_KM} km.`);
     erro.name = "ParserError";
@@ -123,12 +131,20 @@ function normalizarObservacao(payload, { cidade, consultadoEm = new Date().toISO
   const rajadaMs = dentro(numero(dados.VEN_RAJ), 0, 120);
   const direcaoGraus = dentro(numero(dados.VEN_DIR), 0, 360);
   const chuvaMm = dentro(numero(dados.CHUVA), 0, 500);
-  const temperaturaMinC = dentro(numero(dados.TEM_MIN), -90, 70);
-  const temperaturaMaxC = dentro(numero(dados.TEM_MAX), -90, 70);
+  let temperaturaMinC = dentro(numero(dados.TEM_MIN), -90, 70);
+  let temperaturaMaxC = dentro(numero(dados.TEM_MAX), -90, 70);
   const temperaturaAtualC = dentro(numero(dados.TEM_INS), -90, 70);
-  const umidadeMinPct = dentro(numero(dados.UMD_MIN), 0, 100);
-  const umidadeMaxPct = dentro(numero(dados.UMD_MAX), 0, 100);
+  let umidadeMinPct = dentro(numero(dados.UMD_MIN), 0, 100);
+  let umidadeMaxPct = dentro(numero(dados.UMD_MAX), 0, 100);
   const umidadeAtualPct = dentro(numero(dados.UMD_INS), 0, 100);
+  if (temperaturaMinC !== null && temperaturaMaxC !== null && temperaturaMinC > temperaturaMaxC) {
+    temperaturaMinC = null;
+    temperaturaMaxC = null;
+  }
+  if (umidadeMinPct !== null && umidadeMaxPct !== null && umidadeMinPct > umidadeMaxPct) {
+    umidadeMinPct = null;
+    umidadeMaxPct = null;
+  }
   if ([temperaturaMinC, temperaturaMaxC, temperaturaAtualC, umidadeMinPct, umidadeMaxPct, umidadeAtualPct, ventoMs, rajadaMs, direcaoGraus, chuvaMm].every((valor) => valor === null)) {
     const erro = new Error("INMET não publicou temperatura, chuva nem vento na observação mais recente.");
     erro.name = "ParserError";
@@ -192,7 +208,10 @@ function atualizarHistorico(cache, cidade, observacao, agoraMs = Date.now()) {
   cache.versao = 1;
   cache.bases ||= {};
   const anterior = cache.bases[cidade.chave] || { historico: [] };
-  const porInstante = new Map((anterior.historico || []).map((item) => [item.medidoEm, item]));
+  // A API pode trocar a estação mais próxima. Uma série nunca mistura estações.
+  const porInstante = new Map((anterior.historico || [])
+    .filter((item) => item?.estacao?.codigo === observacao.estacao.codigo)
+    .map((item) => [item.medidoEm, item]));
   porInstante.set(observacao.medidoEm, observacao);
   const limite = agoraMs - RETENCAO_HISTORICO_MS;
   const historico = [...porInstante.values()]
@@ -244,7 +263,7 @@ function coberturaHoraria(pontos, horasEsperadas) {
 function coberturaIndicador(pontos, campos, horasEsperadas) {
   const instantesValidos = new Set(
     pontos
-      .filter((item) => campos.some((campo) => Number.isFinite(item?.[campo])))
+      .filter((item) => campos.every((campo) => Number.isFinite(item?.[campo])))
       .map((item) => item.medidoEm)
   );
   const esperadas = Math.max(0, Math.min(24, horasEsperadas));
@@ -268,11 +287,15 @@ function agregarObservacoes(historico, {
     .filter((item) => item?.medidoEm)
     .map((item) => [item.medidoEm, item]));
   const todos = [...unicos.values()]
-    .filter((item) => Number.isFinite(Date.parse(item.medidoEm)))
+    .filter((item) => Number.isFinite(Date.parse(item.medidoEm)) && Date.parse(item.medidoEm) <= agoraData.getTime())
     .sort((a, b) => Date.parse(a.medidoEm) - Date.parse(b.medidoEm));
   const pontos = todos
     .filter((item) => partesLocais(item.medidoEm, fuso).data === hoje)
     .sort((a, b) => Date.parse(a.medidoEm) - Date.parse(b.medidoEm));
+  // TEM_MIN/TEM_MAX e UMD_MIN/UMD_MAX são extremos da hora anterior.
+  // A leitura das 00h pertence ao último intervalo do dia anterior.
+  const pontosTermohigrometricos = todos.filter((item) =>
+    partesLocais(new Date(Date.parse(item.medidoEm) - 1), fuso).data === hoje);
   const periodos = {};
   for (const chave of ["manha", "tarde", "noite"]) {
     const doPeriodo = pontos.filter((item) => periodoDaHora(partesLocais(item.medidoEm, fuso).hora) === chave);
@@ -306,6 +329,7 @@ function agregarObservacoes(historico, {
     return hora >= inicioHora && hora < fimHora && Date.parse(item.medidoEm) <= agoraData.getTime();
   });
   const horasEsperadasDia = agoraLocal.hora + 1;
+  const horasEsperadasTermohigrometricas = agoraLocal.hora;
   const fimEfetivoJanela = Math.min(fimHora, agoraLocal.hora + 1);
   const horasEsperadasJanela = Math.max(0, fimEfetivoJanela - inicioHora);
   const chuvaPorHora = pontos.filter((item) => Number.isFinite(item.chuvaUltimaHoraMm)).map((item) => {
@@ -326,11 +350,11 @@ function agregarObservacoes(historico, {
     pontos,
     periodos,
     chuvaPorHora,
-    temperaturaMinC: extremos(pontos.map((item) => item.temperaturaMinC), "min"),
-    temperaturaMaxC: extremos(pontos.map((item) => item.temperaturaMaxC), "max"),
+    temperaturaMinC: extremos(pontosTermohigrometricos.map((item) => item.temperaturaMinC), "min"),
+    temperaturaMaxC: extremos(pontosTermohigrometricos.map((item) => item.temperaturaMaxC), "max"),
     temperaturaAtualC: pontos.at(-1)?.temperaturaAtualC ?? null,
-    umidadeMinPct: extremos(pontos.map((item) => item.umidadeMinPct), "min"),
-    umidadeMaxPct: extremos(pontos.map((item) => item.umidadeMaxPct), "max"),
+    umidadeMinPct: extremos(pontosTermohigrometricos.map((item) => item.umidadeMinPct), "min"),
+    umidadeMaxPct: extremos(pontosTermohigrometricos.map((item) => item.umidadeMaxPct), "max"),
     umidadeAtualPct: pontos.at(-1)?.umidadeAtualPct ?? null,
     precipitacaoTotalMm: somaOuNull(chuvas),
     precipitacaoUltimas24hMm: somaOuNull(pontos24h.map((item) => item.chuvaUltimaHoraMm)),
@@ -339,14 +363,14 @@ function agregarObservacoes(historico, {
     rajadaMaxKmh: extremos(pontos.map((item) => item.rajadaKmh), "max"),
     cobertura: coberturaHoraria(pontos, horasEsperadasDia),
     coberturaTemperatura: coberturaIndicador(
-      pontos,
-      ["temperaturaMinC", "temperaturaMaxC", "temperaturaAtualC"],
-      horasEsperadasDia
+      pontosTermohigrometricos,
+      ["temperaturaMinC", "temperaturaMaxC"],
+      horasEsperadasTermohigrometricas
     ),
     coberturaUmidade: coberturaIndicador(
-      pontos,
-      ["umidadeMinPct", "umidadeMaxPct", "umidadeAtualPct"],
-      horasEsperadasDia
+      pontosTermohigrometricos,
+      ["umidadeMinPct", "umidadeMaxPct"],
+      horasEsperadasTermohigrometricas
     ),
     coberturaUltimas24h: coberturaHoraria(pontos24h, 24),
     coberturaPeriodo: coberturaHoraria(pontosJanela, horasEsperadasJanela),

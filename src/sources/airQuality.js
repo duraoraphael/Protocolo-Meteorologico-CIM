@@ -2,82 +2,73 @@ const { buscarJsonComRetentativa } = require("./httpJsonClient");
 const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
 
 const SOURCE = "Open-Meteo Air Quality / CAMS";
-const VARS = ["pm2_5", "pm10", "ozone", "nitrogen_dioxide", "sulphur_dioxide", "carbon_monoxide"];
-const POLUENTES = Object.freeze({
-  pm10: { nome: "MP10", unidade: "µg/m³", horas: 24, faixas: [[45,40],[100,80],[150,120],[250,200],[600,400]] },
-  pm2_5: { nome: "MP2,5", unidade: "µg/m³", horas: 24, faixas: [[15,40],[50,80],[75,120],[125,200],[300,400]] },
-  ozone: { nome: "O₃", unidade: "µg/m³", horas: 8, faixas: [[100,40],[130,80],[160,120],[200,200],[800,400]] },
-  nitrogen_dioxide: { nome: "NO₂", unidade: "µg/m³", horas: 1, faixas: [[200,40],[240,80],[320,120],[1130,200],[3750,400]] },
-  sulphur_dioxide: { nome: "SO₂", unidade: "µg/m³", horas: 24, faixas: [[40,40],[50,80],[125,120],[800,200],[2620,400]] },
-});
-
-function calcularSubindice(concentracao, faixas) {
-  if (!Number.isFinite(concentracao) || concentracao < 0 || concentracao > faixas.at(-1)[0]) return null;
-  let limiteConcentracao = 0;
-  let limiteIndice = 0;
-  for (const [cHigh, iHigh] of faixas) {
-    if (concentracao <= cHigh) {
-      const calculado = limiteIndice + ((iHigh - limiteIndice) / (cHigh - limiteConcentracao)) * (concentracao - limiteConcentracao);
-      return Math.round(calculado);
-    }
-    limiteConcentracao = cHigh;
-    limiteIndice = iHigh;
-  }
-  return null;
-}
-
-function mediaNoFimDaJanela(times, values, fim, horas) {
-  const inicio = Date.parse(`${fim}:00Z`);
-  const alvo = Array.from({ length: horas }, (_, i) => new Date(inicio - (horas - 1 - i) * 3600000).toISOString().slice(0, 16));
-  const indices = new Map(times.map((t, i) => [t.slice(0, 16), i]));
-  const selecionados = alvo.map((ts) => indices.get(ts));
-  if (selecionados.some((i) => i === undefined)) return null;
-  const dados = selecionados.map((i) => values[i]);
-  if (dados.some((n) => !Number.isFinite(n) || n < 0)) return null;
-  return dados.reduce((a, b) => a + b, 0) / dados.length;
-}
-
-function calcularIQAr(json, { now = new Date() } = {}) {
-  const h = json?.hourly;
-  if (!Array.isArray(h?.time) || !h.time.length) throw new Error("CAMS sem série horária de tempo.");
-  for (const v of VARS) {
-    if (!Array.isArray(h[v]) || h[v].length !== h.time.length) throw new Error(`CAMS sem série alinhada para ${v}.`);
-  }
-  const unidades = json.hourly_units || {};
-  for (const v of Object.keys(POLUENTES)) if (!/µg\/m³|μg\/m³/i.test(unidades[v] || "")) throw new Error(`Unidade ausente ou incompatível para ${v}.`);
-  const offset = Number(json.utc_offset_seconds || 0);
-  const horaLocal = new Date(now.getTime() + offset * 1000).toISOString().slice(0, 13);
-  const disponiveis = h.time.filter((t) => t.slice(0, 13) <= horaLocal);
-  if (!disponiveis.length) throw new Error("CAMS não retornou observação estimada até a hora atual.");
-  const fim = disponiveis.at(-1);
-  if (Date.parse(`${fim}:00Z`) < Date.parse(`${horaLocal}:00Z`) - 3 * 3600000) throw new Error("CAMS sem estimativa recente (defasagem acima de 3 horas).");
-  const subindices = [];
-  for (const [chave, meta] of Object.entries(POLUENTES)) {
-    const media = mediaNoFimDaJanela(h.time, h[chave], fim, meta.horas);
-    const indice = media === null ? null : calcularSubindice(media, meta.faixas);
-    if (indice !== null) subindices.push({ poluente: meta.nome, concentracao: media, unidade: meta.unidade, periodoHoras: meta.horas, indice });
-  }
-  if (!subindices.length) throw new Error("CAMS não forneceu janelas completas para calcular IQAr brasileiro.");
-  const pior = subindices.reduce((a, b) => b.indice > a.indice ? b : a);
-  return {
-    iqar: pior.indice,
-    classificacao: classificarIQAr(pior.indice),
-    subindiceResponsavel: pior.poluente,
-    subindices,
-    referenciaEm: fim,
-    consultadoEm: now.toISOString(),
-    coordenadaGrade: { latitude: json.latitude, longitude: json.longitude },
-  };
-}
+const VARS = ["us_aqi", "pm2_5", "pm10"];
+const FUSO = "America/Sao_Paulo";
 
 function classificarIQAr(indice) {
-  if (!Number.isFinite(indice)) return null;
-  if (indice <= 40) return { nivel: "Boa", exibicao: "Boa (Normal)", cor: "#00843D" };
-  if (indice <= 80) return { nivel: "Moderada", exibicao: "Moderada", cor: "#F2C500" };
-  if (indice <= 120) return { nivel: "Ruim", exibicao: "Ruim", cor: "#E87500" };
-  if (indice <= 200) return { nivel: "Muito Ruim", exibicao: "Muito Ruim", cor: "#D92828" };
-  if (indice <= 400) return { nivel: "Péssima", exibicao: "Péssima", cor: "#7826A8" };
-  return null;
+  if (!Number.isFinite(indice) || indice < 0) return null;
+  const gravidadeOriginal = indice <= 50 ? "Boa"
+    : indice <= 100 ? "Moderada"
+    : indice <= 150 ? "Insalubre para grupos sensíveis"
+    : indice <= 200 ? "Insalubre"
+    : indice <= 300 ? "Muito insalubre" : "Perigosa";
+  if (indice <= 50) return { nivel: "Normal", exibicao: "NORMAL", cor: "#00843D", gravidadeOriginal };
+  if (indice <= 100) return { nivel: "Moderado", exibicao: "MODERADO", cor: "#F2C500", gravidadeOriginal };
+  return { nivel: "Ruim", exibicao: "RUIM", cor: "#D92828", gravidadeOriginal };
+}
+
+function calcularIQAr(json, { now = new Date(), fuso = FUSO } = {}) {
+  const h = json?.hourly;
+  if (json?.timezone !== fuso || (!Array.isArray(h?.time) && !json?.current)) {
+    throw new Error("Open-Meteo Air Quality sem série horária ou fuso esperado.");
+  }
+  const validarUnidades = (unidades) => {
+    if (unidades.us_aqi !== "USAQI") throw new Error("Unidade inesperada para us_aqi.");
+    for (const campo of ["pm2_5", "pm10"]) {
+      if (!/^[µμ]g\/m³$/.test(unidades[campo] || "")) throw new Error(`Unidade ausente ou incompatível para ${campo}.`);
+    }
+  };
+  const horaLocal = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: fuso, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
+  }).format(now).replace(" ", "T");
+  const offset = Number(json.utc_offset_seconds);
+  if (!Number.isFinite(offset)) throw new Error("Open-Meteo Air Quality sem deslocamento UTC válido.");
+  const recente = (tempo) => {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(tempo || "")) return false;
+    const utc = Date.parse(`${tempo}:00Z`) - offset * 1000;
+    const atraso = now.getTime() - utc;
+    return Number.isFinite(utc) && atraso >= -15 * 60_000 && atraso <= 3 * 3_600_000;
+  };
+  let dados = null;
+  let currentUnidadesValidas = false;
+  try { validarUnidades(json.current_units || {}); currentUnidadesValidas = true; } catch {}
+  if (json.current && Number.isFinite(json.current.us_aqi) && json.current.us_aqi >= 0
+      && ["pm2_5", "pm10"].every((campo) => Number.isFinite(json.current[campo]) && json.current[campo] >= 0)
+      && json.current.time <= `${horaLocal}:00` && recente(json.current.time) && currentUnidadesValidas) {
+    dados = { ...json.current, referenciaEm: json.current.time };
+  }
+  if (!dados) {
+    if (!Array.isArray(h?.time) || !h.time.length) throw new Error("Open-Meteo Air Quality sem série horária ou fuso esperado.");
+    for (const campo of VARS) {
+      if (!Array.isArray(h[campo]) || h[campo].length !== h.time.length) throw new Error(`Open-Meteo Air Quality sem série alinhada para ${campo}.`);
+    }
+    if (h.time.some((t, i) => !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)
+        || (i > 0 && t <= h.time[i - 1]))) throw new Error("Open-Meteo Air Quality com timestamps inválidos ou duplicados.");
+    validarUnidades(json.hourly_units || {});
+    const indice = h.time.findLastIndex((t, i) => t.slice(0, 13) <= horaLocal
+      && recente(t) && Number.isFinite(h.us_aqi[i]) && h.us_aqi[i] >= 0
+      && ["pm2_5", "pm10"].every((campo) => Number.isFinite(h[campo][i]) && h[campo][i] >= 0));
+    if (indice < 0) throw new Error("Open-Meteo Air Quality sem estimativa recente ou US AQI válido.");
+    dados = { us_aqi: h.us_aqi[indice], pm2_5: h.pm2_5[indice], pm10: h.pm10[indice], referenciaEm: h.time[indice] };
+  }
+  const iqar = Math.round(dados.us_aqi);
+  return {
+    iqar, indiceTipo: "US AQI", classificacao: classificarIQAr(iqar),
+    pm25: Number.isFinite(dados.pm2_5) && dados.pm2_5 >= 0 ? dados.pm2_5 : null,
+    pm10: Number.isFinite(dados.pm10) && dados.pm10 >= 0 ? dados.pm10 : null,
+    referenciaEm: dados.referenciaEm, consultadoEm: now.toISOString(),
+    coordenadaGrade: { latitude: json.latitude, longitude: json.longitude },
+  };
 }
 
 function criarUrl(cidade) {
@@ -85,30 +76,26 @@ function criarUrl(cidade) {
   url.searchParams.set("latitude", cidade.latitude);
   url.searchParams.set("longitude", cidade.longitude);
   url.searchParams.set("hourly", VARS.join(","));
-  url.searchParams.set("timezone", cidade.fusoHorario || "America/Sao_Paulo");
-  url.searchParams.set("past_hours", "48");
+  url.searchParams.set("current", VARS.join(","));
+  url.searchParams.set("timezone", cidade.fusoHorario || FUSO);
+  url.searchParams.set("past_hours", "6");
   url.searchParams.set("forecast_hours", "1");
   return url.toString();
 }
 
 async function buscarQualidadeAr(cidade, { fetchImpl = fetch, now = new Date(), env = process.env } = {}) {
-  const apiKey = String(env.OPEN_METEO_API_KEY || "").trim();
-  if (!apiKey) {
-    const error = new Error("Licença comercial da Open-Meteo/CAMS não configurada (OPEN_METEO_API_KEY ausente).");
-    error.code = "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED";
-    throw error;
-  }
   const url = aplicarConfiguracaoOpenMeteo(criarUrl(cidade), env);
   const json = await buscarJsonComRetentativa(url, { nomeFonte: SOURCE, fetchImpl });
-  const dados = calcularIQAr(json, { now });
   return {
-    ...dados,
+    ...calcularIQAr(json, { now, fuso: cidade.fusoHorario || FUSO }),
     fonte: "Qualidade do ar estimada — Open-Meteo/CAMS",
     fonteTipo: "estimativa_modelada",
+    modoLicenca: String(env.OPEN_METEO_API_KEY || "").trim() ? "comercial" : "avaliacao_local",
+    fuso: cidade.fusoHorario || FUSO,
     latitudeSolicitada: cidade.latitude,
     longitudeSolicitada: cidade.longitude,
     url: removerCredenciaisOpenMeteo(url),
   };
 }
 
-module.exports = { SOURCE, VARS, POLUENTES, calcularSubindice, calcularIQAr, classificarIQAr, buscarQualidadeAr };
+module.exports = { SOURCE, VARS, classificarIQAr, calcularIQAr, buscarQualidadeAr };

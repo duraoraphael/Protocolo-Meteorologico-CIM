@@ -223,16 +223,17 @@ function avaliarRiscos(consolidado) {
   }
 
   if ((Number.isFinite(umidadeMin) && umidadeMin <= LIMIARES.baixaUmidadePct) || textoAvisos(avisosInmet, /baixa umidade/i)) {
+    const umidadeObservada = /INMET.+esta[cç][aã]o autom[aá]tica/i.test(fontesPorCampo.umidadeMin || "");
     candidatos.push({
       tipo: "baixaUmidade",
       nivel: 1,
       janela: "tarde",
       descricao: Number.isFinite(umidadeMin)
-        ? `Umidade relativa mínima baixa prevista (${umidadeMin}%), com atenção à saúde e risco de incêndio.`
+        ? `Umidade relativa mínima baixa ${umidadeObservada ? "observada" : "prevista"} (${umidadeMin}%), com atenção à saúde e risco de incêndio.`
         : "Aviso oficial de baixa umidade, com atenção à saúde e risco de incêndio.",
       naturezaDado: textoAvisos(avisosInmet, /baixa umidade/i)
         ? "Aviso oficial"
-        : "Classificação interna baseada na previsão",
+        : umidadeObservada ? "Classificação interna baseada em observação oficial" : "Classificação interna baseada na previsão",
       recomendacoes: recomendacoesFenomeno("umidade", "ATENÇÃO"),
     });
   }
@@ -281,19 +282,18 @@ function avaliarRiscos(consolidado) {
     });
   }
 
-  // Só o IQAr calculado conforme as faixas brasileiras válidas pode gerar
-  // alerta. Índices US/EU ou concentração instantânea não são substitutos.
-  if (Number.isFinite(qualidadeAr?.iqar) && qualidadeAr.iqar > 80) {
+  // O US AQI é estimativa modelada; o limiar operacional acompanha sua escala.
+  if (qualidadeAr?.indiceTipo === "US AQI" && Number.isFinite(qualidadeAr.iqar) && qualidadeAr.iqar > 100) {
     const grau = qualidadeAr.iqar > 200
       ? "EMERGÊNCIA"
-      : qualidadeAr.iqar > 120 ? "ALERTA" : "ATENÇÃO";
+      : qualidadeAr.iqar > 150 ? "ALERTA" : "ATENÇÃO";
     candidatos.push({
       tipo: "qualidadeArRuim",
       grau,
       nivel: NIVEL_POR_GRAU[grau],
       janela: "ao longo do dia",
-      descricao: `Qualidade do ar estimada ${qualidadeAr.classificacao.exibicao.toLowerCase()} (IQAr ${qualidadeAr.iqar}); considere reduzir exposição prolongada ao ar livre.`,
-      naturezaDado: "IQAr brasileiro calculado a partir de estimativa modelada",
+      descricao: `Qualidade do ar estimada ${qualidadeAr.classificacao.exibicao.toLowerCase()} (US AQI ${qualidadeAr.iqar}; gravidade original: ${qualidadeAr.classificacao.gravidadeOriginal}); considere reduzir exposição prolongada ao ar livre.`,
+      naturezaDado: "US AQI de estimativa modelada",
       recomendacoes: recomendacoesFenomeno("ar", grau),
     });
   }

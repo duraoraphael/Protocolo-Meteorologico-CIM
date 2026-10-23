@@ -110,10 +110,25 @@ test("painel identifica fontes autorizadas e indisponibilidade de UV/rajada", ()
   });
 
   assert.match(html, /Rajada prevista[\s\S]*Dado indisponível[\s\S]*Informação indisponível/);
-  assert.match(html, /Chuva acumulada\/dia[\s\S]*INMET — estação automática/);
+  assert.match(html, /Chuva acumulada\/dia[\s\S]*Sem leituras válidas no dia[\s\S]*Informação indisponível/);
   assert.match(html, /Índice UV[\s\S]*Dado indisponível[\s\S]*Informação indisponível/);
   assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>[\s\S]*Petrobras — OCEANOP/);
   assert.doesNotMatch(html, /O portal Clima e Saúde não publica índice UV/);
+});
+
+test("card de ar mostra US AQI modelado no fuso local e identifica avaliação sem chave", () => {
+  const html = carregarPainel().executar("Dashboard.home")({
+    cidade: { chave: "manaus", nome: "Manaus", uf: "AM", fuso: "America/Manaus" },
+    qualidadeAr: { iqar: 73, classificacao: { nivel: "Moderado", exibicao: "MODERADO",
+      gravidadeOriginal: "Moderada" }, referenciaEm: "2026-10-23T14:00", modoLicenca: "avaliacao_local" },
+    fontesPorCampo: { "ar.iqar": "Qualidade do ar estimada — Open-Meteo/CAMS" },
+    ventoPorPeriodo: [], monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
+  });
+  assert.match(html, /QUALIDADE DO AR|Qualidade do ar/);
+  assert.match(html, /MODERADO/);
+  assert.match(html, /US AQI 73/);
+  assert.match(html, /America\/Manaus/);
+  assert.match(html, /avaliação local; uso comercial exige licença/);
 });
 
 test("painel usa rajada OCEANOP consolidada e identifica horário/fonte", () => {

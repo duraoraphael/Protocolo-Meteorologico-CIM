@@ -1,0 +1,1208 @@
+﻿{
+  "consultadoEm": "2026-10-23T18:57:02.414Z",
+  "catalogo": {
+    "estacoes": 669,
+    "erro": null
+  },
+  "resultados": [
+    {
+      "cidade": "rio_de_janeiro",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A636",
+        "nome": "RIO DE JANEIRO - JACAREPAGUÁ",
+        "uf": "RJ",
+        "latitude": -22.93999999,
+        "longitude": -43.40277777,
+        "distanciaKm": 23.8,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 24.3,
+        "maxima": 26.2,
+        "atual": 24.4
+      },
+      "umidade": {
+        "minima": 77,
+        "maxima": 83,
+        "atual": 78
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 20,
+            "tempMax": 25,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 20,
+            "tempMax": 28,
+            "umidadeMin": 40,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 21,
+            "tempMax": 28,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 20,
+            "tempMax": 25,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 17,
+            "tempMax": 25,
+            "umidadeMin": 45,
+            "umidadeMax": 90
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A627",
+          "nome": "NITEROI",
+          "uf": "RJ",
+          "distanciaKm": 8.5
+        },
+        {
+          "codigo": "A652",
+          "nome": "RIO DE JANEIRO - FORTE DE COPACABANA",
+          "uf": "RJ",
+          "distanciaKm": 9.2
+        },
+        {
+          "codigo": "A636",
+          "nome": "RIO DE JANEIRO - JACAREPAGUA",
+          "uf": "RJ",
+          "distanciaKm": 23.8
+        },
+        {
+          "codigo": "A621",
+          "nome": "RIO DE JANEIRO - VILA MILITAR",
+          "uf": "RJ",
+          "distanciaKm": 24.9
+        },
+        {
+          "codigo": "A603",
+          "nome": "DUQUE DE CAXIAS - XEREM",
+          "uf": "RJ",
+          "distanciaKm": 37
+        }
+      ]
+    },
+    {
+      "cidade": "macae",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A608",
+        "nome": "MACAÉ",
+        "uf": "RJ",
+        "latitude": -22.3761111,
+        "longitude": -41.81194444,
+        "distanciaKm": 18.8,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 23.7,
+        "maxima": 24,
+        "atual": 23.9
+      },
+      "umidade": {
+        "minima": 86,
+        "maxima": 89,
+        "atual": 86
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 16,
+            "tempMax": 28,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 20,
+            "tempMax": 34,
+            "umidadeMin": 50,
+            "umidadeMax": 95
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 17,
+            "tempMax": 29,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 11,
+            "tempMax": 25,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 12,
+            "tempMax": 24,
+            "umidadeMin": 60,
+            "umidadeMax": 100
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A608",
+          "nome": "MACAE",
+          "uf": "RJ",
+          "distanciaKm": 18.8
+        },
+        {
+          "codigo": "A630",
+          "nome": "SANTA MARIA MADALENA",
+          "uf": "RJ",
+          "distanciaKm": 37.2
+        },
+        {
+          "codigo": "A659",
+          "nome": "SILVA JARDIM",
+          "uf": "RJ",
+          "distanciaKm": 61.4
+        },
+        {
+          "codigo": "A624",
+          "nome": "NOVA FRIBURGO - SALINAS",
+          "uf": "RJ",
+          "distanciaKm": 73.5
+        },
+        {
+          "codigo": "A629",
+          "nome": "CARMO",
+          "uf": "RJ",
+          "distanciaKm": 75.9
+        }
+      ]
+    },
+    {
+      "cidade": "brasilia",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A001",
+        "nome": "BRASILIA",
+        "uf": "DF",
+        "latitude": -15.78944444,
+        "longitude": -47.92583332,
+        "distanciaKm": 4.6,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 29.3,
+        "maxima": 30.6,
+        "atual": 29.9
+      },
+      "umidade": {
+        "minima": 34,
+        "maxima": 39,
+        "atual": 37
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 19,
+            "tempMax": 32,
+            "umidadeMin": 25,
+            "umidadeMax": 65
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 19,
+            "tempMax": 32,
+            "umidadeMin": 20,
+            "umidadeMax": 70
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 19,
+            "tempMax": 33,
+            "umidadeMin": 20,
+            "umidadeMax": 70
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 20,
+            "tempMax": 30,
+            "umidadeMin": 40,
+            "umidadeMax": 80
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 20,
+            "tempMax": 29,
+            "umidadeMin": 40,
+            "umidadeMax": 80
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A001",
+          "nome": "BRASILIA",
+          "uf": "DF",
+          "distanciaKm": 4.6
+        },
+        {
+          "codigo": "A046",
+          "nome": "GAMA (PONTE ALTA)",
+          "uf": "DF",
+          "distanciaKm": 31.4
+        },
+        {
+          "codigo": "A045",
+          "nome": "AGUAS EMENDADAS",
+          "uf": "DF",
+          "distanciaKm": 35.2
+        },
+        {
+          "codigo": "A042",
+          "nome": "BRAZLANDIA",
+          "uf": "DF",
+          "distanciaKm": 37.6
+        },
+        {
+          "codigo": "A047",
+          "nome": "PARANOA (COOPA-DF)",
+          "uf": "DF",
+          "distanciaKm": 42.4
+        }
+      ]
+    },
+    {
+      "cidade": "manaus",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A101",
+        "nome": "MANAUS",
+        "uf": "AM",
+        "latitude": -3.10333333,
+        "longitude": -60.01638888,
+        "distanciaKm": 4.9,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 27.7,
+        "maxima": 29.2,
+        "atual": 29.1
+      },
+      "umidade": {
+        "minima": 71,
+        "maxima": 77,
+        "atual": 72
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 25,
+            "tempMax": 34,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 25,
+            "tempMax": 34,
+            "umidadeMin": 60,
+            "umidadeMax": 95
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 24,
+            "tempMax": 34,
+            "umidadeMin": 45,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 23,
+            "tempMax": 32,
+            "umidadeMin": 45,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 23,
+            "tempMax": 33,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 14,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 14,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A101",
+          "nome": "MANAUS",
+          "uf": "AM",
+          "distanciaKm": 4.9
+        },
+        {
+          "codigo": "A119",
+          "nome": "MANACAPURU",
+          "uf": "AM",
+          "distanciaKm": 74
+        },
+        {
+          "codigo": "A120",
+          "nome": "AUTAZES",
+          "uf": "AM",
+          "distanciaKm": 107.2
+        },
+        {
+          "codigo": "A121",
+          "nome": "ITACOATIARA",
+          "uf": "AM",
+          "distanciaKm": 166.5
+        },
+        {
+          "codigo": "A144",
+          "nome": "NOVO ARIPUANA",
+          "uf": "AM",
+          "distanciaKm": 227.8
+        }
+      ]
+    },
+    {
+      "cidade": "santos",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A765",
+        "nome": "BERTIOGA",
+        "uf": "SP",
+        "latitude": -23.84472221,
+        "longitude": -46.14333333,
+        "distanciaKm": 21.8,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 23.8,
+        "maxima": 24.9,
+        "atual": 23.9
+      },
+      "umidade": {
+        "minima": 89,
+        "maxima": 98,
+        "atual": 97
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 18,
+            "tempMax": 28,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 19,
+            "tempMax": 36,
+            "umidadeMin": 45,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 14,
+            "tempMax": 23,
+            "umidadeMin": 80,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 12,
+            "tempMax": 20,
+            "umidadeMin": 75,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 14,
+            "tempMax": 22,
+            "umidadeMin": 60,
+            "umidadeMax": 90
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A765",
+          "nome": "BERTIOGA",
+          "uf": "SP",
+          "distanciaKm": 21.8
+        },
+        {
+          "codigo": "A771",
+          "nome": "SAO PAULO - INTERLAGOS",
+          "uf": "SP",
+          "distanciaKm": 45.2
+        },
+        {
+          "codigo": "A701",
+          "nome": "SAO PAULO - MIRANTE",
+          "uf": "SP",
+          "distanciaKm": 60.2
+        },
+        {
+          "codigo": "A744",
+          "nome": "BRAGANCA PAULISTA",
+          "uf": "SP",
+          "distanciaKm": 114.5
+        },
+        {
+          "codigo": "A740",
+          "nome": "SAO LUIZ DO PARAITINGA",
+          "uf": "SP",
+          "distanciaKm": 122.6
+        }
+      ]
+    },
+    {
+      "cidade": "aracaju",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A472",
+        "nome": "ACAJUTIBA",
+        "uf": "BA",
+        "latitude": -11.65444444,
+        "longitude": -38.01583333,
+        "distanciaKm": 131.2,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": false,
+      "temperatura": {
+        "minima": 30.4,
+        "maxima": 32.8,
+        "atual": 30.9
+      },
+      "umidade": {
+        "minima": 54,
+        "maxima": 59,
+        "atual": 58
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 25,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 24,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 25,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 24,
+            "tempMax": 32,
+            "umidadeMin": 30,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 24,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A355",
+          "nome": "CORURIPE",
+          "uf": "AL",
+          "distanciaKm": 123.1
+        },
+        {
+          "codigo": "A472",
+          "nome": "ACAJUTIBA",
+          "uf": "BA",
+          "distanciaKm": 131.2
+        },
+        {
+          "codigo": "A353",
+          "nome": "ARAPIRACA",
+          "uf": "AL",
+          "distanciaKm": 133.4
+        },
+        {
+          "codigo": "A323",
+          "nome": "PAO DE ACUCAR",
+          "uf": "AL",
+          "distanciaKm": 135.4
+        },
+        {
+          "codigo": "A458",
+          "nome": "RIBEIRA DO AMPARO",
+          "uf": "BA",
+          "distanciaKm": 150
+        }
+      ]
+    },
+    {
+      "cidade": "natal",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A304",
+        "nome": "NATAL",
+        "uf": "RN",
+        "latitude": -5.83722221,
+        "longitude": -35.20805555,
+        "distanciaKm": 4.7,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 28.2,
+        "maxima": 30,
+        "atual": 28.2
+      },
+      "umidade": {
+        "minima": 67,
+        "maxima": 74,
+        "atual": 73
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 26,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 25,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 25,
+            "tempMax": 30,
+            "umidadeMin": 45,
+            "umidadeMax": 80
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 24,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 24,
+            "tempMax": 31,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A304",
+          "nome": "NATAL",
+          "uf": "RN",
+          "distanciaKm": 4.7
+        },
+        {
+          "codigo": "A352",
+          "nome": "CAMARATUBA",
+          "uf": "PB",
+          "distanciaKm": 84.3
+        },
+        {
+          "codigo": "A367",
+          "nome": "SANTA CRUZ",
+          "uf": "RN",
+          "distanciaKm": 98.4
+        },
+        {
+          "codigo": "A310",
+          "nome": "AREIA",
+          "uf": "PB",
+          "distanciaKm": 139.7
+        },
+        {
+          "codigo": "A320",
+          "nome": "JOAO PESSOA",
+          "uf": "PB",
+          "distanciaKm": 154.3
+        }
+      ]
+    },
+    {
+      "cidade": "oiapoque",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A242",
+        "nome": "OIAPOQUE",
+        "uf": "AP",
+        "latitude": 3.81361111,
+        "longitude": -51.8625,
+        "distanciaKm": 9,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 34.1,
+        "maxima": 34.9,
+        "atual": 34.9
+      },
+      "umidade": {
+        "minima": 57,
+        "maxima": 63,
+        "atual": 57
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 20,
+            "tempMax": 38,
+            "umidadeMin": 25,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 22,
+            "tempMax": 39,
+            "umidadeMin": 20,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 22,
+            "tempMax": 39,
+            "umidadeMin": 30,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 22,
+            "tempMax": 40,
+            "umidadeMin": 20,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 22,
+            "tempMax": 39,
+            "umidadeMin": 30,
+            "umidadeMax": 100
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A242",
+          "nome": "OIAPOQUE",
+          "uf": "AP",
+          "distanciaKm": 9
+        },
+        {
+          "codigo": "A244",
+          "nome": "PORTO GRANDE",
+          "uf": "AP",
+          "distanciaKm": 354.9
+        },
+        {
+          "codigo": "A249",
+          "nome": "MACAPA",
+          "uf": "AP",
+          "distanciaKm": 432.7
+        },
+        {
+          "codigo": "A245",
+          "nome": "PORTO DE MOZ",
+          "uf": "PA",
+          "distanciaKm": 632.9
+        },
+        {
+          "codigo": "A201",
+          "nome": "BELEM",
+          "uf": "PA",
+          "distanciaKm": 694.9
+        }
+      ]
+    },
+    {
+      "cidade": "vitoria",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A612",
+        "nome": "VITÓRIA",
+        "uf": "ES",
+        "latitude": -20.27083332,
+        "longitude": -40.30583333,
+        "distanciaKm": 6.4,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 24.7,
+        "maxima": 25.6,
+        "atual": 25.6
+      },
+      "umidade": {
+        "minima": 90,
+        "maxima": 94,
+        "atual": 91
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 20,
+            "tempMax": 26,
+            "umidadeMin": 60,
+            "umidadeMax": 95
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 21,
+            "tempMax": 30,
+            "umidadeMin": 40,
+            "umidadeMax": 95
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 22,
+            "tempMax": 30,
+            "umidadeMin": 50,
+            "umidadeMax": 95
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 22,
+            "tempMax": 26,
+            "umidadeMin": 70,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 20,
+            "tempMax": 24,
+            "umidadeMin": 65,
+            "umidadeMax": 90
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A612",
+          "nome": "VITORIA",
+          "uf": "ES",
+          "distanciaKm": 6.4
+        },
+        {
+          "codigo": "A613",
+          "nome": "SANTA TERESA",
+          "uf": "ES",
+          "distanciaKm": 44.7
+        },
+        {
+          "codigo": "A657",
+          "nome": "AFONSO CLAUDIO",
+          "uf": "ES",
+          "distanciaKm": 83.8
+        },
+        {
+          "codigo": "A633",
+          "nome": "VENDA NOVA DO IMIGRANTE",
+          "uf": "ES",
+          "distanciaKm": 89.2
+        },
+        {
+          "codigo": "A632",
+          "nome": "MARILANDIA",
+          "uf": "ES",
+          "distanciaKm": 103.7
+        }
+      ]
+    },
+    {
+      "cidade": "araucaria",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A807",
+        "nome": "CURITIBA",
+        "uf": "PR",
+        "latitude": -25.4486111,
+        "longitude": -49.23055554,
+        "distanciaKm": 23.3,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 22.1,
+        "maxima": 22.6,
+        "atual": 22.2
+      },
+      "umidade": {
+        "minima": 67,
+        "maxima": 72,
+        "atual": 72
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 15,
+            "tempMax": 25,
+            "umidadeMin": 60,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 16,
+            "tempMax": 23,
+            "umidadeMin": 90,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 9,
+            "tempMax": 18,
+            "umidadeMin": 80,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 8,
+            "tempMax": 18,
+            "umidadeMin": 50,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 9,
+            "tempMax": 19,
+            "umidadeMin": 50,
+            "umidadeMax": 95
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A807",
+          "nome": "CURITIBA",
+          "uf": "PR",
+          "distanciaKm": 23.3
+        },
+        {
+          "codigo": "B806",
+          "nome": "COLOMBO",
+          "uf": "PR",
+          "distanciaKm": 38.4
+        },
+        {
+          "codigo": "A873",
+          "nome": "MORRETES",
+          "uf": "PR",
+          "distanciaKm": 60.5
+        },
+        {
+          "codigo": "A874",
+          "nome": "SAO MATEUS DO SUL",
+          "uf": "PR",
+          "distanciaKm": 100.5
+        },
+        {
+          "codigo": "A819",
+          "nome": "CASTRO",
+          "uf": "PR",
+          "distanciaKm": 110.4
+        }
+      ]
+    },
+    {
+      "cidade": "salvador",
+      "status": "operacional",
+      "erro": null,
+      "estacao": {
+        "codigo": "A456",
+        "nome": "SALVADOR-RADIO FAROL",
+        "uf": "BA",
+        "latitude": -12.80833333,
+        "longitude": -38.49583333,
+        "distanciaKm": 18.8,
+        "situacao": "Operante"
+      },
+      "medidoEm": "2026-10-23T18:00:00.000Z",
+      "estacaoRepresentativa": true,
+      "temperatura": {
+        "minima": 31.4,
+        "maxima": 32.7,
+        "atual": 31.5
+      },
+      "umidade": {
+        "minima": 58,
+        "maxima": 64,
+        "atual": 62
+      },
+      "previsaoInmet": {
+        "status": "operacional",
+        "data": "23/10/2026",
+        "dias": [
+          {
+            "data": "2026-10-23",
+            "tempMin": 24,
+            "tempMax": 32,
+            "umidadeMin": 50,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-24",
+            "tempMin": 24,
+            "tempMax": 31,
+            "umidadeMin": 40,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-25",
+            "tempMin": 23,
+            "tempMax": 31,
+            "umidadeMin": 40,
+            "umidadeMax": 100
+          },
+          {
+            "data": "2026-10-26",
+            "tempMin": 23,
+            "tempMax": 31,
+            "umidadeMin": 40,
+            "umidadeMax": 90
+          },
+          {
+            "data": "2026-10-27",
+            "tempMin": 24,
+            "tempMax": 30,
+            "umidadeMin": 55,
+            "umidadeMax": 90
+          }
+        ]
+      },
+      "coberturaTemperatura": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "coberturaUmidade": {
+        "amostras": 1,
+        "horasEsperadas": 15,
+        "parcial": true
+      },
+      "alternativas": [
+        {
+          "codigo": "A456",
+          "nome": "SALVADOR-RADIO FAROL",
+          "uf": "BA",
+          "distanciaKm": 18.8
+        },
+        {
+          "codigo": "A406",
+          "nome": "CRUZ DAS ALMAS",
+          "uf": "BA",
+          "distanciaKm": 72
+        },
+        {
+          "codigo": "A413",
+          "nome": "FEIRA DE SANTANA",
+          "uf": "BA",
+          "distanciaKm": 100.5
+        },
+        {
+          "codigo": "A438",
+          "nome": "MARAU",
+          "uf": "BA",
+          "distanciaKm": 115.2
+        },
+        {
+          "codigo": "A434",
+          "nome": "AMARGOSA",
+          "uf": "BA",
+          "distanciaKm": 120.9
+        }
+      ]
+    }
+  ]
+}

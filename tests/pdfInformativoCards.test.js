@@ -86,11 +86,11 @@ test("condições de mar OCEANOP distinguem altura, máxima, período e pico sem
   assert.equal(bloco.find("th").length, 6, "a integração não cria colunas nem altera o layout aprovado");
 });
 
-test("qualidade do ar mantém o IQAr brasileiro, fonte e referência temporal", () => {
+test("qualidade do ar mantém US AQI, gravidade original, fonte e referência temporal", () => {
   const $ = cheerio.load(renderPdfHtml(report({
     qualidadeAr: {
       iqar: 42,
-      classificacao: { nivel: "Moderada", exibicao: "Moderada", cor: "#F2C500" },
+      classificacao: { nivel: "Moderado", exibicao: "MODERADO", cor: "#F2C500", gravidadeOriginal: "Moderada" },
       subindiceResponsavel: "MP2,5",
       fonte: "Qualidade do ar estimada — Open-Meteo/CAMS",
       referenciaEm: "2026-10-23T09:00",
@@ -103,10 +103,10 @@ test("qualidade do ar mantém o IQAr brasileiro, fonte e referência temporal", 
   const primeiraLinha = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV")
     .closest("section").find("tbody tr").first();
   assert.deepEqual(primeiraLinha.find("td").map((_, td) => $(td).text().trim()).get(), [
-    "Índice brasileiro (IQAr)",
+    "Índice US AQI (estimativa de modelo)",
     "42",
-    "Moderada",
-    "Maior subíndice: MP2,5",
+    "MODERADO",
+    "Gravidade original: Moderada",
   ]);
   const bloco = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV").closest("section").text();
   assert.match(bloco, /Open-Meteo\/CAMS/);
@@ -121,24 +121,26 @@ test("qualidade do ar sem IQAr válido permanece indisponível", () => {
   const primeiraLinha = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV")
     .closest("section").find("tbody tr").first();
   assert.deepEqual(primeiraLinha.find("td").map((_, td) => $(td).text().trim()).get(), [
-    "Índice brasileiro (IQAr)", "—", "Informação indisponível", "Sem dados suficientes/licença",
+    "Índice US AQI (estimativa de modelo)", "—", "Informação indisponível", "Sem dados suficientes/licença",
   ]);
 });
 
-test("temperatura e umidade usam quatro colunas previstas e deixam a fonte na nota", () => {
+test("temperatura e umidade observadas usam quatro colunas e mostram cobertura", () => {
   for (const horarioAgendado of ["05:00", "15:00"]) {
     const $ = cheerio.load(renderPdfHtml(report({
       horarioAgendado,
-      tabelaTemperaturaUmidade: [{ fonte: "INMET — previsão oficial", natureza: "Previsão diária oficial", tempMin: 23.2, tempMax: 38, umidadeMin: 84, umidadeMax: 97 }],
+      tabelaTemperaturaUmidade: [{ fonte: "INMET — estação automática (A636)", natureza: "Observação", tempMin: 23.2, tempMax: 38, umidadeMin: 84, umidadeMax: 97 }],
+      coberturaTemperaturaObservada: { amostras: 2, horasEsperadas: 15, parcial: true },
+      coberturaUmidadeObservada: { amostras: 2, horasEsperadas: 15, parcial: true },
     })));
     const tabela = $("table.tabela-temp-umidade");
     assert.equal(tabela.length, 1);
-    assert.deepEqual(tabela.find("th").map((_, th) => $(th).text()).get(), ["Temp. Mínima", "Temp. Máxima", "Umidade Mínima", "Umidade Máxima"]);
+    assert.deepEqual(tabela.find("th").map((_, th) => $(th).text()).get(), ["Temp. mín. observada", "Temp. máx. observada", "Umidade mín. observada", "Umidade máx. observada"]);
     assert.deepEqual(tabela.find("tbody td").map((_, td) => $(td).text()).get(), ["23,2°C", "38°C", "84%", "97%"]);
     assert.doesNotMatch(tabela.text(), /Clima e Saúde|Open-Meteo/);
     const bloco = tabela.closest("section");
-    assert.equal(bloco.find(".subtitulo-tabela").text(), "Indicadores consolidados do período consultado.");
-    assert.equal(bloco.find(".fonte-tabela").text(), "Fonte de dados: INMET — previsão oficial.");
+    assert.equal(bloco.find(".subtitulo-tabela").text(), "Extremos horários medidos no dia civil local até a consulta.");
+    assert.equal(bloco.find(".fonte-tabela").text(), "Fonte de dados: INMET — estação automática (A636). Temperatura: parcial (2/15 leituras); umidade: parcial (2/15 leituras).");
   }
 });
 

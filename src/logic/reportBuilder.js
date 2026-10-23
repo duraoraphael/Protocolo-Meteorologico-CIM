@@ -20,6 +20,7 @@ const { tipoDocumentoPorHorario } = require("./alertPresentation");
 const { edicaoInformativo, intervaloAvisos, validadeInformativo, partesNoFuso } = require("./informativoValidity");
 const { aplicarPoliticaFontes } = require("./weatherSourcePolicy");
 const { metadadosMeteorologicos } = require("./weatherSourceMetadata");
+const { classificarDadosRelatorio, validarDadosRelatorio } = require("./meteorologicalValidity");
 const { montarContextoMeteorologicoSetor } = require("./sectorWeatherContext");
 const {
   buscarOceanopPorCoordenadas,
@@ -134,11 +135,11 @@ function montarVentoPorPeriodo({ base }) {
         velocidadeMediaKmh: p.velocidadeMediaKmh ?? null,
         rajadaMaxKmh: p.rajadaMaxKmh ?? null,
         rajadaPrevistaEm: p.rajadaPrevistaEm || null,
-        fonteRajada: p.fonteRajada || (p.fonteOceanop ? FONTE_OCEANOP : null),
+        fonteRajada: p.fonteRajada || (p.fonteOceanop ? FONTE_OCEANOP : (Number.isFinite(p.rajadaMaxKmh) ? "Open-Meteo — previsão meteorológica" : null)),
         tipoDado: p.tipoDado || "indisponivel",
-        referenciaInmet: p.fonteRajada
-          ? `${p.fonteRajada} · ${p.localRajada || "área homologada"}${p.periodoReferenciaRajada ? ` · ${p.periodoReferenciaRajada}` : ""}`
-          : `Open-Meteo · vento médio e direção; rajada prevista indisponível`,
+        referenciaInmet: p.fonteRajada || p.fonteOceanop
+          ? `${p.fonteRajada || FONTE_OCEANOP} · ${p.localRajada || p.localOceanop || "área homologada"}${p.periodoReferenciaRajada || p.periodoReferenciaOceanop ? ` · ${p.periodoReferenciaRajada || p.periodoReferenciaOceanop}` : ""}`
+          : Number.isFinite(p.rajadaMaxKmh) ? "Open-Meteo · previsão de rajada a 10 m" : "Open-Meteo · vento médio e direção; rajada prevista indisponível",
       };
     });
 }
@@ -181,7 +182,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
 
   try {
     qualidadeArCams = await consultarQualidadeAr(cidade, { now: dataNow });
-    healthQualidadeAr = operacional("Open-Meteo Air Quality / CAMS", "Concentrações modeladas recebidas; IQAr calculado pela regra brasileira.", {
+    healthQualidadeAr = operacional("Open-Meteo Air Quality / CAMS", "Índice US AQI e concentrações modeladas recebidos.", {
       checkedAt: dataNow.toISOString(),
       lastSuccessAt: qualidadeArCams.consultadoEm,
     });
@@ -203,6 +204,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       diasPrevisao: 4,
       agregarJanela: Boolean(horarioAgendado),
       fuso: cidade.fusoHorario || "America/Sao_Paulo",
+      agora: () => dataNow,
     });
   } catch (erro) {
     falhasApi.openMeteo = erro;
@@ -236,7 +238,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       if (!picoRajadaPortalHoje) {
         avisosColeta.push(`Tetra Tech: Rajada prevista indisponível para ${dataHoje} na janela ${janelaRajada.rotulo}.`);
       }
-      previsaoRajadaPortalDias = resultadoRajadaPortal.picosDiarios.map((item) => ({
+      previsaoRajadaPortalDias = resultadoRajadaPortal.desatualizado ? [] : resultadoRajadaPortal.picosDiarios.map((item) => ({
         data: item.data,
         rajadaMaxKmh: item.rajadaPrevistaKmH,
         rajadaPrevistaEm: item.picoEm,
@@ -296,12 +298,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     if (!mar) avisosColeta.push("Open-Meteo Marine: condições marítimas indisponíveis para o ponto validado da base.");
   }
   const pontoOceanop = oceanopPontos[cidade.chave];
-  let healthOceanop = portalRajada?.habilitado
+  let healthOceanop = Number.isFinite(picoRajadaPortalHoje?.rajadaPrevistaKmH) && !resultadoRajadaPortal?.desatualizado
     ? naoAplicavel("Oceanop / Petrobras", "Rajada atendida pelo portal Tetra Tech autorizado.")
     : !pontoOceanop?.habilitado
     ? naoConfigurada("Oceanop / Petrobras", "Área OCEANOP homologada ainda não vinculada a esta base.")
     : naoAplicavel("Oceanop / Petrobras", "Área configurada, aguardando consulta.");
-  if (!portalRajada?.habilitado && pontoOceanop?.habilitado) {
+  if ((!Number.isFinite(picoRajadaPortalHoje?.rajadaPrevistaKmH) || resultadoRajadaPortal?.desatualizado) && pontoOceanop?.habilitado) {
     try {
       resultadoOceanop = await consultarOceanop(pontoOceanop);
       let erroProduto = null;
@@ -400,6 +402,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   // permanecem explícitas até uma fonte autorizada equivalente responder.
   const { diagnosticos: diagnosticosFallback } = aplicarPoliticaFontes({
     base,
+    cidade,
     openMeteo,
     inmetObservacao,
     fontesPorCampo: integrado.fontesPorCampo,
@@ -429,7 +432,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       integrado.fontesPorCampo.rajadaPrevistaKmh = FONTE_OCEANOP;
     }
   }
-  if (resultadoRajadaPortal?.registros?.length) {
+  if (resultadoRajadaPortal?.registros?.length && !resultadoRajadaPortal.desatualizado) {
     const partesHoje = partesNoFuso(dataNow, portalRajada.fusoHorario);
     const dataHoje = `${partesHoje.year}-${String(partesHoje.month).padStart(2, "0")}-${String(partesHoje.day).padStart(2, "0")}`;
     for (const [chave, janela] of Object.entries(PERIODOS_HOJE)) {
@@ -446,7 +449,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   }
   // O pico diário do portal é prioritário no card/resumo de rajada, mas não é
   // copiado para períodos sem comprovação do horário dentro daquela janela.
-  if (Number.isFinite(picoRajadaPortalHoje?.rajadaPrevistaKmH)) {
+  if (!resultadoRajadaPortal?.desatualizado && Number.isFinite(picoRajadaPortalHoje?.rajadaPrevistaKmH)) {
     base.rajadaMaxKmh = picoRajadaPortalHoje.rajadaPrevistaKmH;
     base.rajadaPrioritariaReferencia = {
       fonte: picoRajadaPortalHoje.fonte,
@@ -479,6 +482,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     probabilidadeChuvaMax: base.probabilidadeChuvaMax,
     precipitacaoHorariaMaxMm: base.precipitacaoHorariaMaxMm,
     precipitacaoTotalMm: base.precipitacaoTotalMm,
+    chuvaPrevistaDiaMm: openMeteo?.precipitacaoDiariaMm ?? null,
     temTempestadeHoje: base.temTempestadeHoje,
     periodos: base.periodos,
     fontesPorCampo: integrado.fontesPorCampo,
@@ -507,7 +511,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   ].filter((fonte) => fonte && fonte !== "Indisponível"))];
   const tabelaTemperaturaUmidade = [{
     fonte: fontesTabelaTemperatura.join(" / ") || "Indisponível",
-    natureza: "Previsão diária oficial",
+    natureza: "Observação do dia civil local (cobertura parcial quando indicada)",
     tempMin: base.tempMin,
     tempMax: base.tempMax,
     umidadeMin: base.umidadeMin,
@@ -515,10 +519,27 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   }];
   // No PDF das duas edições, o vento cobre sempre o dia operacional inteiro
   // (05h–00h); apenas os cards consolidados permanecem limitados à edição.
-  const ventoPorPeriodo = montarVentoPorPeriodo({ base });
+  const periodosTabela = Object.fromEntries(["manha", "tarde", "noite"].map((chave) => {
+    const edicao = base.periodos[chave] || {};
+    const dia = openMeteo?.periodosDiaCompleto?.[chave] || {};
+    const rajadaPrioritaria = Number.isFinite(edicao.rajadaMaxKmh) && (edicao.fonteRajada || edicao.fonteOceanop);
+    return [chave, {
+      ...edicao, ...dia,
+      rajadaMaxKmh: rajadaPrioritaria ? edicao.rajadaMaxKmh : Number.isFinite(dia.rajadaMaxKmh) ? dia.rajadaMaxKmh : edicao.rajadaMaxKmh,
+      fonteRajada: edicao.fonteRajada,
+      fonteOceanop: edicao.fonteOceanop,
+      localRajada: edicao.localRajada,
+      localOceanop: edicao.localOceanop,
+      periodoReferenciaRajada: edicao.periodoReferenciaRajada,
+      periodoReferenciaOceanop: edicao.periodoReferenciaOceanop,
+      rajadaPrevistaEm: rajadaPrioritaria ? edicao.rajadaPrevistaEm : null,
+      disponivel: dia.disponivel || edicao.disponivel,
+    }];
+  }));
+  const ventoPorPeriodo = montarVentoPorPeriodo({ base: { ...base, periodos: periodosTabela } });
 
   const chuvaPorPeriodo = ["manha", "tarde", "noite"].map((k) => {
-    const p = base.periodos[k];
+    const p = openMeteo?.periodosDiaCompleto?.[k] || base.periodos[k];
     const i = inmetPrevisao?.periodos[k];
     return {
       periodo: p?.periodo || PERIODOS_HOJE[k].label,
@@ -531,7 +552,8 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       medidoEm: p?.medidoEm || null,
     };
   });
-  const chuvaPorHora = inmetObservacao?.agregado?.chuvaPorHora || [];
+  const chuvaPorHora = inmetObservacao?.status === "operacional" && !inmetObservacao.observacao?.desatualizado
+    ? inmetObservacao.agregado?.chuvaPorHora || [] : [];
 
   // Fontes listadas por NOME, sem URL: as chamadas de API carregam a query
   // completa (dezenas de parâmetros) e poluíam o documento sem agregar nada
@@ -544,12 +566,12 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   if (openMeteo)
     fontesAutomatizadas.push({
       nome: "Open-Meteo — Weather Forecast API",
-      uso: "Condição, temperatura, umidade, chuva, probabilidade, vento médio, direção e índice UV previstos",
+      uso: "Condição, chuva, probabilidade, vento médio, direção e índice UV previstos",
     });
   if (qualidadeArCams)
     fontesAutomatizadas.push({
       nome: "Open-Meteo Air Quality / CAMS",
-      uso: "Estimativa modelada; concentrações convertidas para o IQAr brasileiro conforme CONAMA 506/2024 e orientação MMA (jan/2025)",
+      uso: "Estimativa modelada; índice US AQI e concentrações de PM2,5/PM10, não medição oficial",
     });
   if (mar)
     fontesAutomatizadas.push({
@@ -561,7 +583,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       nome: "INMET — Previsão",
       uso: "Contexto textual oficial municipal; os avisos oficiais permanecem prioritários",
     });
-  if (inmetObservacao?.observacao)
+  if (inmetObservacao?.status === "operacional" && !inmetObservacao.observacao?.desatualizado)
     fontesAutomatizadas.push({
       nome: "INMET — Estação Automática",
       uso: `Temperatura, umidade, chuva e vento observados em ${inmetObservacao.observacao.estacao.nome} (${inmetObservacao.observacao.estacao.codigo}); histórico composto somente pelas coletas oficiais armazenadas`,
@@ -682,8 +704,10 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     paraMonitoramento("clima-saude", "Clima e Saúde — Ministério da Saúde", healthClimaSaude),
   ];
 
+  const previsaoHojeInmet = (inmetPrevisao?.dias || []).find((dia) => dia.dataBr === inmetPrevisao.data);
   const relatorio = {
-    cidade: { chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, fuso: cidade.fusoHorario || "America/Sao_Paulo" },
+    cidade: { chave: cidade.chave, nome: cidade.nome, uf: cidade.uf, latitude: cidade.latitude,
+      longitude: cidade.longitude, fuso: cidade.fusoHorario || "America/Sao_Paulo" },
     nomeArquivoBase: `Informativo_Meteorologico_${slugCidade(cidade.nome)}_${dataNow.toISOString().slice(0, 10)}`,
     dataFormatadaLonga: new Intl.DateTimeFormat("pt-BR", {
       dateStyle: "full",
@@ -707,6 +731,8 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     tempMax: base.tempMax,
     umidadeMin: base.umidadeMin,
     umidadeMax: base.umidadeMax,
+    temperaturaAtualC: base.temperaturaAtualC,
+    umidadeAtualPct: base.umidadeAtualPct,
     temperaturaObservadaMinC: base.temperaturaObservadaMinC,
     temperaturaObservadaMaxC: base.temperaturaObservadaMaxC,
     umidadeObservadaMinPct: base.umidadeObservadaMinPct,
@@ -715,6 +741,7 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     coberturaUmidadeObservada: base.coberturaUmidadeObservada,
     precipitacaoHorariaMaxMm: base.precipitacaoHorariaMaxMm,
     precipitacaoTotalMm: base.precipitacaoTotalMm,
+    chuvaPrevistaDiaMm: Number.isFinite(openMeteo?.precipitacaoDiariaMm) ? openMeteo.precipitacaoDiariaMm : null,
     probabilidadeChuvaPrevista: probabilidadeChuvaEdicao.valor,
     probabilidadeChuvaJanela: probabilidadeChuvaEdicao.janela,
     probabilidadeChuvaRegra: probabilidadeChuvaEdicao.regra,
@@ -723,6 +750,14 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     precipitacaoHoraReferencia: base.precipitacaoHoraReferencia ?? null,
     precipitacaoHoraMedidaEm: base.precipitacaoHoraMedidaEm ?? null,
     precipitacaoUltimas24hMm: base.precipitacaoUltimas24hMm ?? null,
+    chuvaEstimadaDiaMm: base.chuvaEstimadaDiaMm,
+    chuvaEstimadaHoraMm: base.chuvaEstimadaHoraMm,
+    chuvaEstimada24hMm: base.chuvaEstimada24hMm,
+    chuvaEstimadaReferencia: base.chuvaEstimadaReferencia,
+    chuvaEstimadaHoraReferencia: base.chuvaEstimadaHoraReferencia,
+    coberturaChuvaEstimadaDia: base.coberturaChuvaEstimadaDia,
+    coberturaChuvaEstimada24h: base.coberturaChuvaEstimada24h,
+    chuvaEstimadaMotivoIndisponibilidade: base.chuvaEstimadaMotivoIndisponibilidade,
     precipitacaoPeriodoMm: base.precipitacaoPeriodoMm ?? null,
     rajadaMaxKmh: base.rajadaMaxKmh,
     rajadaPrevistaKmh: base.rajadaMaxKmh,
@@ -742,6 +777,10 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
       inmetObservacao,
       inmetPrevisao,
       openMeteo,
+      temperaturaObservada: [base.tempMin, base.tempMax],
+      umidadeObservada: [base.umidadeMin, base.umidadeMax],
+      coberturaTemperatura: base.coberturaTemperaturaObservada,
+      coberturaUmidade: base.coberturaUmidadeObservada,
       rajadaPrioritaria: base.rajadaPrioritariaReferencia || base.rajadaOceanopReferencia || null,
       oceanopVento: ventoOceanop?.resumo || null,
       geradoEm: dataNow.toISOString(),
@@ -793,11 +832,11 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     previsaoDias: horarioAgendado && (openMeteo || inmetPrevisao) ? [{
       ...(openMeteo?.previsaoDias?.[0] || {}),
       data: openMeteo?.dataReferencia || (inmetPrevisao?.dias || []).find((dia) => dia.dataBr === inmetPrevisao?.data)?.data || null,
-      tempMin: base.tempMin,
-      tempMax: base.tempMax,
-      umidadeMin: base.umidadeMin,
-      umidadeMax: base.umidadeMax,
-      chuvaMm: base.precipitacaoTotalMm,
+      tempMin: previsaoHojeInmet?.tempMin ?? null,
+      tempMax: previsaoHojeInmet?.tempMax ?? null,
+      umidadeMin: previsaoHojeInmet?.umidadeMin ?? null,
+      umidadeMax: previsaoHojeInmet?.umidadeMax ?? null,
+      chuvaMm: openMeteo?.precipitacaoDiariaMm ?? null,
       probabilidadeChuvaPct: probabilidadeChuvaEdicao.valor,
       rajadaKmh: base.rajadaMaxKmh,
       condicao: base.condicaoGeral,
@@ -806,7 +845,11 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     }] : null,
   };
   if (horarioAgendado) relatorio.horaConsulta = horarioAgendado;
+  relatorio.fontesPorCampo.chuvaPrevistaDiaMm = Number.isFinite(relatorio.chuvaPrevistaDiaMm)
+    ? "Open-Meteo — previsão meteorológica" : "Indisponível";
   relatorio.ocorrencias = montarOcorrencias(relatorio);
+  relatorio.classificacaoDados = classificarDadosRelatorio(relatorio);
+  validarDadosRelatorio(relatorio);
   return registrarDocumentoOperacional(relatorio);
 }
 

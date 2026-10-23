@@ -113,6 +113,34 @@ function montarPrevisaoProximosDiasOpenMeteo(cidade, previsaoDias, { agora = new
   };
 }
 
+function usarTemperaturaUmidadeInmet(previsaoOpenMeteo, previsaoInmet) {
+  const oficiais = new Map((previsaoInmet?.dias || []).map((dia) => [dia.data, dia]));
+  const dias = previsaoOpenMeteo.dias.map((dia) => {
+    const oficial = oficiais.get(dia.data);
+    return {
+      ...dia,
+      tempMaxC: Number.isFinite(oficial?.tempMax) ? oficial.tempMax : null,
+      tempMinC: Number.isFinite(oficial?.tempMin) ? oficial.tempMin : null,
+      umidadeMaxPct: Number.isFinite(oficial?.umidadeMax) ? oficial.umidadeMax : null,
+      umidadeMinPct: Number.isFinite(oficial?.umidadeMin) ? oficial.umidadeMin : null,
+    };
+  });
+  const campoFonte = (campos) => dias.some((dia) => campos.some((campo) => Number.isFinite(dia[campo])))
+    ? "INMET — previsão oficial" : INDISPONIVEL;
+  const temDados = dias.some((dia) => ["tempMaxC", "tempMinC", "umidadeMaxPct", "umidadeMinPct", "chuvaMm", "probabilidadeChuvaPct", "uvMax"].some((campo) => Number.isFinite(dia[campo])) || dia.condicao);
+  return {
+    ...previsaoOpenMeteo,
+    fonte: "INMET — previsão oficial / Open-Meteo — previsão meteorológica",
+    status: temDados ? "parcial" : "indisponivel",
+    dias,
+    fontesCampo: {
+      ...previsaoOpenMeteo.fontesCampo,
+      temperatura: campoFonte(["tempMinC", "tempMaxC"]),
+      umidade: campoFonte(["umidadeMinPct", "umidadeMaxPct"]),
+    },
+  };
+}
+
 function aplicarRajadasOceanop(previsao, diasOceanop = [], fontePadrao = "Petrobras — OCEANOP") {
   if (!previsao || !Array.isArray(previsao.dias) || !Array.isArray(diasOceanop) || !diasOceanop.length) return previsao;
   const porData = new Map(diasOceanop.filter((dia) => Number.isFinite(dia?.rajadaMaxKmh)).map((dia) => [dia.data, dia]));
@@ -131,6 +159,7 @@ function aplicarRajadasOceanop(previsao, diasOceanop = [], fontePadrao = "Petrob
 module.exports = {
   montarPrevisaoProximosDiasInmet,
   montarPrevisaoProximosDiasOpenMeteo,
+  usarTemperaturaUmidadeInmet,
   aplicarRajadasOceanop,
   proximasDatas,
   dataLocalIso,

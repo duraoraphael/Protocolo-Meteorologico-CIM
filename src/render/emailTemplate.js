@@ -22,6 +22,7 @@ const COR = {
   verde: "#00843D",
   amarelo: "#FFCC00",
 };
+const CORES_AR = { NORMAL: "#00843D", MODERADO: "#F2C500", RUIM: "#D92828" };
 
 const ESTILO_REFERENCIA_EMAIL = `background:${COR.painel};padding:0 5px;color:${COR.texto};font-family:Arial,sans-serif;font-size:16px;font-weight:400;line-height:1.4;`;
 
@@ -48,7 +49,7 @@ function numeroUnidade(valor, unidade, casas = null) {
 
 function parOuTraco(minimo, maximo, sufixoMin, sufixoMax) {
   if (!Number.isFinite(minimo) || !Number.isFinite(maximo)) return "Dado indisponível";
-  return `${esc(minimo)}${sufixoMin} / ${esc(maximo)}${sufixoMax}`;
+  return `${esc(minimo.toLocaleString("pt-BR"))}${sufixoMin} / ${esc(maximo.toLocaleString("pt-BR"))}${sufixoMax}`;
 }
 
 function rajadaMaxima(r) {
@@ -81,6 +82,12 @@ function periodosDaEdicao(r, periodos) {
 }
 
 function chuvaPrevistaAcumulada(r) {
+  // Relatórios atuais trazem a previsão diária explicitamente. Quando ela
+  // falta, não substituir por precipitação observada ou por outro agregado.
+  if (Object.hasOwn(r, "chuvaPrevistaDiaMm")) {
+    return Number.isFinite(r.chuvaPrevistaDiaMm) ? r.chuvaPrevistaDiaMm : null;
+  }
+  // Compatibilidade com prévias antigas que ainda não tinham esse campo.
   const diaria = r.previsaoDias?.[0]?.chuvaMm;
   if (Number.isFinite(diaria)) return diaria;
 
@@ -114,7 +121,7 @@ function celulaChuva(chuvaPrevista, probabilidade) {
   </td></tr>`;
   return `<td data-email-rain-card="true" colspan="2" width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:1px solid ${COR.borda};border-bottom:1px solid ${COR.borda};padding:0;text-align:center;vertical-align:middle;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border-collapse:collapse;table-layout:fixed;">
-      ${bloco("acumulado", "CHUVA ACUMULADA/DIA", chuvaPrevista, true)}
+      ${bloco("acumulado", "CHUVA PREVISTA/DIA", chuvaPrevista, true)}
       ${bloco("probabilidade", "PROBABILIDADE DE CHUVA", probabilidade, false)}
     </table>
   </td>`;
@@ -158,25 +165,24 @@ function resumoMeteorologico(r) {
   const chuvaPrevista = chuvaPrevistaAcumulada(r);
   const probabilidade = probabilidadeChuvaPrevista(r);
   const qa = r.qualidadeAr;
-  const arOk = Number.isFinite(qa?.iqar) && presente(qa?.classificacao?.exibicao);
+  const arOk = Number.isFinite(qa?.iqar) && Object.hasOwn(CORES_AR, qa?.classificacao?.exibicao);
   const ar = arOk
-    ? `<span style="color:${esc(qa.classificacao.cor)};">${esc(qa.classificacao.exibicao)}</span>`
+    ? `<span style="color:${CORES_AR[qa.classificacao.exibicao]};font-size:80%;">${esc(qa.classificacao.exibicao)}</span>`
     : "Dado indisponível";
-  const arDetalhe = arOk
-    ? `IQAr ${qa.iqar} · ${esc(qa.fonte || "Estimativa CAMS")} · ${esc(qa.referenciaEm || "horário indisponível")}`
-    : esc(qa?.motivoIndisponibilidade || "Sem janela válida ou licença comercial configurada");
+  const previsaoInmet = r.inmetPrevisao;
+  const previsaoHoje = previsaoInmet?.dias?.find((dia) => dia.dataBr === previsaoInmet.data);
   return `<table data-email-metrics="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-collapse:collapse;table-layout:fixed;">
     <colgroup>
       <col width="16.67%"><col width="16.67%"><col width="16.66%">
       <col width="16.67%"><col width="16.67%"><col width="16.66%">
     </colgroup>
     <tr data-email-metric-row="1">
-      ${celulaMetrica("PREVISÃO TEMP. MÍN/MÁX", parOuTraco(r.tempMin, r.tempMax, "°", "°C"))}
-      ${celulaMetrica("PREVISÃO UMIDADE MÍN/MÁX", parOuTraco(r.umidadeMin, r.umidadeMax, "%", "%"))}
+      ${celulaMetrica("PREVISÃO TEMP. MÍN/MÁX", parOuTraco(previsaoHoje?.tempMin, previsaoHoje?.tempMax, "°", "°C"))}
+      ${celulaMetrica("PREVISÃO UMIDADE MÍN/MÁX", parOuTraco(previsaoHoje?.umidadeMin, previsaoHoje?.umidadeMax, "%", "%"))}
       ${celulaMetrica("RAJADA PREVISTA", rajadaValor, true)}
     </tr>
     <tr data-email-metric-row="2">
-      ${celulaMetrica("QUALIDADE DO AR", ar, false, arDetalhe)}
+      ${celulaMetrica("QUALIDADE DO AR", ar)}
       ${celulaChuva(
         Number.isFinite(chuvaPrevista) ? numeroUnidade(chuvaPrevista, "mm") : "Dado indisponível",
         Number.isFinite(probabilidade) ? `${esc(probabilidade)}%` : "Indisponível"

@@ -32,7 +32,8 @@ const Dashboard = (() => {
   const weatherIcon = (code, day = true) => code == null ? 'cloud' : code >= 95 ? 'storm' : (code >= 71 && code <= 77) || code === 85 || code === 86 ? 'snow' : code >= 51 ? 'rain' : code >= 45 ? 'fog' : code < 2 ? (day == null ? 'cloud' : day ? 'sun' : 'moon') : 'cloud';
   const unit = (value, suffix) => value == null ? '—' : `${escape(value)}${suffix}`;
   const oneDecimal = value => Number(value).toFixed(1);
-  const pair = (a, b, suffix) => a == null && b == null ? '—' : `${unit(a, suffix)} / ${unit(b, suffix)}`;
+  const pair = (a, b, suffix) => a == null && b == null ? '—' : [a, b]
+    .map(valor => Number.isFinite(valor) ? `${valor.toLocaleString('pt-BR')}${suffix}` : '—').join(' / ');
   const list = (items) => `<ul>${items.map(x => `<li>${escape(x)}</li>`).join('')}</ul>`;
   // Níveis do protocolo: nomes preservados, cores do painel por gravidade.
   const NIVEIS = {
@@ -91,12 +92,14 @@ const Dashboard = (() => {
     const gustValue = Number.isFinite(r.rajadaMaxKmh) ? r.rajadaMaxKmh : (gusts.length ? Math.max(...gusts) : null);
     const aq = r.qualidadeAr;
     const arDisponivel = Number.isFinite(aq?.iqar) && aq?.classificacao?.exibicao;
-    const classeIqAr = { Boa: 'boa', Moderada: 'moderada', Ruim: 'ruim', 'Muito Ruim': 'muito-ruim', 'Péssima': 'pessima' }[aq?.classificacao?.nivel];
+    const classeIqAr = { Normal: 'boa', Moderado: 'moderada', Ruim: 'muito-ruim' }[aq?.classificacao?.nivel];
     const ar = arDisponivel
       ? `<span class="iqar-classe iqar-${classeIqAr}">${escape(aq.classificacao.exibicao)}</span>`
       : 'Informação indisponível';
+    const fusoAr = r.cidade?.fuso || 'America/Sao_Paulo';
+    const rotuloFusoAr = fusoAr === 'America/Sao_Paulo' ? 'Brasília' : fusoAr;
     const arDetalhe = arDisponivel
-      ? `IQAr ${aq.iqar} · estimativa referente a ${String(aq.referenciaEm || '').replace('T', ' às ')}`
+      ? `US AQI ${aq.iqar} · gravidade original: ${escape(aq.classificacao.gravidadeOriginal)} · estimativa de modelo referente a ${String(aq.referenciaEm || '').replace('T', ' às ')} (${escape(rotuloFusoAr)})${aq.modoLicenca === 'avaliacao_local' ? ' · avaliação local; uso comercial exige licença' : ''}`
       : aq?.motivoIndisponibilidade || 'Sem dados modelados válidos ou licença comercial configurada';
     const fields = r.fontesPorCampo || {};
     const sources = (...keys) => {
@@ -131,24 +134,41 @@ const Dashboard = (() => {
     const tempObservada = pair(r.temperaturaObservadaMinC, r.temperaturaObservadaMaxC, '°');
     const umidadeObservada = pair(r.umidadeObservadaMinPct, r.umidadeObservadaMaxPct, '%');
     const detalheTemp = tempObservada === '—'
-      ? 'Mínima / máxima previstas para o dia · INMET'
-      : `Prevista para o dia · observada parcial ${tempObservada} (${coberturaTemp.amostras || 0}/${coberturaTemp.horasEsperadas || 0} leituras)`;
+      ? 'Sem observações INMET representativas nesta atualização'
+      : coberturaTemp.parcial ? `Parcial · ${coberturaTemp.amostras || 0}/${coberturaTemp.horasEsperadas || 0} leituras` : 'Dia civil local · cobertura completa';
     const detalheUmidade = umidadeObservada === '—'
-      ? 'Mínima / máxima previstas para o dia · INMET'
-      : `Prevista para o dia · observada parcial ${umidadeObservada} (${coberturaUmidade.amostras || 0}/${coberturaUmidade.horasEsperadas || 0} leituras)`;
+      ? 'Sem observações INMET representativas nesta atualização'
+      : coberturaUmidade.parcial ? `Parcial · ${coberturaUmidade.amostras || 0}/${coberturaUmidade.horasEsperadas || 0} leituras` : 'Dia civil local · cobertura completa';
+    const ultimaMedicao = r.inmetObservacao?.observacao?.medidoEm;
+    const horaMedicao = Number.isFinite(Date.parse(ultimaMedicao || ''))
+      ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(ultimaMedicao))
+      : null;
+    const referenciaEstacao = r.inmetObservacao?.observacao?.estacao;
+    const detalheEstacao = referenciaEstacao ? ` · estação ${escape(referenciaEstacao.nome || referenciaEstacao.codigo)} (${escape(referenciaEstacao.codigo)})` : '';
+    const detalheMedicao = horaMedicao ? ` · última medição ${escape(horaMedicao)} (Brasília)${r.inmetObservacao?.status === 'operacional' ? '' : ' · desatualizada'}` : '';
     const ce = r.conteudoEmail;
     const cardsEmail = ce ? [
       metric('Chuva prevista/dia', ce.chuvaPrevistaMm == null ? 'Dado indisponível' : unit(ce.chuvaPrevistaMm, ' <small>mm</small>'), 'Previsão acumulada para o dia · mesmo valor do e-mail', 'rain', '', ce.fonteChuvaPrevista || ''),
       metric('Probabilidade de chuva', ce.probabilidadeChuva == null ? 'Dado indisponível' : unit(ce.probabilidadeChuva, '%'), ce.janelaProbabilidade ? `Máxima prevista ${ce.janelaProbabilidade}` : 'Máxima prevista entre os períodos do dia', 'rain', '', ce.fonteProbabilidade || ''),
     ] : [];
     const cards = [
-      metric('Temperatura prevista', pair(r.tempMin, r.tempMax, '°'), detalheTemp, 'thermometer', '', sources('tempMin','tempMax')),
-      metric('Umidade relativa prevista', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
+      metric('Temperatura observada mín/máx', pair(r.tempMin, r.tempMax, '°'), detalheTemp, 'thermometer', '', sources('tempMin','tempMax')),
+      metric('Umidade observada mín/máx', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
       metric('Rajada prevista', Number.isFinite(gustValue) ? formatarRajadaPrevista(gustValue) : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
       ...cardsEmail,
-      metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), r.coberturaObservacoesInmet?.parcial ? `Dia civil local · parcial (${r.coberturaObservacoesInmet.amostras || 0}/${r.coberturaObservacoesInmet.horasEsperadas || 0} leituras)` : 'Dia civil local · cobertura completa', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
-      metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), r.precipitacaoHoraReferencia ? `Hora de referência: ${escape(r.precipitacaoHoraReferencia)} · INMET` : 'Hora de referência indisponível', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
-      metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), r.coberturaChuva24h?.parcial ? `Acumulado incompleto · ${r.coberturaChuva24h.amostras || 0}/24 leituras INMET` : 'Acumulado completo das últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
+      metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), `${!Number.isFinite(r.precipitacaoDiariaMm) ? 'Sem leituras válidas no dia' : r.coberturaObservacoesInmet?.parcial ? `Dia civil local · parcial (${r.coberturaObservacoesInmet.amostras || 0}/${r.coberturaObservacoesInmet.horasEsperadas || 0} leituras)` : 'Dia civil local · cobertura completa'}${detalheEstacao}${detalheMedicao}`, 'rain', '', sourceOrPolicy('Informação indisponível', 'precipitacaoDiariaMm')),
+      metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), r.precipitacaoHoraReferencia ? `Hora de referência: ${escape(r.precipitacaoHoraReferencia)} · INMET${detalheEstacao}${detalheMedicao}` : `Hora de referência indisponível${detalheEstacao}${detalheMedicao}`, 'rain', '', sourceOrPolicy('Informação indisponível', 'precipitacaoHoraMm')),
+      metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), `${!Number.isFinite(r.precipitacaoUltimas24hMm) ? 'Sem leituras válidas nas últimas 24 horas' : r.coberturaChuva24h?.parcial ? `Acumulado incompleto · ${r.coberturaChuva24h.amostras || 0}/24 leituras INMET` : 'Acumulado completo das últimas 24 horas'}${detalheEstacao}${detalheMedicao}`, 'rain', '', sourceOrPolicy('Informação indisponível', 'precipitacaoUltimas24hMm')),
+      ...[
+        ['Chuva estimada/dia', 'chuvaEstimadaDia', 'Desde 00h', 'coberturaChuvaEstimadaDia'],
+        ['Chuva estimada/última hora', 'chuvaEstimadaHora', 'Última hora completa', null],
+        ['Chuva estimada/últimas 24 h', 'chuvaEstimada24h', 'Janela móvel de 24 horas', 'coberturaChuvaEstimada24h'],
+      ].map(([titulo, chave, janela, cobertura]) => {
+        const dado = r.classificacaoDados?.[chave] || {};
+        const cov = cobertura ? r[cobertura] : null;
+        const detalhe = `${janela} · ESTIMATIVA OPEN-METEO${dado.referenciaEm ? ` · referência ${escape(dado.referenciaEm)} (Brasília)` : ''}${cov?.parcial ? ` · parcial ${cov.amostras}/${cov.horasEsperadas} horas` : ''}${dado.estado === 'indisponivel' ? ` · ${escape(dado.motivoIndisponibilidade || 'Dados indisponíveis')}` : ''}`;
+        return metric(titulo, unit(dado.valor, ' <small>mm</small>'), detalhe, 'rain', '', dado.fonte || 'Informação indisponível');
+      }),
       metric('Índice UV', uv == null ? 'Dado indisponível' : unit(uv, ''), uvDetail, 'sun', '', uvSource),
       metric('Condição geral', escape(r.condicaoGeral), 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
       metric('Qualidade do ar', arDisponivel ? ar : escape(ar), arDetalhe, 'leaf', 'air', sources('ar.iqar')),
@@ -345,7 +365,7 @@ const Dashboard = (() => {
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;
     if (type === 'vento') return `${windRain(r)}<h3>Referências INMET</h3>${(r.ventoPorPeriodo || []).map(p => `<p>${escape(p.periodo)}: ${escape(p.referenciaInmet)}</p>`).join('')}`;
     const fieldLabel = campo => {
-      const labels={condicaoGeral:'Condição geral',atual:'Condições do horário atual',tempMin:'Temperatura mínima',tempMax:'Temperatura máxima',umidadeMin:'Umidade mínima',umidadeMax:'Umidade máxima',rajadaMaxKmh:'Rajada prevista',precipitacaoTotalMm:'Chuva acumulada/dia',precipitacaoDiariaMm:'Chuva acumulada/dia',precipitacaoHoraMm:'Chuva acumulada/Hora',direcao:'Direção do vento',intensidadeVento:'Vento',precipitacaoMm:'Chuva prevista no período',probabilidadeChuva:'Probabilidade de chuva',alturaMaxDiaM:'Altura máxima de onda',temperaturaMarC:'Temperatura da água',pm25Medio:'PM2,5',uvMax:'Índice UV',aqiUsMax:'Índice de qualidade do ar (US)'};
+      const labels={condicaoGeral:'Condição geral',atual:'Condições do horário atual',tempMin:'Temperatura mínima',tempMax:'Temperatura máxima',umidadeMin:'Umidade mínima',umidadeMax:'Umidade máxima',rajadaMaxKmh:'Rajada prevista',precipitacaoTotalMm:'Chuva acumulada/dia',precipitacaoDiariaMm:'Chuva acumulada/dia',precipitacaoHoraMm:'Chuva acumulada/Hora',chuvaEstimadaDiaMm:'Chuva estimada/dia',chuvaEstimadaHoraMm:'Chuva estimada/última hora',chuvaEstimada24hMm:'Chuva estimada/últimas 24 h',direcao:'Direção do vento',intensidadeVento:'Vento',precipitacaoMm:'Chuva prevista no período',probabilidadeChuva:'Probabilidade de chuva',alturaMaxDiaM:'Altura máxima de onda',temperaturaMarC:'Temperatura da água',pm25Medio:'PM2,5',uvMax:'Índice UV',aqiUsMax:'Índice de qualidade do ar (US)'};
       const parts=campo.split('.'), key=parts.at(-1), periods={manha:'Manhã',tarde:'Tarde',noite:'Noite'};
       return labels[key] ? (periods[parts[1]] ? periods[parts[1]]+' · ' : '')+labels[key] : null;
     };

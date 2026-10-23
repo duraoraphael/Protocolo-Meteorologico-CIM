@@ -6,14 +6,27 @@
 //   Previsão por município (código IBGE): https://apiprevmet3.inmet.gov.br/previsao/<codigoIbge>
 //   Avisos de perigo ativos (nacional):    https://apiprevmet3.inmet.gov.br/avisos/ativos
 //
-// OBS: apitempo.inmet.gov.br (usado em versões antigas de tutoriais) está
-// fora do ar / não resolve mais rotas de previsão — não usar.
+// OBS: a rota antiga de previsão em apitempo.inmet.gov.br não é usada aqui.
+// O catálogo de estações desse host continua sendo consultado pela integração
+// de observações; a série horária pública pode responder sem conteúdo.
 
 const {
   API_TIMEOUT_MS,
   API_TENTATIVAS,
   buscarJsonComRetentativa,
 } = require("./httpJsonClient");
+const tls = require("node:tls");
+const { Agent } = require("undici");
+
+let agenteSistema;
+function requestInitInmet(fetchImpl) {
+  if (fetchImpl !== globalThis.fetch) return { headers: HEADERS };
+  if (!agenteSistema) {
+    const ca = tls.getCACertificates?.("system") || [];
+    agenteSistema = ca.length ? new Agent({ connect: { ca } }) : null;
+  }
+  return { headers: HEADERS, ...(agenteSistema ? { dispatcher: agenteSistema } : {}) };
+}
 
 const HEADERS = { "User-Agent": "Mozilla/5.0 (ProtocoloMeteorologicoCIM/1.0)" };
 const INMET_TIMEOUT_MS = API_TIMEOUT_MS;
@@ -75,7 +88,7 @@ async function buscarPrevisaoInmet(codigoIbge, {
     timeoutMs,
     tentativas: INMET_TENTATIVAS,
     esperarFn,
-    requestInit: { headers: HEADERS },
+    requestInit: requestInitInmet(fetchImpl),
     logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger,
     prefixoLog: "INMET-PREVISAO",
   });
@@ -506,7 +519,7 @@ async function buscarAvisosInmet(codigoIbge, {
     tentativas: INMET_TENTATIVAS,
     atrasoBaseMs: 1000,
     esperarFn,
-    requestInit: { headers: HEADERS },
+    requestInit: requestInitInmet(fetchImpl),
     logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger,
     prefixoLog: "INMET-AVISOS",
   });
