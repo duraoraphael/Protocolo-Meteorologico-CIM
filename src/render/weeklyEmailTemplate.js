@@ -179,7 +179,7 @@ function renderWeeklyEmailHtml(r) {
         <tr><td style="height:3px;background:${brand.amarelo};line-height:3px;font-size:0;">&nbsp;</td></tr>
         <tr><td style="padding:12px 24px 18px 24px;text-align:center;color:#888;font-size:10.5px;">
           Gerado automaticamente por ferramenta assistida por IA em ${esc(r.dataGeracao)} às ${esc(r.horaGeracao)}.
-          Sujeito a revisão humana antes de uso operacional. Fontes: INMET; Clima e Saúde; Open-Meteo somente para condição, UV e mar.
+          Sujeito a revisão humana antes de uso operacional. Fontes: INMET e Clima e Saúde. Campos sem fonte autorizada aparecem como informação indisponível.
         </td></tr>
 
       </table>

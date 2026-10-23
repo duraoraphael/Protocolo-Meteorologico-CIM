@@ -23,13 +23,13 @@ function relatorio(sobrescritas = {}) {
       { periodo: 'Noite', janela: '18h–00h', probabilidade: null, precipitacaoMm: null, resumoInmet: 'Muitas nuvens' },
     ],
     previsaoDias: [{ chuvaMm: 0 }],
-    qualidadeAr: { fonte: 'Open-Meteo Air Quality', aqiPm25: 18, pm25Medio: 14.5, pm25Periodo: 'média diária', pm25Classificacao: { nivel: 'Boa' }, uvMax: 11.2, uvClassificacao: { nivel: 'Extremo' } },
+    qualidadeAr: { fonte: 'Qualidade do ar estimada — Open-Meteo/CAMS', iqar: 18, classificacao: { nivel: 'Boa', exibicao: 'Boa (Normal)', cor: '#00843D' }, referenciaEm: '2026-09-28T10:00', pm25Medio: 14.5, pm25Periodo: 'média diária', uvMax: 11.2, uvClassificacao: { nivel: 'Extremo' } },
     mar: { fonte: 'Open-Meteo Marine', alturaMaxDiaM: 0.7, estadoMarDia: 'Leve' },
     fontesPorCampo: {
       condicaoGeral: 'INMET — previsão oficial', tempMin: 'INMET — previsão oficial', tempMax: 'INMET — previsão oficial',
       umidadeMin: 'INMET — previsão oficial', umidadeMax: 'INMET — previsão oficial',
       'periodos.tarde.rajadaMaxKmh': 'INMET — previsão oficial',
-      precipitacaoTotalMm: 'INMET — estação automática — observado', precipitacaoDiariaMm: 'INMET — estação automática — observado', 'ar.pm25Medio': 'Open-Meteo Air Quality',
+      precipitacaoTotalMm: 'INMET — estação automática — observado', precipitacaoDiariaMm: 'INMET — estação automática — observado', 'ar.iqar': 'Qualidade do ar estimada — Open-Meteo/CAMS', 'ar.pm25Medio': 'Open-Meteo Air Quality',
       'ar.uvMax': 'Open-Meteo Air Quality', 'mar.alturaMaxDiaM': 'Open-Meteo Marine',
     },
     severidade: { grau: 'NORMAL', eventos: [] }, avisosInmet: [],
@@ -58,7 +58,7 @@ test('cabeçalho, indicadores e rodapé usam dados e fontes do relatório', () =
     'CHUVA ACUMULADA/DIA', '0 mm', 'PROBABILIDADE DE CHUVA', '85%', 'CALOR', 'Dado indisponível',
     'MAR — ALTURA MÁX. DE ONDA', '0.7 m', 'CONDIÇÃO GERAL',
     'Fontes de dados:', 'INMET', 'Clima e Saúde — Ministério da Saúde',
-    'Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)',
+    'Petrobras — OCEANOP', 'Tetra Tech (quando autorizado)',
     'Informativo gerado automaticamente pelo Protocolo Meteorológico do COMPARTILHADO.',
   ]) assert.ok(html.includes(texto), texto);
   for (const secaoRemovida of ['Temperatura e umidade', 'Vento por período', 'Chuva por período']) {
@@ -109,7 +109,7 @@ test('card de e-mail usa a máxima OCEANOP da janela, não outra rajada fora del
 });
 
 test('informativos de 05h e 15h exibem exatamente a lista institucional de fontes', () => {
-  const fontesEsperadas = 'INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)';
+  const fontesEsperadas = 'INMET | Clima e Saúde — Ministério da Saúde | Petrobras — OCEANOP | Tetra Tech (quando autorizado)';
   for (const horarioAgendado of ['05:00', '15:00']) {
     const $ = cheerio.load(renderEmailHtml(relatorio({ horarioAgendado, previsaoAte: '00h' })));
     const linhaFontes = $('strong').filter((_, elemento) => $(elemento).text() === 'Fontes de dados:').parent();
@@ -215,7 +215,7 @@ test('previsão de todas as edições fica à direita, até 00h e com escrita pa
     assert.ok(html.indexOf(frase) < html.indexOf('RAJADA PREVISTA'));
     assert.equal((html.match(new RegExp(frase, 'g')) || []).length, 1);
     assert.doesNotMatch(html, /\| Previsão até/);
-    assert.match($.text(), /Fontes de dados:[^]*Open-Meteo/);
+    assert.match($.text(), /Fontes de dados:[^]*Petrobras — OCEANOP/);
   }
 });
 
@@ -235,7 +235,7 @@ test('card de qualidade do ar exibe somente a classificação dinâmica', () => 
   const html = semImagem(renderEmailHtml(relatorio({
     qualidadeAr: {
       fonte: 'Open-Meteo Air Quality', pm25Medio: 27.4, pm25Periodo: 'média diária',
-      aqiPm25: 42, pm25Classificacao: { nivel: 'Moderada' }, uvMax: 5,
+      iqar: 42, classificacao: { nivel: 'Moderada', exibicao: 'Moderada', cor: '#F2C500' }, referenciaEm: '2026-09-28T10:00', uvMax: 5,
       uvClassificacao: { nivel: 'Moderado' },
     },
   })));
@@ -245,7 +245,7 @@ test('card de qualidade do ar exibe somente a classificação dinâmica', () => 
   assert.ok(!html.includes('27.4 µg/m³'));
 });
 
-test('card de qualidade do ar não classifica concentração sem AQI oficial', () => {
+test('card de qualidade do ar não classifica concentração sem IQAr válido', () => {
   const html = semImagem(renderEmailHtml(relatorio({
     qualidadeAr: { pm25Medio: 27.4, pm25Classificacao: { nivel: 'Moderada' } },
   })));
@@ -327,7 +327,7 @@ test('dados ausentes mostram Dado indisponível sem fabricar números nem fontes
     const card = grade.find('div').filter((_, elemento) => $(elemento).text().trim() === rotulo).first().closest('td');
     assert.match(card.text(), /Dado indisponível/, rotulo);
   }
-  assert.ok(html.includes('INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)'));
+  assert.ok(html.includes('INMET | Clima e Saúde — Ministério da Saúde | Petrobras — OCEANOP | Tetra Tech (quando autorizado)'));
   assert.ok(!html.includes('null°C') && !html.includes('undefined'));
   assert.ok(!html.includes('Fonte: INMET'));
 });
@@ -374,7 +374,7 @@ test('alerta, aviso oficial e recomendações aparecem uma vez e na ordem solici
   assert.ok(textoAviso.includes('Vigência: 14:00 até 18:00'));
   assert.ok(textoAviso.includes('Instruções oficiais: Busque abrigo.'));
   assert.ok(textoAviso.includes('Fonte de dados: INMET'));
-  assert.ok(vento.text().replace(/\s+/g, ' ').includes('Fonte de dados: INMET — fonte prioritária consultada | Open-Meteo — previsão complementar'));
+  assert.ok(vento.text().replace(/\s+/g, ' ').includes('Fonte de dados: Open-Meteo'));
   assert.ok(vento.attr('style').includes(`border:1.5px solid ${VISUAL_NIVEL.ALERTA.cor}`));
   assert.ok(aviso.attr('style').includes(`border:1.5px solid ${VISUAL_NIVEL['ATENÇÃO'].cor}`));
   assert.ok(!html.includes('Fonte de critério') && !html.includes('A condição atingiu'));
@@ -399,7 +399,7 @@ test('aviso oficial INMET reutiliza exatamente o componente visual dos demais ca
   assert.equal(cardInmet.find('[data-alert-level]').attr('style'), cardLocal.find('[data-alert-level]').attr('style'));
 });
 
-test('aviso oficial identifica INMET como previsão principal antes do complemento numérico', () => {
+test('aviso oficial identifica INMET e preserva separadamente a fonte numérica', () => {
   const html = semImagem(renderEmailHtml(relatorio({
     rajadaMaxKmh: 49,
     fontesPorCampo: {
@@ -417,8 +417,7 @@ test('aviso oficial identifica INMET como previsão principal antes do complemen
   const aviso = $('table[data-alert-card]').filter((_, card) => $(card).text().includes('Aviso: Tempestade')).first();
   const texto = aviso.text().replace(/\s+/g, ' ');
   assert.match(texto, /Fonte de dados: INMET/);
-  assert.match(texto, /Fonte da previsão: INMET — previsão principal \| Open-Meteo — previsão complementar/);
-  assert.doesNotMatch(texto, /Fonte da previsão: Open-Meteo — previsão complementar(?!\s*\|)/);
+  assert.match(texto, /Fonte da previsão: Open-Meteo — previsão complementar/);
 });
 
 test('aviso INMET usa a cor do seu nível e a linha dinâmica fica escura sobre o fundo do nível', () => {
@@ -461,7 +460,7 @@ test('e-mail omite completamente as previsões dos próximos dias', () => {
   assert.ok(!tarde.includes('ATENÇÃO → ALERTA'));
   assert.ok(!tarde.includes('ATUALIZAÇÃO DE PREVISÃO'));
   assert.ok(tarde.includes('Fontes de dados:'));
-  assert.ok(tarde.includes('Open-Meteo'));
+  assert.ok(tarde.includes('Petrobras — OCEANOP'));
 });
 
 test('HTML escapa textos externos sem transformar o e-mail em imagem', () => {

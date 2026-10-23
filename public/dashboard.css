@@ -110,6 +110,12 @@ h1 em { color:var(--yellow-petro); font-style:normal; }
 .valor { font-size:clamp(24px,1.75vw,30px); font-weight:700; font-variant-numeric:tabular-nums; line-height:1.15; margin-top:10px; letter-spacing:-.02em; overflow-wrap:anywhere; }
 .valor small { font-size:.55em; font-weight:500; letter-spacing:0; }
 .condition .valor,.air .valor { font-size:21px; }
+.iqar-classe { font-weight:700; }
+.iqar-boa { color:#31c779; }
+.iqar-moderada { color:#f2c500; }
+.iqar-ruim { color:#ff8a26; }
+.iqar-muito-ruim { color:#ff5b5b; }
+.iqar-pessima { color:#d6a0ed; }
 .detalhe { font-size:11.5px; line-height:1.4; color:#a6c2b9; margin:6px 0 0; }
 [class*="uv-"] .icon { color:var(--yellow-petro); }
 .uv-baixo .valor { color:#64d99b; }.uv-moderado .valor { color:var(--yellow-petro); }.uv-alto .valor { color:var(--orange-alert); }.uv-muito_alto .valor { color:var(--red-alert); }.uv-extremo .valor { color:#d6a0ed; }

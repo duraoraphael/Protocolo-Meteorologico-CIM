@@ -99,7 +99,10 @@ function resumirPeriodo(horas, chave) {
     alturaMediaM: arredondar(media(pegar("wave_height"))),
     periodoOndaS: arredondar(media(pegar("wave_period"))),
     direcaoOnda: direcaoCardinal(mediaCircular(pegar("wave_direction"))),
+    ondaVentoMaxM: arredondar(maximo(pegar("wind_wave_height"))),
     marulhoMaxM: arredondar(maximo(pegar("swell_wave_height"))),
+    direcaoMarulho: direcaoCardinal(mediaCircular(pegar("swell_wave_direction"))),
+    periodoMarulhoS: arredondar(media(pegar("swell_wave_period"))),
     estadoMar: classificarEstadoMar(alturaMax),
   };
 }
@@ -126,7 +129,7 @@ async function buscarMar(latitude, longitude, {
     latitude: String(latitude),
     longitude: String(longitude),
     hourly:
-      "wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,sea_surface_temperature",
+      "wave_height,wave_period,wave_direction,wind_wave_height,swell_wave_height,swell_wave_direction,swell_wave_period,sea_surface_temperature",
     timezone: fuso,
     forecast_days: "1",
   });
@@ -215,8 +218,14 @@ async function buscarMarComFallback(cidade, {
   salvarCache = salvarCacheMarine,
   agora = () => new Date(),
 } = {}) {
-  const ponto = cidade.pontoMar || { latitude: cidade.latitude, longitude: cidade.longitude };
+  const ponto = cidade.pontoMar;
   const checkedAt = agora().toISOString();
+  if (!ponto || !Number.isFinite(ponto.latitude) || !Number.isFinite(ponto.longitude)) {
+    const erro = Object.assign(new Error("Open-Meteo Marine: base costeira sem ponto marítimo validado."), {
+      code: "MARINE_POINT_NOT_CONFIGURED", tipo: "configuration", transitorio: false,
+    });
+    return { dados: null, erro, health: indisponivel("Open-Meteo Marine", erro, erro.message, { checkedAt }) };
+  }
   try {
     const resultado = await consultar(ponto.latitude, ponto.longitude, {
       fuso: cidade.fusoHorario || "America/Sao_Paulo",

@@ -70,7 +70,7 @@ test("somente 08h e 15h compõem o agendamento automático regular", () => {
     assert.equal(v.validoAteISO, horario === "08:00" ? "2026-10-16T18:00:00.000Z" : "2026-10-17T11:00:00.000Z");
     const prob = probabilidadeChuvaDaEdicao({
       horarioAgendado: horario,
-      openMeteo: { chuvaHoraria: [{ horario: "06:00", probabilidade: 90 }, { horario: "21:00", probabilidade: 40 }] },
+      openMeteo: { probabilidadeChuvaMax: 40, janelaHoje: { rotulo: `${String(hora).padStart(2, "0")}h–00h` } },
     });
     assert.equal(prob.janela, `${String(hora).padStart(2, "0")}h–00h`);
     assert.equal(prob.valor, 40, `${horario} ignora horas anteriores à edição`);
@@ -92,5 +92,5 @@ test("edição das 08h é a edição inicial regular", () => {
   assert.equal(tipoDocumentoPorHorario("08:00"), TIPOS_DOCUMENTO.INFORMATIVO_08H);
   assert.ok(informativoProgramado(TIPOS_DOCUMENTO.INFORMATIVO_08H));
   assert.equal(validade("08:00", new Date("2026-10-21T11:00:00.000Z")).validoDeISO, "2026-10-21T11:00:00.000Z");
-  assert.equal(probabilidadeChuvaDaEdicao({ horarioAgendado: "08:00", openMeteo: { chuvaHoraria: [{ horario: "07:00", probabilidade: 90 }, { horario: "08:00", probabilidade: 40 }] } }).valor, 40);
+  assert.equal(probabilidadeChuvaDaEdicao({ horarioAgendado: "08:00", openMeteo: { probabilidadeChuvaMax: 40, janelaHoje: { rotulo: "08h–00h" } } }).valor, 40);
 });

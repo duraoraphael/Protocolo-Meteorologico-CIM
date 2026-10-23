@@ -1,123 +1,114 @@
-// Fonte: Open-Meteo Air Quality (https://open-meteo.com/en/docs/air-quality-api)
-// A produção usa o endpoint comercial customer-* com chave. Fornece material particulado (PM2.5/PM10)
-// e poeira, além do índice UV previsto pelo CAMS/Open-Meteo.
-//
-// Relevante para o protocolo do CIM por qualidade do ar respirável, especialmente em bases próximas a
-//   polos industriais/refinarias e em períodos de queimadas.
-
-const {
-  API_TIMEOUT_MS,
-  API_TENTATIVAS,
-  buscarJsonComRetentativa,
-} = require("./httpJsonClient");
+const { buscarJsonComRetentativa } = require("./httpJsonClient");
 const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
 
-const OPEN_METEO_AIR_TIMEOUT_MS = API_TIMEOUT_MS;
-const OPEN_METEO_AIR_TENTATIVAS = API_TENTATIVAS;
+const SOURCE = "Open-Meteo Air Quality / CAMS";
+const VARS = ["pm2_5", "pm10", "ozone", "nitrogen_dioxide", "sulphur_dioxide", "carbon_monoxide"];
+const POLUENTES = Object.freeze({
+  pm10: { nome: "MP10", unidade: "µg/m³", horas: 24, faixas: [[45,40],[100,80],[150,120],[250,200],[600,400]] },
+  pm2_5: { nome: "MP2,5", unidade: "µg/m³", horas: 24, faixas: [[15,40],[50,80],[75,120],[125,200],[300,400]] },
+  ozone: { nome: "O₃", unidade: "µg/m³", horas: 8, faixas: [[100,40],[130,80],[160,120],[200,200],[800,400]] },
+  nitrogen_dioxide: { nome: "NO₂", unidade: "µg/m³", horas: 1, faixas: [[200,40],[240,80],[320,120],[1130,200],[3750,400]] },
+  sulphur_dioxide: { nome: "SO₂", unidade: "µg/m³", horas: 24, faixas: [[40,40],[50,80],[125,120],[800,200],[2620,400]] },
+});
 
-function classificarUv(uv) {
-  if (uv === null || uv === undefined) return { nivel: "Sem dado", categoria: null };
-  if (uv < 3) return { nivel: "Baixo", categoria: "baixo" };
-  if (uv < 6) return { nivel: "Moderado", categoria: "moderado" };
-  if (uv < 8) return { nivel: "Alto", categoria: "alto" };
-  if (uv < 11) return { nivel: "Muito alto", categoria: "muito_alto" };
-  return { nivel: "Extremo", categoria: "extremo" };
-}
-
-// European Air Quality Index publicado pela Open-Meteo a partir dos dados
-// CAMS. Os limites são os do índice europeu documentado pela própria API.
-function classificarAqiEuropeu(aqi) {
-  if (!Number.isFinite(aqi)) return { nivel: "Sem dado", categoria: null };
-  if (aqi <= 20) return { nivel: "Boa", categoria: "boa" };
-  if (aqi <= 40) return { nivel: "Razoável", categoria: "razoavel" };
-  if (aqi <= 60) return { nivel: "Moderada", categoria: "moderada" };
-  if (aqi <= 80) return { nivel: "Ruim", categoria: "ruim" };
-  if (aqi <= 100) return { nivel: "Muito ruim", categoria: "muito_ruim" };
-  return { nivel: "Extremamente ruim", categoria: "extremamente_ruim" };
-}
-
-function maximo(valores) {
-  const validos = (valores || []).filter(Number.isFinite);
-  return validos.length ? Math.max(...validos) : null;
-}
-
-function media(valores) {
-  const validos = (valores || []).filter(Number.isFinite);
-  if (!validos.length) return null;
-  return validos.reduce((a, b) => a + b, 0) / validos.length;
-}
-
-function arredondar(valor, casas = 1) {
-  if (valor === null) return null;
-  const f = Math.pow(10, casas);
-  return Math.round(valor * f) / f;
-}
-
-async function buscarQualidadeAr(latitude, longitude, {
-  fuso = "America/Sao_Paulo",
-  fetchImpl = fetch,
-  timeoutMs = OPEN_METEO_AIR_TIMEOUT_MS,
-  esperarFn,
-  logger,
-} = {}) {
-  const params = new URLSearchParams({
-    latitude: String(latitude),
-    longitude: String(longitude),
-    hourly: "pm10,pm2_5,dust,carbon_monoxide,european_aqi_pm2_5,uv_index",
-    timezone: fuso,
-    forecast_days: "1",
-  });
-
-  const url = aplicarConfiguracaoOpenMeteo(`https://air-quality-api.open-meteo.com/v1/air-quality?${params.toString()}`);
-
-  const json = await buscarJsonComRetentativa(url, {
-    nomeFonte: "Open-Meteo Air Quality",
-    fetchImpl,
-    timeoutMs,
-    tentativas: OPEN_METEO_AIR_TENTATIVAS,
-    esperarFn,
-    logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger,
-    prefixoLog: "OPEN-METEO-AIR",
-  });
-  if (json.timezone && json.timezone !== fuso) {
-    const erro = new Error(`Open-Meteo Air Quality retornou fuso divergente (${json.timezone}).`);
-    erro.name = "ParserError";
-    throw erro;
+function calcularSubindice(concentracao, faixas) {
+  if (!Number.isFinite(concentracao) || concentracao < 0 || concentracao > faixas.at(-1)[0]) return null;
+  let limiteConcentracao = 0;
+  let limiteIndice = 0;
+  for (const [cHigh, iHigh] of faixas) {
+    if (concentracao <= cHigh) {
+      const calculado = limiteIndice + ((iHigh - limiteIndice) / (cHigh - limiteConcentracao)) * (concentracao - limiteConcentracao);
+      return Math.round(calculado);
+    }
+    limiteConcentracao = cHigh;
+    limiteIndice = iHigh;
   }
-  const horas = json.hourly || {};
-  if (!Array.isArray(horas.time) || !horas.time.length) {
-    const erro = new Error("Open-Meteo Air Quality retornou payload sem série horária.");
-    erro.name = "ParserError";
-    throw erro;
+  return null;
+}
+
+function mediaNoFimDaJanela(times, values, fim, horas) {
+  const inicio = Date.parse(`${fim}:00Z`);
+  const alvo = Array.from({ length: horas }, (_, i) => new Date(inicio - (horas - 1 - i) * 3600000).toISOString().slice(0, 16));
+  const indices = new Map(times.map((t, i) => [t.slice(0, 16), i]));
+  const selecionados = alvo.map((ts) => indices.get(ts));
+  if (selecionados.some((i) => i === undefined)) return null;
+  const dados = selecionados.map((i) => values[i]);
+  if (dados.some((n) => !Number.isFinite(n) || n < 0)) return null;
+  return dados.reduce((a, b) => a + b, 0) / dados.length;
+}
+
+function calcularIQAr(json, { now = new Date() } = {}) {
+  const h = json?.hourly;
+  if (!Array.isArray(h?.time) || !h.time.length) throw new Error("CAMS sem série horária de tempo.");
+  for (const v of VARS) {
+    if (!Array.isArray(h[v]) || h[v].length !== h.time.length) throw new Error(`CAMS sem série alinhada para ${v}.`);
   }
-
-  const pm25Medio = media(horas.pm2_5);
-  const aqiPm25 = maximo(horas.european_aqi_pm2_5);
-  const pm10Medio = media(horas.pm10);
-  const poeiraMax = maximo(horas.dust);
-  const uvMax = maximo(horas.uv_index);
-  const indicePicoUv = Array.isArray(horas.uv_index) && Number.isFinite(uvMax)
-    ? horas.uv_index.findIndex((valor) => valor === uvMax)
-    : -1;
-
+  const unidades = json.hourly_units || {};
+  for (const v of Object.keys(POLUENTES)) if (!/µg\/m³|μg\/m³/i.test(unidades[v] || "")) throw new Error(`Unidade ausente ou incompatível para ${v}.`);
+  const offset = Number(json.utc_offset_seconds || 0);
+  const horaLocal = new Date(now.getTime() + offset * 1000).toISOString().slice(0, 13);
+  const disponiveis = h.time.filter((t) => t.slice(0, 13) <= horaLocal);
+  if (!disponiveis.length) throw new Error("CAMS não retornou observação estimada até a hora atual.");
+  const fim = disponiveis.at(-1);
+  if (Date.parse(`${fim}:00Z`) < Date.parse(`${horaLocal}:00Z`) - 3 * 3600000) throw new Error("CAMS sem estimativa recente (defasagem acima de 3 horas).");
+  const subindices = [];
+  for (const [chave, meta] of Object.entries(POLUENTES)) {
+    const media = mediaNoFimDaJanela(h.time, h[chave], fim, meta.horas);
+    const indice = media === null ? null : calcularSubindice(media, meta.faixas);
+    if (indice !== null) subindices.push({ poluente: meta.nome, concentracao: media, unidade: meta.unidade, periodoHoras: meta.horas, indice });
+  }
+  if (!subindices.length) throw new Error("CAMS não forneceu janelas completas para calcular IQAr brasileiro.");
+  const pior = subindices.reduce((a, b) => b.indice > a.indice ? b : a);
   return {
-    fonte: "Open-Meteo Air Quality / CAMS",
-    url: removerCredenciaisOpenMeteo(url),
-    pm25Medio: arredondar(pm25Medio),
-    aqiPm25: arredondar(aqiPm25),
-    pm25Classificacao: classificarAqiEuropeu(aqiPm25),
-    pm10Medio: arredondar(pm10Medio),
-    poeiraMax: arredondar(poeiraMax),
-    uvMax: arredondar(uvMax),
-    horaPicoUv: indicePicoUv >= 0 ? String(horas.time[indicePicoUv]).slice(11, 16) : null,
-    uvClassificacao: classificarUv(uvMax),
+    iqar: pior.indice,
+    classificacao: classificarIQAr(pior.indice),
+    subindiceResponsavel: pior.poluente,
+    subindices,
+    referenciaEm: fim,
+    consultadoEm: now.toISOString(),
+    coordenadaGrade: { latitude: json.latitude, longitude: json.longitude },
   };
 }
 
-module.exports = {
-  buscarQualidadeAr,
-  classificarUv,
-  classificarAqiEuropeu,
-  OPEN_METEO_AIR_TIMEOUT_MS,
-  OPEN_METEO_AIR_TENTATIVAS,
-};
+function classificarIQAr(indice) {
+  if (!Number.isFinite(indice)) return null;
+  if (indice <= 40) return { nivel: "Boa", exibicao: "Boa (Normal)", cor: "#00843D" };
+  if (indice <= 80) return { nivel: "Moderada", exibicao: "Moderada", cor: "#F2C500" };
+  if (indice <= 120) return { nivel: "Ruim", exibicao: "Ruim", cor: "#E87500" };
+  if (indice <= 200) return { nivel: "Muito Ruim", exibicao: "Muito Ruim", cor: "#D92828" };
+  if (indice <= 400) return { nivel: "Péssima", exibicao: "Péssima", cor: "#7826A8" };
+  return null;
+}
+
+function criarUrl(cidade) {
+  const url = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
+  url.searchParams.set("latitude", cidade.latitude);
+  url.searchParams.set("longitude", cidade.longitude);
+  url.searchParams.set("hourly", VARS.join(","));
+  url.searchParams.set("timezone", cidade.fusoHorario || "America/Sao_Paulo");
+  url.searchParams.set("past_hours", "48");
+  url.searchParams.set("forecast_hours", "1");
+  return url.toString();
+}
+
+async function buscarQualidadeAr(cidade, { fetchImpl = fetch, now = new Date(), env = process.env } = {}) {
+  const apiKey = String(env.OPEN_METEO_API_KEY || "").trim();
+  if (!apiKey) {
+    const error = new Error("Licença comercial da Open-Meteo/CAMS não configurada (OPEN_METEO_API_KEY ausente).");
+    error.code = "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED";
+    throw error;
+  }
+  const url = aplicarConfiguracaoOpenMeteo(criarUrl(cidade), env);
+  const json = await buscarJsonComRetentativa(url, { nomeFonte: SOURCE, fetchImpl });
+  const dados = calcularIQAr(json, { now });
+  return {
+    ...dados,
+    fonte: "Qualidade do ar estimada — Open-Meteo/CAMS",
+    fonteTipo: "estimativa_modelada",
+    latitudeSolicitada: cidade.latitude,
+    longitudeSolicitada: cidade.longitude,
+    url: removerCredenciaisOpenMeteo(url),
+  };
+}
+
+module.exports = { SOURCE, VARS, POLUENTES, calcularSubindice, calcularIQAr, classificarIQAr, buscarQualidadeAr };

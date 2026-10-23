@@ -382,9 +382,9 @@ function tabelaMar(mar, fontesPorCampo = {}) {
   if (!mar?.periodos?.length) return "";
   const fonte = fontesPorCampo["mar.alturaMaxDiaM"] && fontesPorCampo["mar.alturaMaxDiaM"] !== "Indisponível"
     ? fontesPorCampo["mar.alturaMaxDiaM"]
-    : mar.fonte || "Open-Meteo Marine";
+    : mar.fonte || "Informação indisponível";
   const temperatura = mar.temperaturaMarC != null
-    ? ` Temperatura média da superfície do mar: ${mar.temperaturaMarC}°C (${esc(fontesPorCampo["mar.temperaturaMarC"] || "Open-Meteo Marine")}).`
+    ? ` Temperatura média da superfície do mar: ${mar.temperaturaMarC}°C (${esc(fontesPorCampo["mar.temperaturaMarC"] || "Informação indisponível")}).`
     : "";
   const alturaPeriodo = (periodo) => {
     if (periodo.alturaOndaM != null && periodo.alturaMaxM != null) return `${periodo.alturaOndaM} m (máx. ${periodo.alturaMaxM} m)`;
@@ -423,40 +423,28 @@ function tabelaMar(mar, fontesPorCampo = {}) {
 
 function tabelaQualidadeAr(qa, indiceUv, fontesPorCampo = {}) {
   qa ||= {};
-  const fontePm = fontesPorCampo["ar.pm25Medio"] && fontesPorCampo["ar.pm25Medio"] !== "Indisponível" ? fontesPorCampo["ar.pm25Medio"] : "Open-Meteo Air Quality";
-  const linhasParticulado = [
-    qa.pm25Medio == null ? "" : `<tr class="zebra">
-      <td>Material particulado inalável (PM2,5)</td>
-      <td>${qa.pm25Medio} µg/m³</td>
-      <td>—</td>
-      <td>Diretriz OMS 2021: até 15 µg/m³</td>
-    </tr>`,
-    qa.pm10Medio == null ? "" : `<tr>
-      <td>Material particulado inalável (PM10)</td>
-      <td>${qa.pm10Medio} µg/m³</td>
-      <td>—</td>
-      <td>Diretriz OMS 2021: até 45 µg/m³</td>
-    </tr>`,
-  ].join("");
+  const fontePm = fontesPorCampo["ar.iqar"] && !/indisponível/i.test(fontesPorCampo["ar.iqar"])
+    ? fontesPorCampo["ar.iqar"]
+    : Number.isFinite(qa.iqar) ? (qa.fonte || "Qualidade do ar estimada — Open-Meteo/CAMS") : "Informação indisponível";
+  const classificacaoAr = Number.isFinite(qa.iqar) ? qa.classificacao : null;
   const uvDisponivel = Number.isFinite(indiceUv?.valorAtual) && Boolean(indiceUv?.classificacao);
   const uvValor = uvDisponivel ? indiceUv.valorAtual : "Índice UV indisponível";
   const uvClassificacao = uvDisponivel ? indiceUv.classificacao : "Não disponível";
   const uvReferencia = uvDisponivel
-    ? "Previsão e classificação calculada a partir do índice publicado pela Open-Meteo/CAMS."
+    ? "Previsão e classificação calculada a partir da fonte autorizada indicada."
     : "A fonte integrada de índice UV não retornou um valor válido nesta atualização.";
   return blocoTabela({
     titulo: `<h4 class="subsecao">Qualidade do Ar e Índice UV</h4>`,
-    fonte: `Fonte de dados: ${esc(fontePm)} / CAMS (material particulado e índice UV). ${uvDisponivel ? "Indicador UV previsto disponível." : "Indicador UV indisponível nesta atualização."}`,
+    fonte: `${Number.isFinite(qa.iqar) ? "Qualidade do ar estimada — Open-Meteo/CAMS" : "Qualidade do ar indisponível"}. Referência: ${esc(qa.referenciaEm || "indisponível")}. ${esc(fontePm)}. ${uvDisponivel ? "Índice UV previsto disponível." : "Índice UV indisponível nesta atualização."}`,
     tabela: `<table>
     <thead><tr><th>Indicador</th><th>Valor</th><th>Classificação</th><th>Referência</th></tr></thead>
     <tbody>
       <tr>
-        <td>Qualidade do Ar</td>
-        <td>${Number.isFinite(qa.aqiPm25) ? qa.aqiPm25 : "—"}</td>
-        <td>${Number.isFinite(qa.aqiPm25) ? esc(qa.pm25Classificacao?.nivel) : "—"}</td>
-        <td>${Number.isFinite(qa.aqiPm25) ? "Classificação informada pela Open-Meteo/CAMS" : "Classificação indisponível"}</td>
+        <td>Índice brasileiro (IQAr)</td>
+        <td>${Number.isFinite(qa.iqar) ? qa.iqar : "—"}</td>
+        <td>${classificacaoAr ? `<strong style="color:${esc(classificacaoAr.cor)}">${esc(classificacaoAr.exibicao)}</strong>` : "Informação indisponível"}</td>
+        <td>${classificacaoAr ? `Maior subíndice: ${esc(qa.subindiceResponsavel || "—")}` : esc(qa.motivoIndisponibilidade || "Sem dados suficientes/licença")}</td>
       </tr>
-      ${linhasParticulado}
       <tr class="zebra">
         <td>Índice UV</td>
         <td>${esc(uvValor)}</td>
@@ -721,7 +709,7 @@ function blocoPrevisaoAgendada(r, tituloSecao = "") {
   return blocoTabela({
     titulo: tituloSecao,
     tabela: `<table class="previsao-hoje"><thead><tr><th>Período</th><th>Condição</th><th>Temperatura mín./máx.</th><th>Umidade mín./máx.</th><th>Chuva prevista/dia</th><th>Rajada prevista</th><th>Calor</th></tr></thead><tbody>${linhas}</tbody></table>`,
-    fonte: `Fontes por campo: condição — ${fonteAgrupada(["condicaoGeral"], "INMET — previsão oficial")}; temperatura — ${fonteAgrupada(["tempMin", "tempMax"], "INMET — previsão oficial")}; umidade — ${fonteAgrupada(["umidadeMin", "umidadeMax"], "INMET — previsão oficial")}; chuva — ${fonteAgrupada(["precipitacaoTotalMm"], "Dado indisponível")}; probabilidade de chuva — ${fonteAgrupada(["probabilidadeChuvaPrevista"], "Dado indisponível")}; rajada — ${fonteAgrupada(["rajadaMaxKmh"], "Dado indisponível")}; calor — ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))}. O INMET é prioritário e qualquer complemento permanece identificado por campo.`,
+    fonte: `Fontes por campo: condição — ${fonteAgrupada(["condicaoGeral"], "Open-Meteo")}; temperatura — ${fonteAgrupada(["tempMin", "tempMax"], "Open-Meteo")}; umidade — ${fonteAgrupada(["umidadeMin", "umidadeMax"], "Open-Meteo")}; chuva — ${fonteAgrupada(["precipitacaoTotalMm"], "Dado indisponível")}; probabilidade de chuva — ${fonteAgrupada(["probabilidadeChuvaPrevista"], "Dado indisponível")}; rajada — ${fonteAgrupada(["rajadaMaxKmh"], "Dado indisponível")}; calor — ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))}. Cada campo permanece associado à sua fonte efetiva; avisos oficiais são do INMET.`,
   });
 }
 
@@ -811,9 +799,9 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
       </tr></thead>
       <tbody>${linhas}</tbody>
     </table>
-    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "INMET")}; umidade — ${esc(p.fontesCampo?.umidade || "INMET")}; rajada — ${esc(p.fontesCampo?.rajada || "INMET")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; probabilidade de chuva — ${esc(p.fontesCampo?.probabilidadeChuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
+    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "Open-Meteo")}; umidade — ${esc(p.fontesCampo?.umidade || "Open-Meteo")}; rajada — ${esc(p.fontesCampo?.rajada || "Informação indisponível")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; probabilidade de chuva — ${esc(p.fontesCampo?.probabilidadeChuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
       ${p.status === "indisponivel" ? "Tentativa de consulta" : "Atualização (horário da consulta à fonte)"}: ${esc(consulta || "horário indisponível")}, horário local.
-      INMET é prioritário para chuva, vento e rajada; quando não publica um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita na linha de fontes. O índice UV usa Open-Meteo.
+      Open-Meteo fornece a previsão meteorológica; INMET fornece avisos e observações; o portal Tetra Tech fornece rajada somente com cobertura e acesso autorizados. Campos sem fonte válida aparecem como informação indisponível.
       Fonte de dados de calor: ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))} — ${DESCRICAO_CALOR}.</p>
   </div>`;
 }
@@ -851,23 +839,21 @@ function blocosPrevisao(r) {
   const temperatura = blocoTabela({
     titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao secao-modelo">Temperatura e umidade</h4><p class="subtitulo-tabela">Indicadores consolidados do período consultado.</p>`,
     tabela: tabelaTemperatura(r.tabelaTemperaturaUmidade),
-    fonte: fontesTemperatura === "INMET — previsão oficial"
-      ? "Fonte de dados: INMET — previsão oficial."
-      : `Fonte de dados: ${fontesTemperatura || "Dado indisponível"}. INMET é prioritário; complementos são identificados por campo.`,
+    fonte: `Fonte de dados: ${fontesTemperatura || "Dado indisponível"}.`,
   });
   const vento = blocoTabela({
     titulo: `<h4 class="subsecao secao-modelo">Vento por período</h4>`,
     tabela: tabelaVento(r.ventoPorPeriodo),
-    fonte: fonteVento === "Dado indisponível" || fonteVento === "INMET — previsão oficial"
-      ? "Fonte de dados: INMET. A intensidade qualitativa oficial não é convertida em velocidade numérica; campos não publicados aparecem como Não disponível."
-      : `Fonte de dados: ${fonteVento}. A intensidade qualitativa oficial não é convertida em velocidade numérica; OCEANOP é prioritária para rajada em área homologada e as demais fontes permanecem identificadas.`,
+    fonte: fonteVento === "Dado indisponível"
+      ? "Fonte de dados: informação indisponível."
+      : `Fonte de dados: ${fonteVento}. Open-Meteo fornece vento médio e direção; o portal Tetra Tech fornece rajada prevista.`,
   });
   const chuvaPeriodo = blocoTabela({
     titulo: `<h4 class="subsecao secao-modelo">Chuva por período</h4>`,
     tabela: tabelaChuvaPorPeriodo(r.chuvaPorPeriodo),
-    fonte: fonteChuva === "Dado indisponível" || fonteChuva === "INMET — previsão oficial"
-      ? `Fonte de dados: INMET. Probabilidade e acumulado previsto permanecem “Não disponível” quando ausentes no produto municipal; o resumo textual oficial é preservado por período e nenhum total diário é distribuído artificialmente. ${referenciaConsulta(r)}.`
-      : `Fonte de dados: ${fonteChuva}. O resumo textual do INMET é preservado; campos numéricos ausentes podem usar Open-Meteo identificado, sem distribuição artificial de totais. ${referenciaConsulta(r)}.`,
+    fonte: fonteChuva === "Dado indisponível"
+      ? `Fonte de dados: informação indisponível. ${referenciaConsulta(r)}.`
+      : `Fonte de dados: ${fonteChuva}. Probabilidade (%) e volume (mm) permanecem separados; campos ausentes não são estimados. ${referenciaConsulta(r)}.`,
   });
   return `${previsao}${temperatura || (previsao ? "" : tituloSecao)}${vento}${chuvaPeriodo}`;
 }

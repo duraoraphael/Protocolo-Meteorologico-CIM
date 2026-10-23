@@ -93,7 +93,7 @@ test("indicadores do site incluem chuva prevista, probabilidade, hora da consult
   assert.match(tela, /<h2 class="rotulo">Chuva prevista\/dia<\/h2><\/div><div class="valor">1\.1 <small>mm<\/small>/);
   assert.match(tela, /<h2 class="rotulo">Probabilidade de chuva<\/h2><\/div><div class="valor">88%/);
   assert.match(tela, /Hora da consulta:<\/strong> 12:00 \(Horário de Brasília\) <span>\| Previsão até 00h<\/span>/);
-  assert.match(tela, /Fontes de dados:<\/strong> INMET \| Clima e Saúde — Ministério da Saúde \| Open-Meteo/);
+  assert.match(tela, /Fontes de dados:<\/strong> INMET \| Clima e Saúde — Ministério da Saúde \| Petrobras — OCEANOP/);
 });
 
 test("card do e-mail sem ocorrência correspondente vira card próprio; mudanças do dia aparecem", () => {

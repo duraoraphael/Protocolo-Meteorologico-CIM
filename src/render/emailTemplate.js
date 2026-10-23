@@ -100,10 +100,10 @@ function probabilidadeChuvaPrevista(r) {
 }
 
 
-function celulaMetrica(rotulo, valor, ultimaColuna = false) {
+function celulaMetrica(rotulo, valor, ultimaColuna = false, detalhe = "") {
   return `<td colspan="2" width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:${ultimaColuna ? "0" : `1px solid ${COR.borda}`};border-bottom:1px solid ${COR.borda};padding:13px 8px 12px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;">
     <div style="color:${COR.secundario};font:13px/1.3 Arial,sans-serif;text-transform:uppercase;">${rotulo}</div>
-    <div class="email-metric-value" style="color:${COR.texto};font:bold 25px/1.2 Arial,sans-serif;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;">${valor}</div>
+    <div class="email-metric-value" style="color:${COR.texto};font:bold 25px/1.2 Arial,sans-serif;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;">${valor}</div>${detalhe ? `<div style="color:${COR.secundario};font:12px/1.3 Arial,sans-serif;margin-top:4px;">${detalhe}</div>` : ""}
   </td>`;
 }
 
@@ -157,9 +157,14 @@ function resumoMeteorologico(r) {
   const rajadaValor = Number.isFinite(rajada.valor) ? formatarRajadaPrevista(rajada.valor) : "Dado indisponível";
   const chuvaPrevista = chuvaPrevistaAcumulada(r);
   const probabilidade = probabilidadeChuvaPrevista(r);
-  const ar = Number.isFinite(r.qualidadeAr?.aqiPm25) && presente(r.qualidadeAr?.pm25Classificacao?.nivel)
-    ? texto(r.qualidadeAr?.pm25Classificacao?.nivel)
+  const qa = r.qualidadeAr;
+  const arOk = Number.isFinite(qa?.iqar) && presente(qa?.classificacao?.exibicao);
+  const ar = arOk
+    ? `<span style="color:${esc(qa.classificacao.cor)};">${esc(qa.classificacao.exibicao)}</span>`
     : "Dado indisponível";
+  const arDetalhe = arOk
+    ? `IQAr ${qa.iqar} · ${esc(qa.fonte || "Estimativa CAMS")} · ${esc(qa.referenciaEm || "horário indisponível")}`
+    : esc(qa?.motivoIndisponibilidade || "Sem janela válida ou licença comercial configurada");
   return `<table data-email-metrics="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-collapse:collapse;table-layout:fixed;">
     <colgroup>
       <col width="16.67%"><col width="16.67%"><col width="16.66%">
@@ -171,7 +176,7 @@ function resumoMeteorologico(r) {
       ${celulaMetrica("RAJADA PREVISTA", rajadaValor, true)}
     </tr>
     <tr data-email-metric-row="2">
-      ${celulaMetrica("QUALIDADE DO AR", ar)}
+      ${celulaMetrica("QUALIDADE DO AR", ar, false, arDetalhe)}
       ${celulaChuva(
         Number.isFinite(chuvaPrevista) ? numeroUnidade(chuvaPrevista, "mm") : "Dado indisponível",
         Number.isFinite(probabilidade) ? `${esc(probabilidade)}%` : "Indisponível"
@@ -248,7 +253,7 @@ function cartaoAlerta(card) {
   </table>`;
 }
 
-const FONTES_DADOS_EMAIL = "INMET | Clima e Saúde — Ministério da Saúde | Open-Meteo — todos (previsão complementar, Air Quality / CAMS e Marine)";
+const FONTES_DADOS_EMAIL = "INMET | Clima e Saúde — Ministério da Saúde | Petrobras — OCEANOP | Tetra Tech (quando autorizado)";
 
 function fontesDeDados() {
   const relatorio = arguments[0];

@@ -44,17 +44,14 @@ function fetchAna(comp) {
 function fontesOk(extra = {}) {
   const { competenciaDeChave } = require("../src/sources/monitorSecas");
   return {
-    openMeteo: async () => ({
-      condicaoGeral: "Poucas nuvens", tempMin: 21, tempMax: 31,
-      umidadeMin: 50, umidadeMax: 90, precipitacaoTotalMm: 2.5, rajadaMaxKmh: 34,
-    }),
-    qualidadeAr: async () => ({ uvMax: 9, pm25Medio: 35 }),
-    mar: async () => ({ alturaMaxDiaM: 1.1, temperaturaMarC: 26.9 }),
     avisosInmet: async () => ({ avisos: [] }),
     previsaoInmet: async () => ({ data: "13/10/2026", periodos: { manha: PERIODO, tarde: PERIODO, noite: PERIODO } }),
     observacaoInmet: async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: 22, temperaturaMaxC: 37, chuvaUltimaHoraMm: 0.8, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: 31 } }),
+    openMeteo: async () => ({ tempMin: 20, tempMax: 31, umidadeMin: 45, umidadeMax: 90, precipitacaoTotalMm: 2, probabilidadeChuvaMax: 60, uvMax: 8, periodos: { manha: { velocidadeMediaKmh: 12, direcao: "E" } } }),
+    marine: async () => ({ dados: { alturaMaxDiaM: 1.2, periodos: [{ periodoOndaS: 8 }] }, erro: null }),
+    rajadasTetraTech: async () => ({ picosDiarios: [{ rajadaPrevistaKmH: 42 }] }),
     climaSaude: async () => ({ status: "operacional", dados: { dataConsulta: "2026-10-13", municipio: "Rio de Janeiro", uf: "RJ", ehf: { classificacao: "Sem excesso" }, riscoCombinado: "Normal" } }),
-    oceanop: async (area) => ({ previsoes: [{ local: area.local }] }),
+    oceanop: async (ponto) => ({ previsoes: [{ local: ponto.id }] }),
     corRio: (opcoes) => criarServicoCorRio({ ...opcoes, fetchImpl: fetchCorRio, esperarFn: semEspera }),
     fetch: fetchAna(competenciaDeChave("2026-08")),
     ...extra,
@@ -69,7 +66,9 @@ test("todas as fontes saudáveis: nenhum problema; integrações sem configuraç
   const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk() });
   assert.deepEqual(r.problemas, []);
   assert.equal(itemDe(r, "Oceanop").situacao, SITUACAO.OK);
-  assert.equal(itemDe(r, "Licença Open-Meteo").situacao, SITUACAO.NAO_CONFIGURADA);
+  assert.equal(itemDe(r, "Open-Meteo").situacao, SITUACAO.OK);
+  assert.equal(itemDe(r, "Open-Meteo Marine").situacao, SITUACAO.OK);
+  assert.equal(itemDe(r, "Tetra Tech — rajada").situacao, SITUACAO.OK);
 });
 
 test("Clima e Saúde com layout alterado é classificado como formato alterado, não como fora do ar", async () => {
@@ -113,17 +112,11 @@ test("INMET Observação sem temperatura, chuva ou rajada gera campos ausentes",
   assert.match(item.detalhe, /rajada medida pela estação/);
 });
 
-test("falha de DNS no serviço marinho vira indisponível; licença Open-Meteo ausente em produção vira bloqueada", async () => {
-  const dns = Object.assign(new Error("Open-Meteo: falha de resolução DNS"), { tipo: "dns" });
-  const r = await executarVerificacao({
-    cidades: [RIO],
-    env: { NODE_ENV: "production" },
-    fontes: fontesOk({ mar: async () => { throw dns; } }),
-  });
-  assert.equal(itemDe(r, "Open-Meteo Weather").situacao, SITUACAO.OK);
-  assert.equal(itemDe(r, "Open-Meteo Marine").situacao, SITUACAO.INDISPONIVEL);
-  assert.equal(itemDe(r, "Licença Open-Meteo").situacao, SITUACAO.BLOQUEADA);
-  assert.equal(r.problemas.length, 2);
+test("falha de DNS no OCEANOP vira indisponível sem acionar Climatempo", async () => {
+  const dns = Object.assign(new Error("OCEANOP: falha de resolução DNS"), { tipo: "dns" });
+  const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ oceanop: async () => { throw dns; } }) });
+  assert.equal(itemDe(r, "Oceanop").situacao, SITUACAO.INDISPONIVEL);
+  assert.equal(r.itens.some((item) => /Climatempo/i.test(item.fonte)), false);
 });
 
 test("ANA informa a publicação mais recente e avisa quando a competência fixada é outra", async () => {

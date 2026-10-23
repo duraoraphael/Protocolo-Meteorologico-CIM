@@ -8,14 +8,14 @@ const PASTA = path.join(__dirname, "..", "artifacts", "auditoria-alertas-0815");
 
 function previsaoD3() {
   return {
-    fonte: "INMET / Open-Meteo — evidência sem consulta externa",
+    fonte: "INMET / OCEANOP — evidência sem consulta externa",
     status: "ok",
     consultadoEm: "2026-10-21T11:00:00.000Z",
     fuso: "America/Sao_Paulo",
     localidade: { nome: "Macaé", uf: "RJ" },
     fontesCampo: {
       temperatura: "INMET", umidade: "INMET", rajada: "OCEANOP",
-      chuva: "INMET", probabilidadeChuva: "Open-Meteo", uv: "Open-Meteo",
+      chuva: "INMET", probabilidadeChuva: "Informação indisponível", uv: "Informação indisponível",
       condicao: "INMET",
     },
     dias: [
@@ -49,7 +49,7 @@ function relatorio(horarioAgendado) {
     severidade: { grau: inicial ? "ATENÇÃO" : "ALERTA", eventos: [] },
     avisosInmet: [], avisosInmetStatus: "operacional",
     divergencias: [], avisosColeta: [], fontesAutomatizadas: [], fontesManuais: [],
-    fontesPorCampo: { tempMin: "INMET", tempMax: "INMET", umidadeMin: "INMET", umidadeMax: "INMET", rajadaMaxKmh: "OCEANOP", precipitacaoTotalMm: "INMET", probabilidadeChuvaPrevista: "Open-Meteo" },
+    fontesPorCampo: { tempMin: "INMET", tempMax: "INMET", umidadeMin: "INMET", umidadeMax: "INMET", rajadaMaxKmh: "OCEANOP", precipitacaoTotalMm: "INMET", probabilidadeChuvaPrevista: "Informação indisponível" },
     deslocamento: { pedestres: [], transporte: [], condutores: [] },
     edificacao: [],
     previsaoProximosDias: previsaoD3(),

@@ -3,6 +3,7 @@ const path = require("node:path");
 const tls = require("node:tls");
 const { Agent } = require("undici");
 const { buscarJsonComRetentativa, tipoErro } = require("./httpJsonClient");
+const { converterVelocidadeParaKmh } = require("../logic/windUnits");
 
 const FONTE = "INMET — estação automática";
 const URL_BASE = "https://apiprevmet3.inmet.gov.br";
@@ -159,10 +160,10 @@ function normalizarObservacao(payload, { cidade, consultadoEm = new Date().toISO
     umidadeMaxPct,
     umidadeAtualPct,
     chuvaUltimaHoraMm: chuvaMm,
-    ventoVelocidadeKmh: ventoMs === null ? null : arredondar(ventoMs * 3.6, 1),
+    ventoVelocidadeKmh: ventoMs === null ? null : arredondar(converterVelocidadeParaKmh(ventoMs, "m/s"), 1),
     ventoDirecaoGraus: direcaoGraus,
     ventoDirecao: direcaoCardeal(direcaoGraus),
-    rajadaKmh: rajadaMs === null ? null : arredondar(rajadaMs * 3.6, 1),
+    rajadaKmh: rajadaMs === null ? null : arredondar(converterVelocidadeParaKmh(rajadaMs, "m/s"), 1),
     metadados: {
       fonte: FONTE,
       instanteMedicao: medidoEm,

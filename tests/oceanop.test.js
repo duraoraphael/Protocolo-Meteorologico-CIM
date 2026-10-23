@@ -1,11 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  ENDPOINT, FONTE, numero, numeroNoIntervalo, normalizarResposta,
-  validarConsulta, buscarOceanop, mapearOceanopParaVento,
+  ENDPOINT, ENDPOINT_PONTOS, FONTE, numero, numeroNoIntervalo, normalizarResposta,
+  validarConsulta, validarPonto, buscarOceanop, buscarOceanopPorCoordenadas, mapearOceanopParaVento,
   mapearOceanopParaProximosDias, limparCacheOceanop, obterDiagnosticoOceanop,
+  normalizarIdentificadorLocal,
 } = require("../src/sources/oceanop");
 const oceanopAreas = require("../src/config/oceanopAreas");
+const { CIDADES } = require("../src/config/cities");
+const oceanopPontos = require("../src/config/oceanopPontos");
 
 const UNIDADES = Object.freeze({
   VelocidadeVento: "m/s",
@@ -40,11 +43,72 @@ test("converte vírgula decimal, preserva zero e não fabrica ausentes", () => {
   assert.equal(numeroNoIntervalo("360", "DirecaoVento"), 360);
 });
 
+test("POST por coordenadas usa contrato Swagger e associa retorno ao ID da base", async () => {
+  limparCacheOceanop();
+  const chamadas = [];
+  const ponto = oceanopPontos.brasilia;
+  const dados = [registro("22/10/2026", "12:00", { Local: "brasilia" })];
+  const resultado = await buscarOceanopPorCoordenadas(ponto, {
+    fetchImpl: async (url, opcoes) => {
+      chamadas.push({ url: String(url), opcoes });
+      return resposta(dados);
+    },
+    tentativas: 1,
+    env: { OCEANOP_API_KEY: "segredo-de-teste" },
+  });
+  assert.equal(chamadas[0].url, ENDPOINT_PONTOS);
+  assert.equal(chamadas[0].opcoes.method, "POST");
+  assert.deepEqual(JSON.parse(chamadas[0].opcoes.body), [{ ID: "brasilia", Lat: CIDADES.brasilia.latitude, Lon: CIDADES.brasilia.longitude }]);
+  assert.equal(chamadas[0].opcoes.headers["X-API-Key"], "segredo-de-teste");
+  assert.equal(resultado.consulta.id, "brasilia");
+  assert.equal(resultado.previsoes[0].local, "brasilia");
+});
+
+test("cache por coordenadas é isolado entre bases e deduplica chamadas simultâneas", async () => {
+  limparCacheOceanop();
+  let chamadas = 0;
+  const fetchImpl = async (_url, opcoes) => {
+    chamadas += 1;
+    const [{ ID }] = JSON.parse(opcoes.body);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return resposta([registro("22/10/2026", "12:00", { Local: ID })]);
+  };
+  const opcoes = {
+    fetchImpl, tentativas: 1, logger: null,
+    agora: () => new Date("2026-10-22T12:00:00Z"),
+  };
+  const [primeiro, duplicado] = await Promise.all([
+    buscarOceanopPorCoordenadas(oceanopPontos.brasilia, opcoes),
+    buscarOceanopPorCoordenadas(oceanopPontos.brasilia, opcoes),
+  ]);
+  const rio = await buscarOceanopPorCoordenadas(oceanopPontos.rio_de_janeiro, opcoes);
+  const cacheBrasilia = await buscarOceanopPorCoordenadas(oceanopPontos.brasilia, opcoes);
+  assert.equal(chamadas, 2);
+  assert.equal(primeiro.previsoes[0].local, "brasilia");
+  assert.equal(duplicado.previsoes[0].local, "brasilia");
+  assert.equal(rio.previsoes[0].local, "rio_de_janeiro");
+  assert.equal(cacheBrasilia.cache, true);
+});
+
+test("pontos cobrem todas as bases e Brasília não habilita produto marítimo", () => {
+  assert.deepEqual(Object.keys(oceanopPontos).sort(), Object.keys(CIDADES).sort());
+  Object.values(oceanopPontos).forEach(validarPonto);
+  assert.equal(oceanopPontos.brasilia.usarVento, true);
+  assert.equal(oceanopPontos.brasilia.usarMar, false);
+  assert.deepEqual([oceanopPontos.brasilia.latitude, oceanopPontos.brasilia.longitude], [-15.7939869, -47.8828]);
+});
+
 test("valida apenas identificador local e nunca aceita coordenadas no lugar dele", () => {
   assert.deepEqual(validarConsulta(" sururu "), { local: "sururu" });
   assert.deepEqual(validarConsulta(area()), { local: "AREA-A" });
   assert.throws(() => validarConsulta({ latitude: -22, longitude: -43 }), /identificador local/);
   assert.throws(() => validarConsulta("lo\ncal"), /identificador local/);
+});
+
+test("normaliza somente variações textuais equivalentes do identificador local", () => {
+  assert.equal(normalizarIdentificadorLocal("  Macaé  "), "macae");
+  assert.equal(normalizarIdentificadorLocal("RIO-DE JANEIRO"), "rio de janeiro");
+  assert.notEqual(normalizarIdentificadorLocal("Brasília"), normalizarIdentificadorLocal("Rio de Janeiro"));
 });
 
 test("habilita as sete bases informadas em km/h e preserva o fuso de Manaus", () => {
@@ -79,7 +143,10 @@ test("GET sem token envia somente a query local codificada", async () => {
   const resultado = await buscarOceanop(area({ local: "Área Sururu" }), {
     usarCache: false, tentativas: 1, logger: null,
     agora: () => new Date("2026-10-20T08:00:00Z"),
-    fetchImpl: async (url, init) => { chamada = { url: String(url), init }; return resposta(); },
+    fetchImpl: async (url, init) => {
+      chamada = { url: String(url), init };
+      return resposta([registro("20/10/2026", "05:00", { Local: "Área Sururu" })]);
+    },
   });
   const url = new URL(chamada.url);
   assert.equal(url.origin + url.pathname, ENDPOINT);
@@ -90,6 +157,44 @@ test("GET sem token envia somente a query local codificada", async () => {
   assert.equal(chamada.init.headers.Authorization, undefined);
   assert.equal(resultado.previsoes[0].valores.VelocidadeVento_10M_Rajada, 4.99);
   assert.equal(resultado.previsoes[0].valores.Precipitacao, 0);
+});
+
+test("descarta resposta de outra localidade antes de armazenar ou promover dados", async () => {
+  limparCacheOceanop();
+  const areaBrasilia = oceanopAreas.brasilia;
+  const fetchImpl = async () => resposta([
+    registro("20/10/2026", "05:00", { Local: "Rio de Janeiro" }),
+  ]);
+  await assert.rejects(
+    buscarOceanop(areaBrasilia, { fetchImpl, tentativas: 1, logger: null }),
+    { code: "OCEANOP_LOCATION_MISMATCH" },
+  );
+  assert.equal(obterDiagnosticoOceanop().status, "INDISPONIVEL");
+});
+
+test("cache OCEANOP permanece isolado entre Brasília e Rio de Janeiro", async () => {
+  limparCacheOceanop();
+  const chamadas = [];
+  const fetchImpl = async (url) => {
+    const local = new URL(url).searchParams.get("local");
+    chamadas.push(local);
+    return resposta([registro("20/10/2026", "05:00", { Local: local })]);
+  };
+  const opcoes = { fetchImpl, tentativas: 1, logger: null, agora: () => new Date("2026-10-20T08:00:00Z") };
+  const brasilia = await buscarOceanop(oceanopAreas.brasilia, opcoes);
+  const rio = await buscarOceanop(oceanopAreas.rio_de_janeiro, opcoes);
+  const brasiliaCache = await buscarOceanop(oceanopAreas.brasilia, opcoes);
+  assert.deepEqual(chamadas, [oceanopAreas.brasilia.local, oceanopAreas.rio_de_janeiro.local]);
+  assert.equal(brasilia.previsoes[0].local, oceanopAreas.brasilia.local);
+  assert.equal(rio.previsoes[0].local, oceanopAreas.rio_de_janeiro.local);
+  assert.equal(brasiliaCache.cache, true);
+  assert.equal(brasiliaCache.previsoes[0].local, oceanopAreas.brasilia.local);
+});
+
+test("Brasília usa somente vento OCEANOP e nunca recebe produto marítimo", () => {
+  assert.notEqual(CIDADES.brasilia.costeira, true);
+  assert.equal(oceanopAreas.brasilia.usarVento, true);
+  assert.notEqual(oceanopAreas.brasilia.usarMar, true);
 });
 
 test("valida success/data não vazio, datas e ordenação cronológica", () => {

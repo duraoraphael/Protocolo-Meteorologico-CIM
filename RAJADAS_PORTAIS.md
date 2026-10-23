@@ -1,4 +1,4 @@
-# Rajadas previstas — Tetra Tech/OCEANOP e Climatempo
+# Rajadas previstas — portal Tetra Tech
 
 ## Estrutura técnica confirmada
 
@@ -60,9 +60,9 @@ Todos os horários válidos são agrupados pela data civil da cidade. Manaus usa
 maior rajada. Em empate, é preservado o primeiro horário do pico. O resultado
 mantém valor em nós, valor bruto da API, horário, área, consulta e atualização.
 
-O pico diário alimenta o card/resumo “Rajada prevista”, site, e-mail, PDF e
-D+1–D+3. Ele não é copiado para uma linha de “Vento por período” sem que o pico
-pertença comprovadamente àquela janela.
+O pico diário alimenta D+1–D+3. Site, e-mail e PDF usam o maior valor comprovado
+dentro da janela da edição (08h–15h ou 15h–00h); as linhas por período recebem
+somente os valores cujos horários pertencem à manhã, tarde ou noite.
 
 ## Situação por base
 
@@ -75,13 +75,15 @@ pertença comprovadamente àquela janela.
 | Santos | Tetra Tech — `Terrestre/Santos` | Implementada; aguarda credencial para validação real |
 | Vitória | Tetra Tech — `Terrestre/Vitória` | Implementada; aguarda credencial para validação real |
 | Salvador | Tetra Tech — `Terrestre/Salvador` | Implementada; aguarda credencial para validação real |
+| Natal | Tetra Tech — `Terrestre/Natal` | Implementada; aguarda credencial para validação real |
+| Oiapoque | Tetra Tech — `Terrestre/Oiapoque` | Implementada; aguarda credencial para validação real |
 | Araucária | Página indicada de Wenceslau Bráz | Desabilitada; equivalência geográfica não validada |
-| Aracaju | Climatempo | Scraping desabilitado; requer API/licença escrita |
+| Aracaju | Tetra Tech — `Terrestre/Aracaju` | Implementada; aguarda credencial para validação real |
 
-Os [Termos de Uso do Climatempo](https://www.climatempo.com.br/legal/termos-de-uso)
-limitam o uso a finalidades pessoais/não comerciais e vedam robôs, spiders,
-coleta e extração automatizada. Por isso a página não é raspada pelo CIM.
+O domínio e o contrato consultados identificam o serviço como portal Tetra
+Tech. A aplicação não afirma que o payload veio diretamente da API OCEANOP sem
+documentação contratual que comprove essa origem.
 
 Uma cidade somente deve ser declarada operacional após a API autorizada
 retornar dados reais e o pico diário aparecer no fluxo do informativo. Até lá,
-as fontes meteorológicas existentes permanecem como fallback identificado.
+o campo permanece indisponível e a pendência é registrada.

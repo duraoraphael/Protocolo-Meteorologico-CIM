@@ -1,9 +1,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { buscarJsonComRetentativa, API_TENTATIVAS } = require("./httpJsonClient");
+const { converterVelocidadeParaKmh } = require("../logic/windUnits");
 
 const API_BASE = "https://petrobras.ttforecast.com.br/api/v1";
-const FONTE = "Tetra Tech/OCEANOP";
+// O portal e o endpoint comprovam a origem Tetra Tech. Não rotulamos o dado
+// como API OCEANOP sem evidência contratual explícita dessa cadeia de produto.
+const FONTE = "Tetra Tech — portal TTForecast";
 const CAMPO_RAJADA = "10_metre_wind_gust_since_previous_post_processing";
 const METROS_POR_SEGUNDO_POR_NO = 0.514444444444;
 const KMH_POR_NO = 1.852;
@@ -45,11 +48,7 @@ function numero(valor) {
 
 function converterParaKmH(valor, unidade) {
   const n = numero(valor);
-  if (n === null) return null;
-  const u = String(unidade || "").trim().toLowerCase();
-  if (["kt", "kts", "knots", "nó", "nós"].includes(u)) return n * KMH_POR_NO;
-  if (["km/h", "kmh"].includes(u)) return n;
-  return null;
+  return n === null ? null : converterVelocidadeParaKmh(n, unidade);
 }
 
 function arredondar(valor, casas = 2) {
@@ -147,7 +146,7 @@ function dataAtualizacao(payload) {
   return candidatos.find((valor) => valor && Number.isFinite(Date.parse(valor))) || null;
 }
 
-function calcularPicosDiarios(payload, { cidade, areaName, fusoHorario, consultadoEm }) {
+function extrairRegistrosRajada(payload, { cidade, areaName, fusoHorario, consultadoEm }) {
   const timestamps = payload?.timestamps;
   const rajadasMs = payload?.[CAMPO_RAJADA];
   if (!Array.isArray(timestamps) || !Array.isArray(rajadasMs) || timestamps.length !== rajadasMs.length) {
@@ -155,7 +154,7 @@ function calcularPicosDiarios(payload, { cidade, areaName, fusoHorario, consulta
       name: "ParserError", code: "TETRATECH_INVALID_GUST_SERIES", transitorio: false,
     });
   }
-  const porDia = new Map();
+  const registros = [];
   for (let indice = 0; indice < timestamps.length; indice++) {
     const instante = instanteDoTimestamp(timestamps[indice]);
     const valorBrutoMs = numero(rajadasMs[indice]);
@@ -163,7 +162,7 @@ function calcularPicosDiarios(payload, { cidade, areaName, fusoHorario, consulta
     // O endpoint entrega a série base em m/s. O próprio gráfico converte essa
     // série para nós e declara a unidade "nós"; reproduzimos esse contrato.
     const rajadaNos = valorBrutoMs / METROS_POR_SEGUNDO_POR_NO;
-    const rajadaKmH = converterParaKmH(rajadaNos, "kt");
+    const rajadaKmH = converterVelocidadeParaKmh(valorBrutoMs, "m/s");
     const local = partesLocais(instante, fusoHorario);
     const registro = {
       instante,
@@ -173,21 +172,34 @@ function calcularPicosDiarios(payload, { cidade, areaName, fusoHorario, consulta
       rajadaKmH,
       valorBrutoMs,
       indice,
+      cidade,
+      fonte: FONTE,
+      area: areaName,
+      consultadoEm,
     };
-    const atual = porDia.get(local.data);
-    if (!atual || registro.rajadaKmH > atual.rajadaKmH ||
-        (registro.rajadaKmH === atual.rajadaKmH && registro.instante < atual.instante)) {
-      porDia.set(local.data, registro);
-    }
+    registros.push(registro);
   }
-  if (!porDia.size) throw Object.assign(new Error("Tetra Tech/OCEANOP: nenhum valor válido de rajada."), {
+  if (!registros.length) throw Object.assign(new Error("Tetra Tech/OCEANOP: nenhum valor válido de rajada."), {
     name: "ParserError", code: "TETRATECH_NO_VALID_GUSTS", transitorio: false,
   });
+  return registros;
+}
+
+function calcularPicosDiarios(payload, contexto) {
+  const registros = extrairRegistrosRajada(payload, contexto);
+  const porDia = new Map();
+  for (const registro of registros) {
+    const atual = porDia.get(registro.data);
+    if (!atual || registro.rajadaKmH > atual.rajadaKmH ||
+        (registro.rajadaKmH === atual.rajadaKmH && registro.instante < atual.instante)) {
+      porDia.set(registro.data, registro);
+    }
+  }
   const atualizadoEm = dataAtualizacao(payload);
   return [...porDia.values()].sort((a, b) => a.data.localeCompare(b.data)).map((pico) => ({
-    cidade,
+    cidade: contexto.cidade,
     fonte: FONTE,
-    area: areaName,
+    area: contexto.areaName,
     data: pico.data,
     // Limita a precisão operacional: evita expor a cauda binária produzida
     // pela conversão de nós para km/h em site, e-mail, PDF e alertas.
@@ -197,7 +209,7 @@ function calcularPicosDiarios(payload, { cidade, areaName, fusoHorario, consulta
     horarioPico: pico.horario,
     picoEm: pico.instante.toISOString(),
     tipo: "pico_diario",
-    consultadoEm,
+    consultadoEm: contexto.consultadoEm,
     atualizadoEm,
     registroOrigem: {
       campo: CAMPO_RAJADA,
@@ -207,6 +219,23 @@ function calcularPicosDiarios(payload, { cidade, areaName, fusoHorario, consulta
       unidadeBruta: "m/s",
     },
   }));
+}
+
+function selecionarMaximaJanela(registros, data, inicioHora, fimHora) {
+  const candidatos = (Array.isArray(registros) ? registros : []).filter((item) => {
+    const hora = Number(String(item?.horario || "").slice(0, 2));
+    return item?.data === data && Number.isFinite(hora) && hora >= inicioHora && hora < fimHora && Number.isFinite(item?.rajadaKmH);
+  });
+  if (!candidatos.length) return null;
+  const pico = candidatos.reduce((maior, item) => item.rajadaKmH > maior.rajadaKmH ? item : maior);
+  return {
+    cidade: pico.cidade, fonte: pico.fonte, area: pico.area, data: pico.data,
+    rajadaPrevistaKmH: arredondar(pico.rajadaKmH, 2),
+    rajadaOriginal: arredondar(pico.rajadaNos, 2), unidadeOriginal: "kt",
+    horarioPico: pico.horario, picoEm: pico.instante instanceof Date ? pico.instante.toISOString() : String(pico.instante),
+    tipo: "pico_janela", consultadoEm: pico.consultadoEm,
+    janela: `${String(inicioHora).padStart(2, "0")}h–${String(fimHora % 24).padStart(2, "0")}h`,
+  };
 }
 
 function validarAreaConfig(area) {
@@ -285,6 +314,9 @@ async function buscarRajadasTetraTech(cidade, area, {
         pagina: area.pagina,
         fusoHorario: area.fusoHorario,
         consultadoEm,
+        registros: extrairRegistrosRajada(payload, {
+          cidade, areaName: areaApi.name, fusoHorario: area.fusoHorario, consultadoEm,
+        }),
         picosDiarios: calcularPicosDiarios(payload, {
           cidade, areaName: areaApi.name, fusoHorario: area.fusoHorario, consultadoEm,
         }),
@@ -343,6 +375,8 @@ module.exports = {
   arredondar,
   converterParaKmH,
   calcularPicosDiarios,
+  extrairRegistrosRajada,
+  selecionarMaximaJanela,
   lerCachePersistente,
   salvarCachePersistente,
   resultadoPersistidoValido,

@@ -31,6 +31,8 @@ services:
         sync: false
       - key: DASHBOARD_PASSWORD
         sync: false
+      - key: OPEN_METEO_API_KEY
+        sync: false
       - key: CIDADE
         value: rio_de_janeiro
       - key: ENVIO_AUTOMATICO_DIARIO
@@ -45,27 +47,7 @@ services:
         value: "5"
       - key: JANELA_MONITOR
         value: "00:00-24:00"
-      - key: CLIMATEMPO_API_TOKEN
+      - key: OCEANOP_API_KEY
         sync: false
-      - key: CLIMATEMPO_LOCALE_ID_RIO_DE_JANEIRO
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_MACAE
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_BRASILIA
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_MANAUS
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_SANTOS
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_ARACAJU
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_NATAL
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_OIAPOQUE
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_VITORIA
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_ARAUCARIA
-        sync: false
-      - key: CLIMATEMPO_LOCALE_ID_SALVADOR
+      - key: OCEANOP_ACCESS_TOKEN
         sync: false

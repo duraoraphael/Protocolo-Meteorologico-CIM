@@ -68,6 +68,15 @@ function classificarIntensidadeVento(kmh) {
   return "Fraco";
 }
 
+function classificarIndiceUv(valor) {
+  if (!Number.isFinite(valor)) return null;
+  if (valor < 3) return { nivel: "Baixo", faixa: "0–2" };
+  if (valor < 6) return { nivel: "Moderado", faixa: "3–5" };
+  if (valor < 8) return { nivel: "Alto", faixa: "6–7" };
+  if (valor < 11) return { nivel: "Muito alto", faixa: "8–10" };
+  return { nivel: "Extremo", faixa: "11+" };
+}
+
 // Divide as horas de hoje em três períodos operacionais. São as mesmas
 // janelas no painel e nos PDFs das 05h e das 15h (hoje, das 05h até 00h).
 const INICIO_JANELA_HOJE = 5;
@@ -117,7 +126,6 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
     return valores.length === idxs.length && valores.every(Number.isFinite) ? valores : null;
   };
   const velocidades = completa("wind_speed_10m");
-  const rajadas = completa("wind_gusts_10m");
   const direcoes = completa("wind_direction_10m");
   const probs = completa("precipitation_probability");
   const precs = completa("precipitation");
@@ -127,7 +135,6 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
     ? velocidades.reduce((a, b) => a + b, 0) / velocidades.length
     : null;
   const velocidadeMaxKmh = velocidades ? Math.max(...velocidades) : null;
-  const rajadaMaxKmh = rajadas ? Math.max(...rajadas) : null;
   // Média vetorial: a aritmética dos graus erra perto do norte (350° e 10°
   // dariam 180°).
   const direcaoMedia = direcoes ? (Math.atan2(
@@ -146,7 +153,9 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
     intensidadeVento: velocidadeMaxKmh == null ? "Sem dado" : `${classificarIntensidadeVento(Math.round(velocidadeMaxKmh))} (até ${Math.round(velocidadeMaxKmh)} km/h)`,
     velocidadeMediaKmh: velocidadeMediaKmh == null ? null : Math.round(velocidadeMediaKmh),
     velocidadeMaxKmh: velocidadeMaxKmh == null ? null : Math.round(velocidadeMaxKmh),
-    rajadaMaxKmh: rajadaMaxKmh == null ? null : Math.round(rajadaMaxKmh),
+    // Rajada prevista não pertence a esta integração. O campo é mantido nulo
+    // por compatibilidade estrutural e só pode ser preenchido pelo portal TT.
+    rajadaMaxKmh: null,
     probabilidadeChuva: probabilidadeChuva == null ? null : Math.round(probabilidadeChuva),
     precipitacaoMm: precipitacaoMm == null ? null : Math.round(precipitacaoMm * 10) / 10,
     precipitacaoHorariaMaxMm:
@@ -154,7 +163,7 @@ function resumirPeriodo(horas, chave, { dataReferencia, inicioHora = INICIO_JANE
         ? null
         : Math.round(precipitacaoHorariaMaxMm * 10) / 10,
     tempestade,
-    disponivel: [velocidadeMaxKmh, rajadaMaxKmh, probabilidadeChuva, precipitacaoMm].some(Number.isFinite) || codigos.length > 0,
+    disponivel: [velocidadeMaxKmh, probabilidadeChuva, precipitacaoMm].some(Number.isFinite) || codigos.length > 0,
   };
 }
 
@@ -176,9 +185,31 @@ function validarResposta(json, fuso) {
     erro.name = "ParserError";
     throw erro;
   }
+  const seriesEsperadas = [
+    ["hourly", "temperature_2m"], ["hourly", "relative_humidity_2m"],
+    ["hourly", "precipitation_probability"], ["hourly", "precipitation"],
+    ["hourly", "wind_speed_10m"], ["hourly", "wind_direction_10m"],
+    ["hourly", "weather_code"], ["hourly", "uv_index"],
+    ["daily", "temperature_2m_max"], ["daily", "temperature_2m_min"],
+    ["daily", "precipitation_sum"], ["daily", "precipitation_probability_max"],
+    ["daily", "wind_speed_10m_max"], ["daily", "weather_code"],
+    ["daily", "uv_index_max"],
+  ];
+  for (const [bloco, campo] of seriesEsperadas) {
+    const serie = json[bloco]?.[campo];
+    const esperado = json[bloco].time.length;
+    if (!Array.isArray(serie) || serie.length !== esperado) {
+      const erro = new Error(
+        `Open-Meteo retornou série ${bloco}.${campo} ausente ou desalinhada (${Array.isArray(serie) ? serie.length : "ausente"}/${esperado}).`,
+      );
+      erro.name = "ParserError";
+      erro.code = "OPEN_METEO_INVALID_SERIES";
+      throw erro;
+    }
+  }
   const unidadesEsperadas = {
     temperature_2m: "°C", relative_humidity_2m: "%", precipitation_probability: "%",
-    precipitation: "mm", wind_speed_10m: "km/h", wind_gusts_10m: "km/h",
+    precipitation: "mm", wind_speed_10m: "km/h", uv_index: "",
     wind_direction_10m: "°",
   };
   for (const [campo, esperada] of Object.entries(unidadesEsperadas)) {
@@ -186,6 +217,20 @@ function validarResposta(json, fuso) {
     if (recebida != null && recebida !== esperada) {
       const erro = new Error(`Open-Meteo retornou unidade inesperada para ${campo}: ${recebida}.`);
       erro.name = "ParserError";
+      throw erro;
+    }
+  }
+  const unidadesDiariasEsperadas = {
+    temperature_2m_max: "°C", temperature_2m_min: "°C",
+    precipitation_sum: "mm", precipitation_probability_max: "%",
+    wind_speed_10m_max: "km/h", uv_index_max: "",
+  };
+  for (const [campo, esperada] of Object.entries(unidadesDiariasEsperadas)) {
+    const recebida = json.daily_units?.[campo];
+    if (recebida != null && recebida !== esperada) {
+      const erro = new Error(`Open-Meteo retornou unidade diária inesperada para ${campo}: ${recebida}.`);
+      erro.name = "ParserError";
+      erro.code = "OPEN_METEO_INVALID_UNIT";
       throw erro;
     }
   }
@@ -217,9 +262,10 @@ async function buscarOpenMeteo(latitude, longitude, {
     longitude: String(longitude),
     current: "temperature_2m,weather_code,is_day",
     hourly:
-      "temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code",
+      "temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,weather_code,uv_index",
     daily:
-      "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code",
+      "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,weather_code,uv_index_max",
+    wind_speed_unit: "kmh",
     timezone: fuso,
     forecast_days: String(diasPrevisao),
   });
@@ -284,8 +330,10 @@ async function buscarOpenMeteo(latitude, longitude, {
   const maximoOuNulo = (valores) => valores.length ? Math.max(...valores) : null;
   const precipitacaoHorariaMaxMm = maximoOuNulo(listaPeriodos.map((p) => p.precipitacaoHorariaMaxMm).filter(Number.isFinite));
   const probabilidadeChuvaMax = maximoOuNulo(listaPeriodos.map((p) => p.probabilidadeChuva).filter(Number.isFinite));
-  const rajadaMaxKmh = maximoOuNulo(listaPeriodos.map((p) => p.rajadaMaxKmh).filter(Number.isFinite));
   const velocidadeMaxKmh = maximoOuNulo(listaPeriodos.map((p) => p.velocidadeMaxKmh).filter(Number.isFinite));
+  const valoresUvDia = valoresDia("uv_index");
+  const uvMax = Number.isFinite(dia.uv_index_max?.[0]) ? dia.uv_index_max[0] : maximoOuNulo(valoresUvDia);
+  const indiceUvPico = uvMax === null ? -1 : indicesDia.find((i) => horas.uv_index?.[i] === uvMax);
   const chuvaHoraria = indicesJanela.map((i) => ({
     horario: horas.time[i].slice(11, 16),
     intervalo: `${horas.time[i].slice(11, 16)}–${hh(Number(horas.time[i].slice(11, 13)) + 1).replace("h", ":00")}`,
@@ -321,22 +369,34 @@ async function buscarOpenMeteo(latitude, longitude, {
     precipitacaoDiariaMm: Number.isFinite(dia.precipitation_sum[0]) ? Math.round(dia.precipitation_sum[0] * 10) / 10 : null,
     precipitacaoHorariaMaxMm,
     probabilidadeChuvaMax,
-    rajadaMaxKmh,
+    rajadaMaxKmh: null,
     velocidadeMaxKmh,
+    uvMax: uvMax == null ? null : Math.round(uvMax * 10) / 10,
+    uvClassificacao: classificarIndiceUv(uvMax),
+    horaPicoUv: indiceUvPico >= 0 ? horas.time[indiceUvPico] : null,
     temTempestadeHoje,
     periodos,
     periodosDiaCompleto,
     chuvaHoraria,
-    previsaoDias: dia.time.map((data, i) => ({
+    previsaoDias: dia.time.map((data, i) => {
+      const indices = horas.time.map((instante, indice) => ({ instante, indice }))
+        .filter((item) => String(item.instante).slice(0, 10) === data)
+        .map((item) => item.indice);
+      const umidadeDia = indices.map((indice) => horas.relative_humidity_2m?.[indice]).filter(Number.isFinite);
+      return ({
       data,
       condicao: descreverCodigo(dia.weather_code?.[i]),
       tempMin: Number.isFinite(dia.temperature_2m_min?.[i]) ? dia.temperature_2m_min[i] : null,
       tempMax: Number.isFinite(dia.temperature_2m_max?.[i]) ? dia.temperature_2m_max[i] : null,
+      umidadeMin: umidadeDia.length ? Math.round(Math.min(...umidadeDia)) : null,
+      umidadeMax: umidadeDia.length ? Math.round(Math.max(...umidadeDia)) : null,
       // Agregado diário da fonte no dia civil local (00h–24h).
       janela: "00h–24h",
       chuvaMm: Number.isFinite(dia.precipitation_sum[i]) ? Math.round(dia.precipitation_sum[i] * 10) / 10 : null,
-      rajadaKmh: Number.isFinite(dia.wind_gusts_10m_max[i]) ? Math.round(dia.wind_gusts_10m_max[i]) : null,
-    })),
+      probabilidadeChuvaPct: Number.isFinite(dia.precipitation_probability_max?.[i]) ? Math.round(dia.precipitation_probability_max[i]) : null,
+      uvMax: Number.isFinite(dia.uv_index_max?.[i]) ? Math.round(dia.uv_index_max[i] * 10) / 10 : null,
+      rajadaKmh: null,
+    }); }),
   };
 }
 
@@ -344,6 +404,7 @@ module.exports = {
   buscarOpenMeteo,
   direcaoCardinal,
   classificarIntensidadeVento,
+  classificarIndiceUv,
   INICIO_JANELA_HOJE,
   PERIODOS,
   OPEN_METEO_TIMEOUT_MS,

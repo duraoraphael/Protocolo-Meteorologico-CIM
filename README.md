@@ -138,32 +138,33 @@ kiosk também ao iniciar a sessão.
 
 | Fonte | Uso | Observação |
 |---|---|---|
-| **Open-Meteo Weather** | Complemento identificado para temperatura, umidade, condição, chuva, vento e rajada quando o INMET não publicar o valor numérico | Nunca é apresentado como dado oficial do INMET; a origem complementar permanece indicada por campo |
 | **INMET — estação automática** (`apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}`) | Temperatura/umidade atuais e extremos horários; `Chuva acumulada/dia`, `Chuva acumulada/Hora`; medições de vento e rajada usadas somente no monitoramento observacional | `Chuva acumulada/dia` soma as leituras cuja hora de referência pertence ao dia civil local; `Chuva acumulada/Hora` usa a última hora oficial disponível e identifica o intervalo. Uma medição de rajada nunca ocupa o campo de rajada prevista |
-| **INMET — previsão e avisos** (`apiprevmet3.inmet.gov.br`) | Fonte prioritária para chuva, vento e rajada previstos; também fornece condição, temperatura, umidade e avisos de perigo ativos | Direção, intensidade e resumo textual são preservados. Se o produto municipal não publicar um valor numérico, a Open-Meteo pode complementá-lo com identificação explícita |
-| **Climatempo Advisor** (`apiadvisor.climatempo.com.br`) | Acumulado diário previsto e probabilidade diária de chuva para hoje e D+1 a D+3 | Só é ativado com contrato, token e ID oficial por base. Valida ID, município, UF, data e faixas numéricas; em falha mantém INMET/Open-Meteo e registra a fonte efetiva |
-| **OCEANOP / Petrobras** (`GET /api/v1/previsao/JsonPrevisaoAreaAsync?local=...`) | Fonte prioritária de rajada prevista exclusivamente nas áreas autorizadas e homologadas | Consulta server-side por identificador `local`; nunca envia coordenadas. Sem correspondência, unidade ou fuso confirmados, preserva INMET/Open-Meteo e não promove o dado |
-| **Tetra Tech/OCEANOP** (`/api/v1/areas/json` e `/api/v1/bulletins/{idArea}`) | Pico diário de rajada prevista para áreas terrestres autorizadas | A API oficial do portal exige `X-API-Key` ou OAuth. A série de rajada exibida em nós é convertida por `km/h = nós × 1,852`; o horizonte completo é armazenado localmente e continua válido por data quando a sessão expira |
-| **Open-Meteo Marine** (`customer-marine-api.open-meteo.com` em produção) | Fallback identificado para altura/período/direção de onda, marulho e temperatura do mar — **só nas 9 bases costeiras** | Mesma licença/chave comercial; permanece ativo quando não há ponto OCEANOP homologado ou a consulta oficial falha |
-| **Open-Meteo Air Quality / CAMS** (`customer-air-quality-api.open-meteo.com` em produção) | PM2,5/PM10, European AQI de PM2,5 e índice UV previsto | Mesma licença/chave comercial; AQI e UV mantêm identificação CAMS/Open-Meteo |
+| **INMET — previsão e avisos** (`apiprevmet3.inmet.gov.br`) | Avisos meteorológicos oficiais e contexto textual municipal | Os avisos oficiais mantêm precedência operacional; observação e previsão não são misturadas |
+| **Open-Meteo Forecast** (`api.open-meteo.com/v1/forecast`) | Condição, temperatura, umidade, chuva, probabilidade, vento médio, direção e índice UV | `wind_speed_unit=kmh`; não solicita nem usa rajada. Produção exige licença/chave Customer |
+| **Open-Meteo Marine** (`marine-api.open-meteo.com/v1/marine`) | Altura, direção e período de ondas, onda de vento e swell | Somente para bases costeiras e pontos marítimos cadastrados; bases interiores recebem “Não se aplica” |
+| **OCEANOP / Petrobras** (`POST /api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync`) | Fonte alternativa de rajada por coordenada apenas onde não houver tabela terrestre habilitada | Requer acesso corporativo autorizado e valida localidade, fuso e unidade |
+| **Tetra Tech — portal TTForecast** (`/api/v1/areas/json` e `/api/v1/bulletins/{idArea}`) | Fonte exclusiva de rajada prevista nas bases cobertas; picos por dia, período e janela da edição | A API oficial exige `X-API-Key` ou OAuth. O retorno bruto em m/s é normalizado para km/h; a equivalência exibida em nós usa `km/h = nós × 1,852` |
 | **Clima e Saúde — Ministério da Saúde** ([Excesso de Calor](https://clima.saude.gov.br/)) | EHF, risco combinado e GeoSES | Consulta server-side do HTML oficial, com validação de município, UF e data. Indisponibilidade nunca é convertida em nível Normal |
 | **Monitor de Secas — ANA** ([portal](https://monitordesecas.ana.gov.br/) e [tabela S0–S4](https://monitordesecas.ana.gov.br/tabela-de-classificacao)) | Seção mensal no PDF: mapa oficial e o resumo oficial da UF do destino de cada informativo | Pública, sem chave. A página é SPA; a coleta usa a mesma API (`apimsbr.ana.gov.br`) e os mesmos arquivos (S3 da ANA) que o navegador carrega. Competência em `MONITOR_SECAS_COMPETENCIA` (AAAA-MM); cache em `data/monitor-secas/` |
 | **COR-Rio** ([Centro de Operações e Resiliência](https://cor.rio/), `appcor.cor-rio.work/estagio_cidade` e `cor.rio/wp-json/wp/v2/posts`) | Painel "Comunicados COR-Rio", seção técnica no PDF disponível para consulta e aviso de e-mail exclusivo da base lógica `COR-RIO — RJ` — somente para o município do Rio de Janeiro (`integracaoCorRio`) | Públicas, sem chave. O aviso por e-mail usa apenas os destinatários vinculados a `cor_rio`; responsáveis da base meteorológica `rio_de_janeiro` não o recebem automaticamente. O endpoint de estágio é o mesmo que o widget da página cor.rio consulta; última coleta válida em `data/cor-rio.json` |
 
-O OCEANOP está cadastrado para Santos, Araucária, Manaus, Rio de Janeiro,
-Macaé, Brasília e Vitória em `src/config/oceanopAreas.js`. A consulta é feita
-sem token, por `local`, e as velocidades são recebidas em km/h, sem conversão.
-O exemplo `sururu` não é usado como área operacional. Quando a fonte não
-responde, as fontes meteorológicas atuais permanecem como fallback.
+O OCEANOP está cadastrado por coordenadas para todas as 11 bases atuais em
+`src/config/oceanopPontos.js`. A consulta usa o `POST` documentado no Swagger e
+aceita credencial oficial por `OCEANOP_API_KEY` ou `OCEANOP_ACCESS_TOKEN`. A
+validação real de 22/10/2026 alcançou o serviço, mas recebeu HTTP 401, portanto
+a integração permanece pendente de autorização operacional. O retorno só é
+aceito quando o campo `Local` corresponde ao ID da base solicitada. O cache é
+isolado por ID e coordenadas. As velocidades declaradas em km/h são preservadas;
+m/s e nós são convertidos pela rotina central. Quando a fonte não responde, o
+campo permanece indisponível, salvo se outra fonte autorizada publicar uma
+variável realmente equivalente.
 O monitor bruto em `areas.html` usa a senha operacional; identificadores locais
 e respostas da fonte não são expostos pela listagem pública de bases.
 
-O pico diário do portal Tetra Tech/OCEANOP está preparado para Rio de Janeiro,
-Manaus, Macaé, Brasília, Santos, Vitória, Salvador, Natal e Oiapoque. Configure uma credencial
-oficial conforme `RAJADAS_PORTAIS.md`. Araucária não usa automaticamente a
-página de Wenceslau Bráz sem validação geográfica. Aracaju permanece no fallback:
-os termos públicos do Climatempo vedam robôs e extração automatizada. A chuva
-do Climatempo usa somente a API Advisor contratada; nunca o HTML público.
+O pico diário do portal Tetra Tech está preparado para Rio de Janeiro,
+Manaus, Macaé, Brasília, Santos, Vitória, Salvador, Aracaju, Natal e Oiapoque. Configure uma credencial
+  oficial conforme `RAJADAS_PORTAIS.md`. Araucária não usa automaticamente a
+  página de Wenceslau Bráz sem validação geográfica.
 
 Fontes citadas no protocolo original mas **sem API pública gratuita e
 estável** (por isso não integradas na coleta automática — o relatório
@@ -172,8 +173,6 @@ usada nos modelos de referência):
 - **Alerta Rio / CODESAL** — boletins em página web, sem endpoint
   JSON documentado e estável. (O COR-Rio é integrado só para a base Rio de
   Janeiro, veja a tabela acima.)
-- **Climatempo público** — sem scraping; a integração automática exige API
-  Advisor corporativa autorizada e permanece não configurada sem credenciais.
 
 Limitação conhecida do histórico INMET:
 - o endpoint legado `apitempo.inmet.gov.br/estacao/{inicio}/{fim}/{estacao}`
@@ -185,21 +184,14 @@ Limitação conhecida do histórico INMET:
 
 Regras de indisponibilidade dos campos restritos:
 - temperatura/umidade atuais e extremos horários observados: somente estação INMET;
-- temperatura/umidade mínimas e máximas diárias: somente previsão municipal INMET;
-- chuva observada: somente estação INMET; chuva diária prevista usa Climatempo
-  Advisor quando autorizado e válido, com INMET/Open-Meteo identificados como fallback;
-- direção, intensidade e rajada previstas priorizam o INMET e recebem complemento identificado da Open-Meteo somente nos campos ausentes; medições da estação ficam separadas e nunca são rotuladas como previsão;
-- condição geral: resumo diário oficial do município INMET vinculado à chave da base; bases do mesmo município podem legitimamente ter a mesma condição;
-- índice UV: Open-Meteo Air Quality/CAMS;
+- temperatura, umidade, condição, chuva prevista, probabilidade, vento médio e direção previstos: Open-Meteo Forecast;
+- chuva observada e medições meteorológicas: estação INMET, sempre separadas da previsão;
+- rajada máxima prevista: portal Tetra Tech nas dez bases cobertas; falha resulta em “Rajada prevista indisponível”, sem fallback silencioso da Open-Meteo;
+- índice UV: Open-Meteo Forecast (`uv_index`/`uv_index_max`); qualidade do ar permanece indisponível enquanto não houver fonte autorizada integrada;
+- mar e ondas: Open-Meteo Marine no ponto marítimo validado da base; não se aplica às bases interiores;
 - falha atual do INMET usa apenas a última observação INMET válida, com data e
   estado `armazenado/desatualizado`; sem cache válido, mostra `Indisponível`;
-- todo complemento da Open-Meteo é explícito na fonte do campo; nunca é rotulado como dado oficial do INMET.
-
-Fontes **testadas e descartadas** (registrado para não retestar à toa):
-- **Open-Meteo Flood** (vazão de rios) — funciona, mas entrega só a vazão
-  absoluta (ex.: 82.984 m³/s em Manaus) sem referência histórica que
-  permita dizer se está acima do normal. Sem esse contexto, o número não é
-  acionável num painel de operação.
+- o Climatempo permanece removido e não participa de fallback.
 
 Outras fontes contratadas podem ser adicionadas em `src/sources/` seguindo o
 mesmo padrão de validação, procedência e fallback.
@@ -232,7 +224,7 @@ ao título oficial, como transformar `Tempestade` em `Tempestade com raios`.
 | Baixa umidade | ≤ 20% | calibração operacional |
 | Índice UV alto | Atenção ≥ 8; Alerta ≥ 11 por padrão, com nível configurável | faixas da OMS |
 | Condição do mar | Atenção ≥ 1,5 m; Alerta ≥ 2,5 m | referência operacional marítima |
-| Qualidade do ar | Atenção > 60; Alerta > 80; Emergência > 100 no European AQI de PM2,5 | classificação European AQI publicada pela Open-Meteo/CAMS |
+| Qualidade do ar | Atenção > 60; Alerta > 80; Emergência > 100 no European AQI de PM2,5 | somente quando uma fonte autorizada fornecer o indicador; atualmente indisponível |
 
 Não altere esses limites de forma isolada: mantenha a implementação, a tabela
 acima e os testes de fronteira sincronizados.
@@ -324,8 +316,11 @@ server.js                  servidor do painel + API
 src/cli.js                 comando único (gera + envia, sem servidor)
 src/pipeline.js             orquestra coleta -> PDF -> e-mail
 src/config/cities.js        cadastro de cidades/instalações
-src/sources/openMeteo.js    fonte Open-Meteo
 src/sources/inmet.js        fonte INMET (previsão + avisos)
+src/sources/openMeteo.js    previsão meteorológica e UV (sem rajadas)
+src/sources/marine.js       ondas e mar em pontos marítimos cadastrados
+src/sources/oceanop.js      fonte OCEANOP por coordenadas
+src/sources/tetratechGusts.js rajada prevista do portal Tetra Tech
 src/sources/inmetObservations.js observação oficial INMET + cache/histórico
 src/sources/climaSaudeService.js EHF/risco térmico e disponibilidade de UV do Clima e Saúde
 src/logic/weatherSourcePolicy.js prioridade e complemento campo a campo
