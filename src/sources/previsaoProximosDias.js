@@ -217,6 +217,85 @@ function mesclarPrevisaoProximosDias(inmet, complementar) {
   };
 }
 
+/** Uma fonte prioritária substitui somente a rajada dos dias em que publicou valor válido. */
+function aplicarRajadasOceanop(previsao, diasOceanop = [], fontePadrao = "Petrobras — OCEANOP") {
+  if (!previsao || !Array.isArray(previsao.dias) || !Array.isArray(diasOceanop) || !diasOceanop.length) return previsao;
+  const porData = new Map(diasOceanop.filter((dia) => Number.isFinite(dia?.rajadaMaxKmh)).map((dia) => [dia.data, dia]));
+  if (!porData.size) return previsao;
+  let utilizou = false;
+  const dias = previsao.dias.map((dia) => {
+    const oceanop = porData.get(dia.data);
+    if (!oceanop) return dia;
+    utilizou = true;
+    return {
+      ...dia,
+      rajadaMaxKmh: oceanop.rajadaMaxKmh,
+      fonteRajada: oceanop.fonte || fontePadrao,
+      rajadaPrevistaEm: oceanop.rajadaPrevistaEm || null,
+      rajadaLocal: oceanop.local || null,
+    };
+  });
+  const fontesPrioritarias = [...new Set(diasOceanop.map((dia) => dia?.fonte || fontePadrao).filter(Boolean))];
+  const rotuloPrioritario = fontesPrioritarias.join(" / ");
+  return utilizou ? {
+    ...previsao,
+    dias,
+    fontesCampo: {
+      ...previsao.fontesCampo,
+      rajada: dias.every((dia) => !Number.isFinite(dia.rajadaMaxKmh) || fontesPrioritarias.includes(dia.fonteRajada))
+        ? rotuloPrioritario
+        : `${rotuloPrioritario} / ${previsao.fontesCampo?.rajada || "fonte alternativa"}`,
+    },
+  } : previsao;
+}
+
+/** Substitui apenas chuva/probabilidade nas datas publicadas pelo Advisor. */
+function aplicarChuvaClimatempo(previsao, climatempo) {
+  if (!previsao || !Array.isArray(previsao.dias) || climatempo?.status !== "operacional") return previsao;
+  const porData = new Map((climatempo.dias || []).map((dia) => [dia.data, dia]));
+  let usouChuva = false;
+  let usouProbabilidade = false;
+  const dias = previsao.dias.map((dia) => {
+    const fonte = porData.get(dia.data);
+    if (!fonte) return dia;
+    const chuvaMm = Number.isFinite(fonte.chuvaAcumuladaPrevistaMm) ? fonte.chuvaAcumuladaPrevistaMm : dia.chuvaMm;
+    const probabilidadeChuvaPct = Number.isFinite(fonte.probabilidadeChuvaPercentual)
+      ? fonte.probabilidadeChuvaPercentual
+      : dia.probabilidadeChuvaPct;
+    if (Number.isFinite(fonte.chuvaAcumuladaPrevistaMm)) usouChuva = true;
+    if (Number.isFinite(fonte.probabilidadeChuvaPercentual)) usouProbabilidade = true;
+    return {
+      ...dia,
+      chuvaMm,
+      probabilidadeChuvaPct,
+      fonteChuva: Number.isFinite(fonte.chuvaAcumuladaPrevistaMm)
+        ? "Climatempo Advisor"
+        : dia.fonteChuva || previsao.fontesCampo?.chuva,
+      fonteProbabilidadeChuva: Number.isFinite(fonte.probabilidadeChuvaPercentual)
+        ? "Climatempo Advisor"
+        : dia.fonteProbabilidadeChuva || previsao.fontesCampo?.probabilidadeChuva,
+    };
+  });
+  const fonteComFallback = (campo, fonteDia, usouClimatempo) => {
+    if (!usouClimatempo) return previsao.fontesCampo?.[campo];
+    const fontes = [...new Set(dias
+      .filter((dia) => Number.isFinite(dia[campo === "chuva" ? "chuvaMm" : "probabilidadeChuvaPct"]))
+      .map((dia) => dia[fonteDia] || previsao.fontesCampo?.[campo])
+      .filter(Boolean))];
+    return fontes.join(" / ") || "Climatempo Advisor";
+  };
+  return {
+    ...previsao,
+    dias,
+    fonte: [previsao.fonte, (usouChuva || usouProbabilidade) ? "Climatempo Advisor" : null].filter(Boolean).join(" / "),
+    fontesCampo: {
+      ...(previsao.fontesCampo || {}),
+      chuva: fonteComFallback("chuva", "fonteChuva", usouChuva),
+      probabilidadeChuva: fonteComFallback("probabilidadeChuva", "fonteProbabilidadeChuva", usouProbabilidade),
+    },
+  };
+}
+
 /**
  * Converte a resposta diária da Open-Meteo nas linhas da tabela, uma por data
  * esperada. Campos ausentes, não numéricos ou com unidade inesperada ficam
@@ -342,6 +421,8 @@ module.exports = {
   obterPrevisaoProximosDias,
   montarPrevisaoProximosDiasInmet,
   mesclarPrevisaoProximosDias,
+  aplicarRajadasOceanop,
+  aplicarChuvaClimatempo,
   interpretarResposta,
   proximasDatas,
   dataLocalIso,

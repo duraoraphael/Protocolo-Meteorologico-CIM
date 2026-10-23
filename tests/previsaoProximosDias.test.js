@@ -80,6 +80,45 @@ test("produto operacional usa previsão oficial INMET e não fabrica rajada, chu
   assert.ok(previsao.dias.every((dia) => dia.rajadaMaxKmh === null && dia.chuvaMm === null && dia.uvMax === null));
 });
 
+test("OCEANOP substitui somente rajadas D+3 com valor válido e preserva os demais campos", () => {
+  const previsao = {
+    status: "ok",
+    dias: [
+      { data: "2026-10-21", tempMaxC: 30, rajadaMaxKmh: 20, chuvaMm: 4 },
+      { data: "2026-10-22", tempMaxC: 31, rajadaMaxKmh: 21, chuvaMm: 5 },
+    ],
+    fontesCampo: { temperatura: "INMET", rajada: "Open-Meteo", chuva: "INMET" },
+  };
+  const resultado = p3d.aplicarRajadasOceanop(previsao, [{
+    data: "2026-10-21", rajadaMaxKmh: 54, rajadaPrevistaEm: "2026-10-21T18:00:00.000Z", local: "Área A",
+  }]);
+  assert.equal(resultado.dias[0].rajadaMaxKmh, 54);
+  assert.equal(resultado.dias[0].fonteRajada, "Petrobras — OCEANOP");
+  assert.equal(resultado.dias[0].tempMaxC, 30);
+  assert.equal(resultado.dias[0].chuvaMm, 4);
+  assert.equal(resultado.dias[1].rajadaMaxKmh, 21);
+  assert.equal(resultado.fontesCampo.rajada, "Petrobras — OCEANOP / Open-Meteo");
+});
+
+test("Tetra Tech aplica picos distintos por dia e preserva a procedência", () => {
+  const previsao = {
+    status: "ok",
+    dias: [
+      { data: "2026-10-21", rajadaMaxKmh: 20 },
+      { data: "2026-10-22", rajadaMaxKmh: 21 },
+      { data: "2026-10-23", rajadaMaxKmh: 22 },
+    ],
+    fontesCampo: { rajada: "Open-Meteo" },
+  };
+  const resultado = p3d.aplicarRajadasOceanop(previsao, [
+    { data: "2026-10-21", rajadaMaxKmh: 51.856, fonte: "Tetra Tech/OCEANOP" },
+    { data: "2026-10-22", rajadaMaxKmh: 44.448, fonte: "Tetra Tech/OCEANOP" },
+  ], "Tetra Tech/OCEANOP");
+  assert.deepEqual(resultado.dias.map((dia) => dia.rajadaMaxKmh), [51.856, 44.448, 22]);
+  assert.equal(resultado.dias[0].fonteRajada, "Tetra Tech/OCEANOP");
+  assert.equal(resultado.fontesCampo.rajada, "Tetra Tech/OCEANOP / Open-Meteo");
+});
+
 test("produto operacional prioriza INMET e complementa rajada/chuva/UV com Open-Meteo", () => {
   const oficial = p3d.montarPrevisaoProximosDiasInmet(CIDADES.macae, {
     dias: DATAS_MACAE.map((data, indice) => ({

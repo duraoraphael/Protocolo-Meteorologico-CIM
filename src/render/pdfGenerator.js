@@ -1,12 +1,24 @@
 const puppeteer = require("puppeteer");
+const fs = require("node:fs");
 const { renderPdfHtml, headerTemplateVazio, footerTemplate } = require("./pdfTemplate");
 const { argsChromium, prepararPaginaIsolada } = require("./chromiumSeguro");
 
 let navegadorPromise = null;
 
+function executavelChromiumDisponivel() {
+  const candidatos = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.platform === "win32" ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" : null,
+    process.platform === "win32" ? "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" : null,
+  ].filter(Boolean);
+  return candidatos.find((caminho) => fs.existsSync(caminho));
+}
+
 function iniciarNavegador() {
+  const executablePath = executavelChromiumDisponivel();
   const inicializacao = puppeteer.launch({
     headless: true,
+    ...(executablePath ? { executablePath } : {}),
     // --no-sandbox só em Linux/container (V-12) — ver chromiumSeguro.js.
     args: argsChromium(),
   });

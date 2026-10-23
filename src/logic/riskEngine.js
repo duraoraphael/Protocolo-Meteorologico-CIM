@@ -14,6 +14,7 @@ const {
 const { formatarTitulo } = require("../../public/alert-title");
 const { grauAvisoInmet, fenomenoAvisoInmet, normalizarComparacao } = require("../sources/inmet");
 const { recomendacoesFenomeno } = require("./phenomenonRecommendations");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 const LIMIARES = {
   // Contrato legado do relatório semanal. O informativo diário não usa estes
@@ -194,7 +195,7 @@ function avaliarRiscos(consolidado) {
       : [fontesPorCampo.precipitacaoHorariaMaxMm, fontesPorCampo.precipitacaoTotalMm];
     const observadoInmet = fontes.some((fonte) => /INMET.+esta[cç][aã]o autom[aá]tica/i.test(fonte || ""));
     const detalhe = evento.assinatura === "vento" && !observadoInmet && Number.isFinite(evento.valores?.rajadaKmh)
-      ? `Rajada prevista: ${evento.valores.rajadaKmh} km/h`
+      ? `Rajada prevista: ${formatarRajadaPrevista(evento.valores.rajadaKmh)}`
       : evento.detalhe;
     candidatos.push({
       ...evento,

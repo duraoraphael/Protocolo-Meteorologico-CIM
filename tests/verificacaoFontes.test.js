@@ -54,6 +54,7 @@ function fontesOk(extra = {}) {
     previsaoInmet: async () => ({ data: "13/10/2026", periodos: { manha: PERIODO, tarde: PERIODO, noite: PERIODO } }),
     observacaoInmet: async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: 22, temperaturaMaxC: 37, chuvaUltimaHoraMm: 0.8, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: 31 } }),
     climaSaude: async () => ({ status: "operacional", dados: { dataConsulta: "2026-10-13", municipio: "Rio de Janeiro", uf: "RJ", ehf: { classificacao: "Sem excesso" }, riscoCombinado: "Normal" } }),
+    oceanop: async (area) => ({ previsoes: [{ local: area.local }] }),
     corRio: (opcoes) => criarServicoCorRio({ ...opcoes, fetchImpl: fetchCorRio, esperarFn: semEspera }),
     fetch: fetchAna(competenciaDeChave("2026-08")),
     ...extra,
@@ -67,7 +68,7 @@ function itemDe(resultado, fonte) {
 test("todas as fontes saudáveis: nenhum problema; integrações sem configuração não contam como problema", async () => {
   const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk() });
   assert.deepEqual(r.problemas, []);
-  assert.equal(itemDe(r, "Oceanop").situacao, SITUACAO.NAO_CONFIGURADA);
+  assert.equal(itemDe(r, "Oceanop").situacao, SITUACAO.OK);
   assert.equal(itemDe(r, "Licença Open-Meteo").situacao, SITUACAO.NAO_CONFIGURADA);
 });
 

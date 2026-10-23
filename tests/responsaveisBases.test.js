@@ -11,6 +11,7 @@ process.env.RESPONSAVEIS_ARQUIVO = arquivo;
 fs.writeFileSync(arquivo, JSON.stringify({
   rio_de_janeiro: [{ nome: "Maria", email: "maria@exemplo.com" }],
   macae: [{ nome: "Maria", email: "maria@exemplo.com" }],
+  cabiunas: [{ nome: "Histórico", email: "historico@exemplo.com" }],
 }));
 
 const { subirApp, SENHA_TESTE } = require("./helpers/servidor");
@@ -34,7 +35,7 @@ test("cadastra a pessoa uma vez e depois vincula uma ou várias bases", async (t
     body: JSON.stringify({ senha: SENHA_TESTE }),
   });
   let dados = await r.json();
-  assert.equal(dados.responsaveis.length, 1, "migração reúne o mesmo e-mail cadastrado em duas bases");
+  assert.equal(dados.responsaveis.length, 2, "migração preserva contato histórico sem expor a base desativada");
   assert.deepEqual(dados.responsaveis[0].bases, ["rio_de_janeiro", "macae"]);
   assert.ok(dados.basesDisponiveis.length > 2);
   assert.deepEqual(
@@ -48,9 +49,9 @@ test("cadastra a pessoa uma vez e depois vincula uma ou várias bases", async (t
   assert.deepEqual(dados.responsavel.bases, []);
 
   r = await pedir(srv.base, "PUT", { email: "joao@exemplo.com", bases: ["cabiunas", "santos"] });
+  assert.equal(r.status, 400);
+  r = await pedir(srv.base, "PUT", { email: "joao@exemplo.com", bases: ["santos"] });
   assert.equal(r.status, 200);
-  dados = await r.json();
-  assert.deepEqual(dados.responsavel.bases, ["cabiunas", "santos"]);
 
   r = await pedir(srv.base, "PUT", { email: "joao@exemplo.com", bases: ["cor_rio"] });
   assert.equal(r.status, 200);
@@ -61,13 +62,13 @@ test("cadastra a pessoa uma vez e depois vincula uma ou várias bases", async (t
   dados = await r.json();
   assert.deepEqual(dados.bases[0].responsaveis, [{ nome: "João Operação" }]);
 
-  r = await pedir(srv.base, "PUT", { email: "joao@exemplo.com", bases: ["cabiunas", "santos", "cor_rio"] });
+  r = await pedir(srv.base, "PUT", { email: "joao@exemplo.com", bases: ["santos", "cor_rio"] });
   assert.equal(r.status, 200);
 
   r = await fetch(srv.base + "/api/responsaveis?cidade=cabiunas");
-  dados = await r.json();
-  assert.deepEqual(dados.bases[0].responsaveis, [{ nome: "João Operação" }]);
-  assert.doesNotMatch(JSON.stringify(dados), /joao@/);
+  assert.equal(r.status, 400);
+  dados = JSON.parse(fs.readFileSync(arquivo, "utf8"));
+  assert.ok(dados.responsaveis.some((p) => p.email === "historico@exemplo.com" && p.bases.includes("cabiunas")));
 
   r = await pedir(srv.base, "DELETE", { email: "joao@exemplo.com" });
   assert.equal(r.status, 200);

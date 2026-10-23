@@ -48,7 +48,7 @@ test("POST /api/responsaveis/consultar exige a senha", async (t) => {
   assert.equal(dados.bases[0].chave, "rio_de_janeiro");
 });
 
-test("diagnóstico OCEANOP exige senha e a listagem pública não revela PointIDs", async (t) => {
+test("diagnóstico OCEANOP exige senha e a listagem pública não revela identificadores locais", async (t) => {
   const srv = await subirApp();
   t.after(srv.fechar);
   let r = await fetch(srv.base + "/api/oceanop/areas");
@@ -56,7 +56,7 @@ test("diagnóstico OCEANOP exige senha e a listagem pública não revela PointID
   const areas = await r.json();
   assert.equal(areas.ok, true);
   assert.ok(areas.areas.length > 0);
-  assert.equal(JSON.stringify(areas).includes("pointId"), false);
+  assert.equal(JSON.stringify(areas).includes('"local"'), false);
 
   r = await fetch(srv.base + "/api/oceanop/previsao", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -66,9 +66,9 @@ test("diagnóstico OCEANOP exige senha e a listagem pública não revela PointID
 
   r = await fetch(srv.base + "/api/oceanop/previsao", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cidade: "rio_de_janeiro", senha: SENHA_TESTE }),
+    body: JSON.stringify({ cidade: "cabiunas", senha: SENHA_TESTE }),
   });
-  assert.equal(r.status, 409, "usuário autorizado recebe apenas o estado de configuração da base");
+  assert.equal(r.status, 400, "base desativada não pode iniciar nova consulta");
 });
 
 test("PDF: 401 sem credencial; 200 com senha (Basic) ou token válido", async (t) => {

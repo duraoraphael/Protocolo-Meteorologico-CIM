@@ -19,6 +19,17 @@ const EMAIL_MAX = 254;
 const NOME_PROIBIDO = /[<>"'\u0000-\u001f\u007f]/;
 const EMAIL_REGEX =
   /^[a-z0-9!#$%&*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+// Identificadores mantidos somente para não apagar vínculos preexistentes ao
+// regravar o cadastro. Não aparecem na UI e não são aceitos em novos envios.
+const BASES_DESATIVADAS_PRESERVADAS = new Set(["cabiunas"]);
+
+function basePreservavel(chave) {
+  return baseDistribuicaoExiste(chave) || BASES_DESATIVADAS_PRESERVADAS.has(chave);
+}
+
+function basesAtivas(bases) {
+  return (Array.isArray(bases) ? bases : []).filter(baseDistribuicaoExiste);
+}
 
 function erroEntrada(mensagem) {
   // status/publico: a rota pode devolver esta mensagem ao cliente sem expor
@@ -61,7 +72,7 @@ function carregarTodos() {
           .map((r) => ({
             nome: r.nome,
             email: r.email,
-            bases: Array.isArray(r.bases) ? [...new Set(r.bases.filter(baseDistribuicaoExiste))] : [],
+            bases: Array.isArray(r.bases) ? [...new Set(r.bases.filter(basePreservavel))] : [],
           })),
       };
     }
@@ -71,7 +82,7 @@ function carregarTodos() {
     // alteração em disco apenas por abrir o painel.
     const porEmail = new Map();
     if (dados && typeof dados === "object") {
-      for (const chave of Object.keys(BASES_DISTRIBUICAO)) {
+      for (const chave of [...Object.keys(BASES_DISTRIBUICAO), ...BASES_DESATIVADAS_PRESERVADAS]) {
         for (const pessoa of Array.isArray(dados[chave]) ? dados[chave] : []) {
           const email = String(pessoa?.email || "").trim().toLowerCase();
           if (!email) continue;
@@ -102,7 +113,7 @@ function listarPorCidade(chave) {
   validarCidade(chave);
   const dados = carregarTodos();
   return dados.responsaveis
-    .filter((r) => r.bases.includes(chave))
+    .filter((r) => basesAtivas(r.bases).includes(chave))
     .map(({ nome, email }) => ({ nome, email }));
 }
 
@@ -119,7 +130,7 @@ function listarTodos() {
 }
 
 function listarResponsaveis() {
-  return carregarTodos().responsaveis.map((r) => ({ ...r, bases: [...r.bases] }));
+  return carregarTodos().responsaveis.map((r) => ({ ...r, bases: basesAtivas(r.bases) }));
 }
 
 function validarBases(bases) {
@@ -148,9 +159,10 @@ function atualizarBases(email, bases) {
   const dados = carregarTodos();
   const pessoa = dados.responsaveis.find((r) => String(r.email).toLowerCase() === emailLimpo);
   if (!pessoa) throw erroEntrada("Responsável não encontrado.");
-  pessoa.bases = basesLimpas;
+  const preservadas = pessoa.bases.filter((base) => BASES_DESATIVADAS_PRESERVADAS.has(base));
+  pessoa.bases = [...preservadas, ...basesLimpas];
   salvarTodos(dados);
-  return { ...pessoa, bases: [...pessoa.bases] };
+  return { ...pessoa, bases: basesAtivas(pessoa.bases) };
 }
 
 function removerResponsavel(email) {

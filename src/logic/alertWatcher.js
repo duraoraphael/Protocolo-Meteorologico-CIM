@@ -18,6 +18,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("node:crypto");
 const { CIDADES, getCidade } = require("../config/cities");
 const { montarRelatorio } = require("./reportBuilder");
 const { avaliarRiscos } = require("./riskEngine");
@@ -31,6 +32,7 @@ const {
 } = require("../sources/inmet");
 
 const ARQUIVO_ESTADO = path.join(__dirname, "..", "..", "data", "alertas-notificados.json");
+const ASSINATURA_MONITOR = "__monitor_inicializado__";
 
 // ---------------------------------------------------------------------------
 // Estado (o que já foi avisado)
@@ -57,6 +59,41 @@ function limparExpirados(estado) {
   // O nível enviado não expira por tempo: persistência do mesmo gatilho não
   // autoriza reenvio após 12 horas. Uma nova transição o substitui.
   return estado;
+}
+
+function fingerprintAlerta(alerta) {
+  const oficial = alerta?.naturezaDado === "Aviso oficial" || String(alerta?.assinatura || "").startsWith("inmet:");
+  const material = oficial
+    ? [
+        alerta.assinatura,
+        alerta.idAviso,
+        alerta.codigoAviso,
+        alerta.sequenciaAviso,
+        alerta.grau,
+        alerta.janela,
+        alerta.atualizadoEm,
+        alerta.detalhe,
+        ...(alerta.instrucoesOficiais || []),
+      ]
+    : [alerta.assinatura, alerta.grau];
+  return crypto.createHash("sha256").update(JSON.stringify(material)).digest("hex");
+}
+
+// O fingerprint da medição identifica o conteúdo atual. O fingerprint da
+// transição também incorpora o estado confirmado anterior. Isso é essencial
+// para distinguir dois ciclos legítimos iguais, por exemplo:
+// NORMAL -> ATENÇÃO -> NORMAL -> ATENÇÃO. Sem o marcador do estado anterior,
+// a fila confundiria o segundo agravamento com o primeiro e não enviaria.
+function fingerprintTransicao(alerta, anterior, motivo) {
+  const material = {
+    atual: fingerprintAlerta(alerta),
+    assinatura: alerta.assinatura,
+    grau: alerta.grau,
+    motivo,
+    grauAnterior: anterior?.grau || anterior?.gravidade || null,
+    estadoAnteriorEm: anterior?.emISO || anterior?.fingerprint || null,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(material)).digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +177,10 @@ function detectarAlertasGraves(report) {
       naturezaDado: "Aviso oficial",
       fonteDados: "INMET",
       orgaoEmissor: "INMET",
+      idAviso: aviso.idAviso || null,
+      codigoAviso: aviso.id || null,
+      sequenciaAviso: aviso.sequencia ?? null,
+      atualizadoEm: aviso.atualizadoEm || null,
       previsaoComplementar: previsao?.detalhe || null,
       periodoPrevisao: previsao?.janela || null,
       fontePrevisao: previsao?.fonteDados || null,
@@ -210,35 +251,57 @@ function detectarAlertasGraves(report) {
 /** Filtra somente transições do último grau enviado por fenômeno. */
 function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => true) {
   const novos = [];
-  for (const a of achados) {
-    const chave = `${chaveBase}|${a.assinatura}`;
-    const jaAvisado = estado[chave];
+  for (const alerta of achados) {
+    const chave = `${chaveBase}|${alerta.assinatura}`;
+    const anterior = estado[chave];
+    const fingerprint = fingerprintAlerta(alerta);
 
-    if (!jaAvisado) {
+    if (!anterior) {
+      const motivo = "novo";
       novos.push({
-        ...a,
+        ...alerta,
+        fingerprint: fingerprintTransicao(alerta, null, motivo),
+        conteudoFingerprint: fingerprint,
         chaveEstado: chave,
-        motivo: "novo",
-        ...(a.assinatura.startsWith("inmet:") ? { grauAnterior: "NORMAL" } : {}),
+        motivo,
+        ...(alerta.assinatura.startsWith("inmet:") ? { grauAnterior: "NORMAL" } : {}),
       });
       continue;
     }
 
-    const antes = GRAVIDADE[jaAvisado.gravidade] ?? 0;
-    const agora = GRAVIDADE[a.gravidade] ?? 0;
+    const antes = GRAVIDADE[anterior.gravidade] ?? 0;
+    const agora = GRAVIDADE[alerta.gravidade] ?? 0;
     if (agora !== antes) {
-      novos.push({ ...a, chaveEstado: chave, motivo: agora > antes ? "agravou" : "reduziu", grauAnterior: jaAvisado.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[jaAvisado.gravidade] });
+      const motivo = agora > antes ? "agravou" : "reduziu";
+      novos.push({
+        ...alerta,
+        fingerprint: fingerprintTransicao(alerta, anterior, motivo),
+        conteudoFingerprint: fingerprint,
+        chaveEstado: chave,
+        motivo,
+        grauAnterior: anterior.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[anterior.gravidade],
+      });
+    } else if (alerta.assinatura.startsWith("inmet:") && anterior.fingerprint && anterior.fingerprint !== fingerprint) {
+      const motivo = "atualizou";
+      novos.push({
+        ...alerta,
+        fingerprint: fingerprintTransicao(alerta, anterior, motivo),
+        conteudoFingerprint: fingerprint,
+        chaveEstado: chave,
+        motivo,
+        grauAnterior: anterior.grau || alerta.grau,
+      });
     }
   }
+
   for (const [chave, anterior] of Object.entries(estado)) {
-    if (!chave.startsWith(`${chaveBase}|`) || achados.some((a) => chave === `${chaveBase}|${a.assinatura}`)) continue;
+    if (!chave.startsWith(`${chaveBase}|`) || chave.endsWith(`|${ASSINATURA_MONITOR}`) ||
+        achados.some((alerta) => chave === `${chaveBase}|${alerta.assinatura}`)) continue;
     const assinatura = chave.slice(chaveBase.length + 1);
-    // Estados legados de avisos oficiais usavam `chuva`/`vento` e podiam
-    // colidir com a previsão. Não inferimos normalização desses registros.
     if (!assinatura.startsWith("inmet:") && anterior.fonteDados === "INMET") continue;
     if (!dadosDisponiveis(assinatura) || (GRAVIDADE[anterior.gravidade] ?? 0) === 0) continue;
     const avisoOficial = assinatura.startsWith("inmet:");
-    novos.push({
+    const normalizacao = {
       chaveEstado: chave,
       assinatura,
       tipo: anterior.tipo || assinatura,
@@ -254,6 +317,11 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
       fonteDados: avisoOficial ? "INMET" : anterior.fonteDados || null,
       naturezaDado: avisoOficial ? "Aviso oficial" : anterior.naturezaDado,
       recomendacoes: [],
+    };
+    novos.push({
+      ...normalizacao,
+      fingerprint: fingerprintTransicao(normalizacao, anterior, "normalizou"),
+      conteudoFingerprint: fingerprintAlerta(normalizacao),
     });
   }
   return novos;
@@ -262,6 +330,7 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
 function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salvarEstado } = {}) {
   const estado = carregar();
   const emISO = new Date().toISOString();
+  const chaveBase = base.chave || String(base.alertas?.[0]?.chaveEstado || "").split("|")[0];
   for (const alerta of base.alertas) {
     estado[alerta.chaveEstado] = {
       gravidade: alerta.gravidade,
@@ -271,10 +340,35 @@ function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salva
       fonteDados: alerta.fonteDados,
       naturezaDado: alerta.naturezaDado,
       janela: alerta.janela,
+      // O estado compara o conteúdo meteorológico; a fila usa o fingerprint
+      // da transição para deduplicar cada episódio separadamente.
+      fingerprint: alerta.conteudoFingerprint || fingerprintAlerta(alerta),
+      eventoFingerprint: alerta.fingerprint || null,
       emISO,
     };
   }
+  estado[`${chaveBase}|${ASSINATURA_MONITOR}`] = {
+    inicializadoEm: estado[`${chaveBase}|${ASSINATURA_MONITOR}`]?.inicializadoEm || emISO,
+    verificadoEm: emISO,
+  };
   salvar(estado);
+}
+
+function registrarLinhaBase(estado, chaveBase, alertas, emISO = new Date().toISOString()) {
+  for (const alerta of alertas) {
+    estado[`${chaveBase}|${alerta.assinatura}`] = {
+      gravidade: alerta.gravidade,
+      grau: alerta.grau,
+      tipo: alerta.tipo,
+      origem: alerta.origem,
+      fonteDados: alerta.fonteDados,
+      naturezaDado: alerta.naturezaDado,
+      janela: alerta.janela,
+      fingerprint: fingerprintAlerta(alerta),
+      emISO,
+    };
+  }
+  estado[`${chaveBase}|${ASSINATURA_MONITOR}`] = { inicializadoEm: emISO, verificadoEm: emISO };
 }
 
 // ---------------------------------------------------------------------------
@@ -306,15 +400,25 @@ function basesMonitoradas() {
  * @param {boolean} [opcoes.ignorarHistorico=false] trata todos os alertas
  *   ativos como novos (envio de teste). O histórico não é lido nem alterado.
  */
-async function verificarAlertas({ ignorarHistorico = false } = {}) {
-  const estado = ignorarHistorico ? {} : limparExpirados(carregarEstado());
+async function verificarAlertas({
+  ignorarHistorico = false,
+  chaves = basesMonitoradas(),
+  montar = montarRelatorio,
+  onBase,
+  carregar = carregarEstado,
+  salvar = salvarEstado,
+  inicializarSemEnvio = true,
+} = {}) {
+  const estado = ignorarHistorico ? {} : limparExpirados(carregar());
   const porBase = [];
   const falhas = [];
+  let estadoAlterado = false;
+  const basesInicializadasAgora = new Set();
 
-  for (const chave of basesMonitoradas()) {
+  const verificarBase = async (chave) => {
     const cidade = getCidade(chave);
     try {
-      const report = await montarRelatorio(cidade, { atualizarClimaSaude: true });
+      const report = await montar(cidade, { atualizarClimaSaude: true });
       const graves = detectarAlertasGraves(report);
       const dadosDisponiveis = (assinatura) => {
         if (assinatura === "vento") return Number.isFinite(report.rajadaMaxKmh) || Number.isFinite(report.rajadaObservadaMaxKmh);
@@ -322,7 +426,7 @@ async function verificarAlertas({ ignorarHistorico = false } = {}) {
         if (assinatura.startsWith("inmet:")) return report.monitoramentoApis?.some((api) => api.id === "inmet-avisos" && api.status === "operacional");
         if (assinatura === "mar") return !report.mar?.desatualizado && Number.isFinite(report.mar?.alturaMaxDiaM);
         if (assinatura === "calor") return Number.isFinite(report.tempMax);
-        if (assinatura === "calor-ehf") return report.climaSaude?.status === 'operacional' && Boolean(report.climaSaude.dados?.nivel);
+        if (assinatura === "calor-ehf") return report.climaSaude?.status === "operacional" && Boolean(report.climaSaude.dados?.nivel);
         if (assinatura === "uv") return Number.isFinite(report.qualidadeAr?.uvMax);
         if (assinatura === "ar") return Number.isFinite(report.qualidadeAr?.aqiPm25);
         if (assinatura === "umidade") return Number.isFinite(report.umidadeMin);
@@ -331,16 +435,38 @@ async function verificarAlertas({ ignorarHistorico = false } = {}) {
           ["open-meteo", "inmet-avisos"].includes(api.id) && api.status === "operacional");
         return true;
       };
-      const novos = filtrarNovidades(chave, graves, estado, dadosDisponiveis);
 
-      if (novos.length) {
-        porBase.push({ chave, cidade, report, alertas: novos });
-      } else {
-        console.log(`[AGENDADOR] ${cidade.nome}: gatilhos sem mudança; nenhum alerta enviado.`);
+      const inicializada = Boolean(estado[`${chave}|${ASSINATURA_MONITOR}`]);
+      if (!ignorarHistorico && inicializarSemEnvio && !inicializada) {
+        registrarLinhaBase(estado, chave, graves);
+        estadoAlterado = true;
+        basesInicializadasAgora.add(chave);
+        console.log(`[AGENDADOR] ${cidade.nome}: linha de base registrada; nenhum alerta retroativo enviado.`);
+        return;
       }
+
+      const novos = filtrarNovidades(chave, graves, estado, dadosDisponiveis);
+      if (!novos.length) {
+        console.log(`[AGENDADOR] ${cidade.nome}: gatilhos sem mudança; nenhum alerta enviado.`);
+        return;
+      }
+      const base = { chave, cidade, report, alertas: novos };
+      porBase.push(base);
+      await onBase?.(base);
     } catch (erro) {
       falhas.push({ chave, nome: cidade.nome, erro: erro.message });
     }
+  };
+
+  await Promise.all(chaves.map(verificarBase));
+  if (estadoAlterado && !ignorarHistorico) {
+    const estadoAtual = carregar();
+    for (const chave of basesInicializadasAgora) {
+      for (const [chaveEstado, valor] of Object.entries(estado)) {
+        if (chaveEstado.startsWith(`${chave}|`)) estadoAtual[chaveEstado] = valor;
+      }
+    }
+    salvar(estadoAtual);
   }
 
   return {
@@ -374,5 +500,7 @@ module.exports = {
   carregarEstado,
   salvarEstado,
   ARQUIVO_ESTADO,
+  ASSINATURA_MONITOR,
+  fingerprintAlerta,
   enviarAlertaCalorDoRelatorio,
 };

@@ -1,3 +1,5 @@
+const { formatarRajadaPrevista } = require("../../public/weather-format");
+
 function valorFinito(valor) {
   return Number.isFinite(valor) ? valor : null;
 }
@@ -48,7 +50,7 @@ function contextoVento(report) {
       .map(([, fonte]) => fonte)
   );
   return {
-    detalhe: observado ? `Rajada medida pela estação INMET: ${rajada} km/h` : `Rajada prevista: ${rajada} km/h`,
+    detalhe: observado ? `Rajada medida pela estação INMET: ${formatarRajadaPrevista(rajada)}` : `Rajada prevista: ${formatarRajadaPrevista(rajada)}`,
     janela: observado ? null : periodoDoMaiorValor(report, "vento"),
     fonteDados: fontes.join(" / ") || "Dado meteorológico integrado",
     naturezaDado: observado ? "Classificação interna baseada em observação oficial" : "Classificação interna baseada na previsão",

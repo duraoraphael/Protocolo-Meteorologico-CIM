@@ -12,10 +12,11 @@ const {
 } = require("./emailComponents");
 const { ordenarEventosParaExibicao, prioridadeNivel } = require("./eventOrdering");
 const { TIPOS_DOCUMENTO, deveExibirNoDocumento } = require("../logic/alertPresentation");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 function alertasCimExibiveis(alertas) {
   return ordenarEventosParaExibicao((Array.isArray(alertas) ? alertas : []).filter((alerta) =>
-    deveExibirNoDocumento({
+    alerta?.motivo === "normalizou" || deveExibirNoDocumento({
       nivel: normalizarGrau(alerta?.grau),
       tipoDocumento: TIPOS_DOCUMENTO.ALERTA_CIM,
     })
@@ -44,6 +45,25 @@ function blocoAlerta(a) {
   });
 }
 
+function tipoComunicado(alertas) {
+  if (alertas.length && alertas.every((alerta) => alerta.motivo === "normalizou")) {
+    return {
+      titulo: "NORMALIZAÇÃO DAS CONDIÇÕES METEOROLÓGICAS",
+      introducao: "Retorno validado ao nível Normal para o fenômeno indicado",
+    };
+  }
+  if (alertas.length && alertas.every((alerta) => ["reduziu", "atualizou"].includes(alerta.motivo))) {
+    return {
+      titulo: "ATUALIZAÇÃO DE ALERTA METEOROLÓGICO",
+      introducao: "Redução validada de severidade; a condição ainda apresenta risco",
+    };
+  }
+  return {
+    titulo: "ALERTA METEOROLÓGICO",
+    introducao: "Mudança de gatilho meteorológico identificada",
+  };
+}
+
 function sitesOficiaisHtml(cidade) {
   const sites = [
     ["INMET", cidade?.links?.inmet || "https://portal.inmet.gov.br/"],
@@ -65,10 +85,12 @@ function renderAlertEmailHtml(base) {
   const cidade = base.cidade;
   const alertas = alertasCimExibiveis(base.alertas);
   if (!alertas.length) return "";
+  const comunicado = tipoComunicado(alertas);
   const apenasCalorEhf = alertas.every((alerta) => alerta.assinatura === 'calor-ehf');
   const temTransicao = alertas.some((alerta) => normalizarGrau(alerta.grauAnterior));
   const rajadas = (r.ventoPorPeriodo || []).map((periodo) => periodo?.rajadaMaxKmh).filter(Number.isFinite);
-  const rajada = rajadas.length ? `${Math.max(...rajadas)} km/h` : "—";
+  const rajadaMax = Number.isFinite(r.rajadaMaxKmh) ? r.rajadaMaxKmh : rajadas.length ? Math.max(...rajadas) : null;
+  const rajada = Number.isFinite(rajadaMax) ? formatarRajadaPrevista(rajadaMax) : "—";
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -80,14 +102,14 @@ function renderAlertEmailHtml(base) {
       <table class="cim-email-shell" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:850px;background:#ffffff;">
         ${faixaSimulacaoEmail(r)}
         ${renderEmailHeader({
-          titulo: "ALERTA METEOROLÓGICO",
+          titulo: comunicado.titulo,
           cidade: cidade.nome,
           uf: cidade.uf,
           data: r.dataFormatadaLonga || r.dataFormatadaCurta,
         })}
 
         <tr><td style="padding:16px 22px 4px 22px;font-family:Arial,sans-serif;font-size:13.5px;color:#333;">
-          ${temTransicao ? "Mudança de gatilho" : "Novo enquadramento"} ${apenasCalorEhf ? 'de calor / risco à saúde' : 'meteorológico'} identificado para <strong>${esc(cidade.nome)}</strong>.
+          ${temTransicao ? comunicado.introducao : "Novo enquadramento"} ${apenasCalorEhf ? 'de calor / risco à saúde' : 'para'} <strong>${esc(cidade.nome)}</strong>.
           Consulte abaixo o grau atual e as recomendações aplicáveis.
         </td></tr>
 
@@ -150,7 +172,12 @@ function assuntoAlerta(base) {
     .filter(Boolean)
     .sort((a, b) => prioridadeNivel(b) - prioridadeNivel(a))[0] || "ALERTA";
   const simbolo = { NORMAL: "🟢", "ATENÇÃO": "🟡", ALERTA: "🟠", "EMERGÊNCIA": "🔴" }[grau];
-  return `${simbolo} ${tipos} — ${nivelExibicao(grau)} — ${base.cidade.nome}/${base.cidade.uf}`;
+  const prefixo = alertas.every((alerta) => alerta.motivo === "normalizou")
+    ? "NORMALIZAÇÃO"
+    : alertas.every((alerta) => ["reduziu", "atualizou"].includes(alerta.motivo))
+      ? "ATUALIZAÇÃO"
+      : null;
+  return `${simbolo} ${prefixo ? `${prefixo} — ` : ""}${tipos} — ${nivelExibicao(grau)} — ${base.cidade.nome}/${base.cidade.uf}`;
 }
 
 module.exports = { alertasCimExibiveis, renderAlertEmailHtml, assuntoAlerta };

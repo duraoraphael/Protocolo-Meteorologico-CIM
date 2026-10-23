@@ -1,5 +1,5 @@
 const express = require("express");
-const { buscarOceanop, validarPonto, obterDiagnosticoOceanop } = require("../sources/oceanop");
+const { buscarOceanop, validarConsulta, obterDiagnosticoOceanop } = require("../sources/oceanop");
 const { CIDADES } = require("../config/cities");
 const pontos = require("../config/oceanopAreas");
 
@@ -12,7 +12,7 @@ function criarOceanopRouter({ verificarSenha } = {}) {
   if (typeof verificarSenha !== "function") throw new TypeError("OCEANOP: verificador de acesso obrigatório.");
   const router = express.Router();
 
-  // A listagem pública não revela PointIDs nem coordenadas corporativas.
+  // A listagem pública não revela identificadores locais corporativos.
   router.get("/areas", (_req, res) => res.json({
     ok: true,
     areas: Object.values(CIDADES).map((cidade) => ({
@@ -39,8 +39,8 @@ function criarOceanopRouter({ verificarSenha } = {}) {
           erro: "Esta base ainda não possui ponto OCEANOP autorizado e homologado.",
         });
       }
-      validarPonto(ponto);
-      const resultado = await buscarOceanop([ponto]);
+      validarConsulta(ponto);
+      const resultado = await buscarOceanop(ponto);
       res.json({ ok: true, cidade: chave, ...resultado, diagnostico: obterDiagnosticoOceanop() });
     } catch (erro) {
       res.status(erro.status === 400 ? 400 : 502).json({

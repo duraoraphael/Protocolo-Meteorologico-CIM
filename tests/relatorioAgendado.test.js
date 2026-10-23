@@ -291,3 +291,22 @@ test("PDF e e-mail exibem a referência da edição sem perder a comparação", 
   assert.doesNotMatch(email, /35 km\/h → 48 km\/h/);
   assert.doesNotMatch(email, /ATUALIZAÇÃO DE PREVISÃO/);
 });
+
+test("PDF das 08h ignora comparação legada, enquanto o das 15h preserva 08h -> 15h", () => {
+  const base = {
+    cidade: { nome: "Rio de Janeiro", uf: "RJ" },
+    dataFormatadaCurta: "21/10/2026", dataFormatadaLonga: "quarta-feira, 21 de outubro de 2026",
+    horaConsulta: "08:00", horarioAgendado: "08:00", previsaoAte: "00h",
+    mudancasDia: ["Grau geral: ATENÇÃO → ALERTA."],
+    previsaoDias: [], condicaoGeral: "Nublado", tabelaTemperaturaUmidade: [],
+    ventoPorPeriodo: [], chuvaPorPeriodo: [], fontesPorCampo: {},
+    severidade: { grau: "NORMAL", eventos: [] }, avisosInmet: [], divergencias: [],
+    avisosColeta: [], fontesAutomatizadas: [], fontesManuais: [],
+    deslocamento: { pedestres: [], transporte: [], condutores: [] }, edificacao: [],
+  };
+  const pdf08 = renderPdfHtml(base);
+  const pdf15 = renderPdfHtml({ ...base, horaConsulta: "15:00", horarioAgendado: "15:00" });
+  assert.doesNotMatch(pdf08, /Mudanças do dia|relatório das 05:00|ATENÇÃO → ALERTA/);
+  assert.match(pdf15, /Mudanças do dia em relação ao relatório das 08:00/);
+  assert.match(pdf15, /ATENÇÃO → ALERTA/);
+});

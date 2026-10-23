@@ -33,6 +33,31 @@ test("cabeçalho usa a edição e a previsão na mesma linha", () => {
   }
 });
 
+test("PDF exibe rajada OCEANOP no resumo e na referência da previsão", () => {
+  const $ = cheerio.load(renderPdfHtml(report({
+    previsaoDias: [{ periodo: "Hoje (15h–00h)", condicao: "Nublado", tempMin: 20, tempMax: 28, umidadeMin: 60, umidadeMax: 90, chuvaMm: 0, rajadaKmh: 43.2 }],
+    ventoPorPeriodo: [{
+      periodo: "Tarde", janela: "12h–18h", direcao: "E", velocidadeMediaKmh: 10,
+      rajadaMaxKmh: 43.2, referenciaInmet: "Petrobras — OCEANOP · Área A · 09/10/2026 15:00:00 a 09/10/2026 15:59:59",
+    }],
+    fontesPorCampo: { rajadaMaxKmh: "Petrobras — OCEANOP", "periodos.tarde.rajadaMaxKmh": "Petrobras — OCEANOP" },
+  })));
+  assert.match($.text(), /43 km\/h/);
+  assert.match($.text(), /Petrobras — OCEANOP/);
+  assert.match($.text(), /Área A/);
+});
+
+test("PDF exibe o pico diário Tetra Tech sem atribuí-lo a um período", () => {
+  const $ = cheerio.load(renderPdfHtml(report({
+    rajadaMaxKmh: 51.856,
+    previsaoDias: [{ periodo: "Hoje", rajadaKmh: 51.856 }],
+    fontesPorCampo: { rajadaMaxKmh: "Tetra Tech/OCEANOP" },
+  })));
+  assert.match($.text(), /52 km\/h/);
+  assert.match($.text(), /Tetra Tech\/OCEANOP/);
+  assert.doesNotMatch($(".tabela-vento-periodo").text(), /52 km\/h/);
+});
+
 test("condições de mar aparecem imediatamente após qualidade do ar e índice UV", () => {
   const html = renderPdfHtml(report({ qualidadeAr: { pm25Classificacao: {}, uvClassificacao: {} } }));
   const $ = cheerio.load(html);
@@ -210,7 +235,7 @@ test("vento e chuva por período exibem os números complementares e suas fontes
 
   const vento = $("table.tabela-vento-periodo");
   assert.match(vento.text(), /12,0 km\/h/);
-  assert.match(vento.text(), /29,0 km\/h/);
+  assert.match(vento.text(), /29 km\/h/);
   assert.match(vento.closest("section").find(".fonte-tabela").text(), /INMET — previsão oficial \/ Open-Meteo — previsão complementar/);
 
   const chuva = $("table.tabela-chuva-periodo");

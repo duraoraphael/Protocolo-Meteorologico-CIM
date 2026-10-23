@@ -82,7 +82,7 @@ test("gera os alertas operacionais com título, cor e 100% das recomendações c
   for (const caso of casos) conferirHtml(caso);
 });
 
-test("calor NORMAL não gera card no Alerta CIM", () => {
+test("calor NORMAL gera card somente quando representa normalização comunicável", () => {
   const calorNormal = nivelEhf("Sem excesso");
   const html = renderizar({
     tipo: "Calor / risco à saúde",
@@ -93,7 +93,9 @@ test("calor NORMAL não gera card no Alerta CIM", () => {
     detalhe: "EHF Sem excesso.",
     recomendacoes: recomendacoesCalor(calorNormal),
   });
-  assert.equal(html, "");
+  assert.match(html, /NORMALIZAÇÃO DAS CONDIÇÕES METEOROLÓGICAS/);
+  assert.match(html, /CALOR \/ RISCO À SAÚDE — NORMAL/);
+  assert.match(html, /NORMALIZAÇÃO:<\/strong> ATENÇÃO → NORMAL/);
 });
 
 test("padroniza os demais nomes de parâmetro e exibe emergencial sem alterar o grau interno", () => {

@@ -16,7 +16,7 @@ const { validarDocumentoOperacional } = require("../logic/documentProvenance");
  * @param {object} [opcoes]
  * @param {boolean} [opcoes.teste=false] assunto marcado como [TESTE].
  */
-async function enviarAlertaPorEmail(base, { teste = false } = {}) {
+async function enviarAlertaPorEmail(base, { teste = false, eventoId = null, destinatariosOverride = null } = {}) {
   const alertas = alertasCimExibiveis(base.alertas);
   if (!alertas.length) {
     return {
@@ -30,7 +30,7 @@ async function enviarAlertaPorEmail(base, { teste = false } = {}) {
   validarDocumentoOperacional(base?.report, "envio de alerta meteorológico");
 
   const baseExibicao = { ...base, alertas };
-  const destinatarios = listaDestinatarios(base.chave);
+  const destinatarios = destinatariosOverride || listaDestinatarios(base.chave, { permitirFallback: false });
   if (destinatarios.length === 0) {
     throw new Error(
       `Nenhum destinatário cadastrado para "${base.cidade.nome}" — alerta não enviado.`
@@ -49,6 +49,10 @@ async function enviarAlertaPorEmail(base, { teste = false } = {}) {
     attachments: anexosLogosEmail(html),
     // Prioridade alta: alguns clientes destacam a mensagem na lista.
     priority: "high",
+    ...(eventoId ? {
+      messageId: `<alerta-${eventoId}@cim.local>`,
+      headers: { "X-CIM-Alert-Event-ID": eventoId },
+    } : {}),
   });
 
   return { messageId: info.messageId, destinatarios, ignorado: false };

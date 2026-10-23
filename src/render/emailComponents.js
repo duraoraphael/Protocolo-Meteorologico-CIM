@@ -140,10 +140,17 @@ function renderStatusChangeCard({
     : AlertTitle.formatarTitulo(fenomeno, atual);
 
   if (resumido) {
+    const anterior = normalizarGrau(grauAnterior);
+    const classificacao = classificacaoMudanca(anterior, atual, motivo);
+    const transicao = anterior
+      ? `<div style="color:#555555;font:12px/1.45 Arial,sans-serif;margin-top:9px;"><strong>${esc(classificacao)}:</strong> ${esc(nivelExibicao(anterior))} → ${esc(nivelExibicao(atual))}</div>`
+      : "";
     return `<table data-alert-card="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#FFFFFF;border:1.5px solid ${visual.cor};border-left:5px solid ${visual.cor};margin:0 0 14px;">
       <tr><td style="padding:15px 18px;color:#333333;font-family:Arial,sans-serif;">
         <div data-alert-title="true" style="color:${visual.cor};font:bold 18px/1.3 Arial,sans-serif;">${esc(tituloAtual)}</div>
+        ${transicao}
         ${detalhe ? `<div data-alert-notice="true" style="font:13px/1.55 Arial,sans-serif;margin-top:12px;"><strong>Informe do aviso:</strong> ${esc(detalhe)}</div>` : ""}
+        ${janela ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:9px;"><strong>${avisoOficial ? "Vigência" : "Período de referência"}:</strong> ${esc(janela)}</div>` : ""}
         ${recomendacoesHtml(recomendacoes)}
       </td></tr>
     </table>`;

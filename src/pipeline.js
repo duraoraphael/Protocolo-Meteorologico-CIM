@@ -11,9 +11,11 @@ const {
   montarPrevisaoProximosDiasInmet,
   obterPrevisaoProximosDias,
   mesclarPrevisaoProximosDias,
+  aplicarRajadasOceanop,
+  aplicarChuvaClimatempo,
 } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
-const { validadeInformativo, HORARIO_EDICAO_INICIAL } = require("./logic/informativoValidity");
+const { validadeInformativo } = require("./logic/informativoValidity");
 const { TIPOS_DOCUMENTO } = require("./logic/alertPresentation");
 const {
   registrarDocumentoOperacional,
@@ -155,7 +157,7 @@ async function executarPipelineCorRio({ enviarEmail = true, horarioAgendado = nu
   return { report, arquivoPdf: null, caminhoArquivo: null, envio, ged: null };
 }
 
-async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false, tipoEnvio = "informativo", permitirSemDestinatarios = false } = {}) {
+async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false, tipoEnvio = "informativo", permitirSemDestinatarios = false, destinatariosTeste = null } = {}) {
   if (tipoEnvio === "cor_rio") {
     return executarPipelineCorRio({ enviarEmail, horarioAgendado, teste, permitirSemDestinatarios });
   }
@@ -170,7 +172,11 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   console.log("[RELATORIO] Dados obtidos");
   if (horarioAgendado) {
     report.nomeArquivoBase += `_${horarioAgendado.replace(":", "")}`;
-    if (horarioAgendado !== HORARIO_EDICAO_INICIAL) {
+    // A edição inicial das 08h é uma fotografia autônoma. Removemos
+    // explicitamente qualquer comparação que possa ter vindo de objeto
+    // reutilizado/cache e só permitimos a comparação regular 08h -> 15h.
+    delete report.mudancasDia;
+    if (horarioAgendado === "15:00") {
       report.mudancasDia = compararComManha(comparacaoAnterior, resumo(report), horarioAgendado);
     }
   }
@@ -190,7 +196,17 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   const instantePrevisao = new Date(report.geradoEmISO || Date.now());
   const previsaoInmet3d = montarPrevisaoProximosDiasInmet(cidade, report.inmetPrevisao, { agora: instantePrevisao });
   const previsaoComplementar3d = await obterPrevisaoProximosDias(cidade, { agora: instantePrevisao });
-  report.previsaoProximosDias = mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d);
+  report.previsaoProximosDias = aplicarRajadasOceanop(
+    aplicarRajadasOceanop(
+      aplicarChuvaClimatempo(
+        mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d),
+        report.climatempoChuva
+      ),
+      report.previsaoOceanopDias
+    ),
+    report.previsaoRajadaPortalDias,
+    "Tetra Tech/OCEANOP"
+  );
   if (report.previsaoProximosDias.status === "indisponivel") {
     report.avisosColeta.push("INMET (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
   }
@@ -239,7 +255,9 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
     console.log("[RELATORIO] Preparando e-mail");
     console.log("[RELATORIO] Enviando SMTP");
     try {
-      envio = await enviarRelatorioPorEmail(report, pdfAnexoEmail);
+      envio = await enviarRelatorioPorEmail(report, pdfAnexoEmail, {
+        destinatariosOverride: destinatariosTeste,
+      });
     } catch (erro) {
       throw erroDaEtapa("email", "SMTP", "enviarRelatorioPorEmail", erro);
     }

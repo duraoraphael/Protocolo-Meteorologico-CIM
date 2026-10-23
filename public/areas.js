@@ -7,6 +7,7 @@ const localFilter = document.getElementById('local-retornado');
 let areas = [], response = null, controller = null;
 const escape = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const value = v => v == null || v === '' ? '—' : typeof v === 'number' ? new Intl.NumberFormat('pt-BR',{maximumFractionDigits:8}).format(v) : escape(v);
+const gustValue = v => WeatherFormat.formatarRajadaNumero(v, '—');
 function clearResults() {
  controller?.abort();controller=null;response=null;results.hidden=true;
  document.getElementById('consultar').disabled=false;
@@ -16,9 +17,9 @@ function clearResults() {
 }
 base.addEventListener('change',()=>{
  clearResults();const selected=areas.find(a=>a.chave===base.value);
- localInput.value=selected?.habilitado ? 'Ponto autorizado (identificador protegido)' : '';
+ localInput.value=selected?.habilitado ? 'Área autorizada (identificador protegido)' : '';
  document.getElementById('consultar').disabled=!selected?.habilitado;
- document.getElementById('vinculo').textContent=selected?.habilitado ? 'Ponto autorizado associado a esta base na configuração do projeto.' : 'Esta base ainda não possui ponto OCEANOP autorizado e homologado.';
+ document.getElementById('vinculo').textContent=selected?.habilitado ? 'Área autorizada associada a esta base na configuração do projeto.' : 'Esta base ainda não possui área OCEANOP autorizada e homologada.';
 });
 localInput.addEventListener('input',clearResults);
 async function loadAreas(){
@@ -33,7 +34,7 @@ async function loadAreas(){
 function render(){
  if(!response)return;
  const rows=response.previsoes.filter(r=>!localFilter.value||r.local===localFilter.value);
- document.getElementById('previsoes').innerHTML=rows.map(r=>`<tr><td>${escape(r.local)||'—'}<small>Escrita na fonte: ${escape(r.escritoEm)||'—'}</small></td><td>${escape(r.inicio)||'—'}</td><td>${escape(r.fim)||'—'}</td>${['Temperatura','VelocidadeVento','VelocidadeVento_10M_Rajada','AlturaMaximaOnda','Precipitacao'].map(k=>`<td>${value(r.valores[k])}</td>`).join('')}<td><details><summary>Ver parâmetros</summary><dl>${response.campos.map(c=>`<div><dt>${escape(c.rotulo)}</dt><dd>${value(r.valores[c.chave])}</dd></div>`).join('')}</dl></details></td></tr>`).join('');
+ document.getElementById('previsoes').innerHTML=rows.map(r=>`<tr><td>${escape(r.local)||'—'}<small>Escrita na fonte: ${escape(r.escritoEm)||'—'}</small></td><td>${escape(r.inicio)||'—'}</td><td>${escape(r.fim)||'—'}</td>${['Temperatura','VelocidadeVento','VelocidadeVento_10M_Rajada','AlturaMaximaOnda','Precipitacao'].map(k=>`<td>${k==='VelocidadeVento_10M_Rajada'?gustValue(r.valores[k]):value(r.valores[k])}</td>`).join('')}<td><details><summary>Ver parâmetros</summary><dl>${response.campos.map(c=>`<div><dt>${escape(c.rotulo)}</dt><dd>${c.chave==='VelocidadeVento_10M_Rajada'?gustValue(r.valores[c.chave]):value(r.valores[c.chave])}</dd></div>`).join('')}</dl></details></td></tr>`).join('');
 }
 localFilter.addEventListener('change',render);
 form.addEventListener('submit',async e=>{
@@ -48,8 +49,8 @@ form.addEventListener('submit',async e=>{
  statusEl.textContent=data.previsoes.length ? `${data.previsoes.length} intervalos retornados pela fonte. Status ${d?.status||'ATIVO'}; ${d?.localidadesComDadosValidos??1} localidade(s) com dados válidos.` : 'Nenhuma previsão encontrada para este local.';
  if(!data.previsoes.length)return;
  localFilter.innerHTML='<option value="">Todos os locais retornados</option>'+[...new Set(data.previsoes.map(r=>r.local).filter(Boolean))].map(p=>`<option value="${escape(p)}">${escape(p)}</option>`).join('');
- document.getElementById('resultado-titulo').textContent=`Ponto: ${data.consulta.pontos.map(p=>p.ID).join(', ')}`;
- document.getElementById('consulta-info').textContent=`Consulta realizada em ${new Date(data.consultadoEm).toLocaleString('pt-BR')} · Respostas associadas pelo PointID solicitado.`;
+ document.getElementById('resultado-titulo').textContent='Área OCEANOP homologada';
+ document.getElementById('consulta-info').textContent=`Consulta realizada em ${new Date(data.consultadoEm).toLocaleString('pt-BR')} · Identificador local protegido pelo backend.`;
  results.hidden=false;render();
  }catch(e){if(e.name!=='AbortError'&&controller===request){statusEl.dataset.error='true';statusEl.textContent=e.message}}
  finally{if(controller===request){button.disabled=false;button.textContent='Consultar previsão';results.setAttribute('aria-busy','false')}}

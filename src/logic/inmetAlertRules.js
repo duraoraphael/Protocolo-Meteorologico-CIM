@@ -4,6 +4,7 @@
 // rajada numérica; esses gatilhos recebem apenas observações de estação INMET.
 const { formatarTitulo } = require("../../public/alert-title");
 const { fenomenoAvisoInmet, grauAvisoInmet, normalizarComparacao } = require("../sources/inmet");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 const GRAUS = Object.freeze({
   NORMAL: 0,
@@ -139,7 +140,7 @@ function classificarCondicoesMeteorologicas({
   const eventos = [];
 
   if (grauVento !== "NORMAL") {
-    const detalhe = `Rajada medida pela estação INMET: ${rajadaKmh} km/h`;
+    const detalhe = `Rajada medida pela estação INMET: ${formatarRajadaPrevista(rajadaKmh)}`;
     eventos.push({
       assinatura: "vento",
       fenomeno: "vento",

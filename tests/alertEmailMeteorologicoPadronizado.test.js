@@ -75,7 +75,9 @@ test("vento interno em ATENÇÃO e ALERTA exibe só informe e recomendações pr
   const html = renderAlertEmailHtml(base([atencao.alerta], atencao.report));
   assert.match(html, /VENTO — ATENÇÃO/);
   assert.match(html, /Informe do aviso:<\/strong> Rajada prevista: 36 km\/h/);
-  assert.doesNotMatch(html, /Origem da classificação|Significado do nível CIM|Instalações \(Operações\)|Período:|Fonte de dados:/);
+  assert.doesNotMatch(html, /Origem da classificação|Significado do nível CIM|Instalações \(Operações\)/);
+  assert.match(html, /Período de referência:<\/strong> Tarde \(12h–18h\)/);
+  assert.doesNotMatch(html, /Fonte de dados:/);
 });
 
 test("vento representa redução e agravamento somente com classificação anterior válida", () => {
@@ -97,13 +99,13 @@ test("vento representa redução e agravamento somente com classificação anter
   assert.deepEqual([reducao.grauAnterior, reducao.grau, reducao.motivo], ["ALERTA", "ATENÇÃO", "reduziu"]);
   let html = renderAlertEmailHtml(base([reducao], vento(36).report));
   assert.match(html, /VENTO — ATENÇÃO/);
-  assert.doesNotMatch(cheerio.load(html)("[data-alert-card='true']").text(), /MUDANÇA DE STATUS|Mudança de gatilho/);
+  assert.match(cheerio.load(html)("[data-alert-card='true']").text(), /REDUÇÃO: ALERTA → ATENÇÃO/);
 
   const agravamento = enviar(45);
   assert.deepEqual([agravamento.grauAnterior, agravamento.grau, agravamento.motivo], ["ATENÇÃO", "ALERTA", "agravou"]);
   html = renderAlertEmailHtml(base([agravamento], vento(45).report));
   assert.match(html, /VENTO — ALERTA/);
-  assert.doesNotMatch(cheerio.load(html)("[data-alert-card='true']").text(), /MUDANÇA DE STATUS|AGRAVAMENTO/);
+  assert.match(cheerio.load(html)("[data-alert-card='true']").text(), /AGRAVAMENTO: ATENÇÃO → ALERTA/);
   assert.equal(classificacaoMudanca("ALERTA", "ALERTA"), "MANUTENÇÃO");
 });
 

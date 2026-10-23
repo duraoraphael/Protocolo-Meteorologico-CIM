@@ -15,6 +15,7 @@ const { buscarSemanaMarEmLote } = require("../sources/openMeteoSemanal");
 const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
 const { LIMIARES } = require("./riskEngine");
 const { registrarDocumentoOperacional } = require("./documentProvenance");
+const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 // Níveis de severidade usados no relatório semanal. O número permite ordenar
 // e escolher a cor; o rótulo aparece no documento.
@@ -84,13 +85,13 @@ function avaliarDia(dia, mar) {
     riscos.push({
       tipo: "Vento forte",
       severidade: SEVERIDADE.CRITICO,
-      detalhe: `Rajadas de até ${dia.rajadaMaxKmh} km/h`,
+      detalhe: `Rajadas de até ${formatarRajadaPrevista(dia.rajadaMaxKmh)}`,
     });
   } else if (dia.rajadaMaxKmh >= LIMIARES.ventoModeradoKmh) {
     riscos.push({
       tipo: "Vento moderado",
       severidade: SEVERIDADE.ATENCAO,
-      detalhe: `Rajadas de até ${dia.rajadaMaxKmh} km/h`,
+      detalhe: `Rajadas de até ${formatarRajadaPrevista(dia.rajadaMaxKmh)}`,
     });
   }
 

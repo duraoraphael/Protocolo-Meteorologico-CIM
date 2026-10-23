@@ -75,7 +75,7 @@ test('valida URL e não consulta base sem configuração', () => {
   assert.throws(() => validarUrl('http://clima.saude.gov.br/rj/petropolis'), /inválida/);
   assert.throws(() => validarUrl('https://outro.example/rj/petropolis'), /inválida/);
   assert.equal(lerArmazenado({ chave: 'x' }).status, 'nao_configurada');
-  assert.equal(CIDADES.cabiunas.climaSaudeMunicipio, 'Macaé');
+  assert.equal(CIDADES.macae.climaSaudeUrl, 'https://clima.saude.gov.br/rj/macae?modo=ehf');
 });
 
 test('falha de rede, timeout e HTTP não-200 preservam último válido sem fabricar dado novo', async () => {

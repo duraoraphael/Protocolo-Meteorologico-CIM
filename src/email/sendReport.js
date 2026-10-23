@@ -1,6 +1,6 @@
 const { renderEmailHtml } = require("../render/emailTemplate");
 const { renderCorRioStandaloneEmail } = require("../render/corRioStandaloneEmail");
-const { listarPorCidade } = require("../config/recipients");
+const { listarPorCidade, validarEmail } = require("../config/recipients");
 const { BASE_COR_RIO } = require("../config/distributionBases");
 const { criarTransportador, enderecoRemetente } = require("./transport");
 const { anexosLogosEmail } = require("../config/headerAssets");
@@ -39,9 +39,20 @@ function listaDestinatarios(cidadeChave, { permitirFallback = true } = {}) {
     .filter(Boolean));
 }
 
-async function enviarRelatorioPorEmail(report, pdfBuffer) {
+async function enviarRelatorioPorEmail(report, pdfBuffer, { destinatariosOverride = null } = {}) {
   validarDocumentoOperacional(report, "envio de e-mail", { exigirCamposCriticos: true });
-  const destinatarios = listaDestinatarios(report.cidade?.chave);
+  let destinatarios;
+  if (destinatariosOverride !== null) {
+    if (!report.envioTeste) {
+      throw new Error("Destinatário avulso permitido somente em envio de teste.");
+    }
+    if (!Array.isArray(destinatariosOverride)) {
+      throw new Error("A lista de destinatários de teste é inválida.");
+    }
+    destinatarios = semDuplicacoes(destinatariosOverride.map(validarEmail));
+  } else {
+    destinatarios = listaDestinatarios(report.cidade?.chave);
+  }
   if (destinatarios.length === 0) {
     throw new Error(
       `Nenhum destinatário cadastrado para "${report.cidade?.nome || "esta base"}". Cadastre um responsável no painel ou configure REPORT_RECIPIENTS no .env.`
