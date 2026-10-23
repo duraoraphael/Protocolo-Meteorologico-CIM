@@ -1,7 +1,7 @@
 // Páginas indicadas para a coleta de rajada prevista. Apenas correspondências
 // geográficas e usos automatizados confirmados ficam habilitados.
 
-const TT_BASE = "https://petrobras.ttforecast.com.br/bulletin/forecast-chart/Terrestre";
+const TT_BASE = "https://petrobras.ttforecast.com.br/bulletin/forecast-table/Terrestre";
 
 function tetraTech(areaName, slug, fusoHorario = "America/Sao_Paulo", extra = {}) {
   return Object.freeze({
@@ -33,13 +33,5 @@ module.exports = Object.freeze({
     motivo: "Correspondência Araucária/Wenceslau Bráz não validada.",
   }),
 
-  // Os termos públicos do Climatempo vedam robôs e extração automatizada.
-  // Ativar somente com API/licença escrita que autorize coleta e redistribuição.
-  aracaju: Object.freeze({
-    fonte: "climatempo",
-    habilitado: false,
-    pagina: "https://www.climatempo.com.br/previsao-do-tempo/15-dias/cidade/384/aracaju-se",
-    fusoHorario: "America/Sao_Paulo",
-    motivo: "Scraping automatizado não autorizado pelos termos públicos; requer API/licença.",
-  }),
+  aracaju: tetraTech("Aracaju", "Aracaju"),
 });

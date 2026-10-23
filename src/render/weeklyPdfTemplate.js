@@ -318,7 +318,7 @@ function renderWeeklyPdfHtml(r) {
 function weeklyFooterTemplate(r) {
   return `<div style="width:100%;font-family:Arial,sans-serif;font-size:7.5pt;color:#666;padding:0 30px;">
     <div style="border-top:2px solid ${brand.amarelo};padding-top:4px;display:flex;justify-content:space-between;">
-      <span>Relatório Semanal CIM — gerado automaticamente por ferramenta assistida por IA em ${esc(r.dataGeracao)} às ${esc(r.horaGeracao)}. Sujeito a revisão humana antes de uso operacional. Fontes: Open-Meteo, INMET.</span>
+      <span>Relatório Semanal CIM — gerado automaticamente por ferramenta assistida por IA em ${esc(r.dataGeracao)} às ${esc(r.horaGeracao)}. Sujeito a revisão humana antes de uso operacional. Fonte meteorológica: INMET.</span>
       <span style="white-space:nowrap;margin-left:12px;"><span class="pageNumber"></span>/<span class="totalPages"></span></span>
     </div>
   </div>`;

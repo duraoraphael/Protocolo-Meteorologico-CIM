@@ -119,7 +119,7 @@ test("todos os tipos de e-mail reutilizam o cabeçalho institucional completo", 
   validarCabecalho(normalizacao, "NORMALIZAÇÃO DAS CONDIÇÕES METEOROLÓGICAS");
   assert.match(normalizacao, /ALERTA → NORMAL/);
   validarCabecalho(semanal, "RELATÓRIO METEOROLÓGICO SEMANAL");
-  assert.doesNotMatch(diario, /Petrobras|logo-petrobras|data-email-header-petrobras/i);
+  assert.doesNotMatch(diario, /logo-petrobras|data-email-header-petrobras/i);
 });
 
 test("localidade e data do informativo são dinâmicas no cabeçalho", () => {

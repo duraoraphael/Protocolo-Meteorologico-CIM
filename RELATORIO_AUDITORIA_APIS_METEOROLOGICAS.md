@@ -1,211 +1,239 @@
-# Relatório de auditoria das APIs meteorológicas
+# Relatório de auditoria das APIs meteorológicas — CIM
 
-> **Registro histórico de 13/10/2026.** Este documento preserva o estado anterior para rastreabilidade e não descreve a política vigente. A configuração atual está em `AUDITORIA_FINAL_DADOS_REAIS_CIM.md`: INMET é prioritário; Open-Meteo complementa somente campos de previsão ausentes e fornece UV com identificação própria; observações INMET permanecem separadas; EHF/risco térmico usam Clima e Saúde; Windy e a rota `/api/logos` foram removidos.
+**Data:** 22/10/2026
 
-**Projeto:** Protocolo Meteorológico CIM  
-**Data da auditoria:** 13/10/2026  
-**Escopo:** backend, painel, rotas HTTP, agendadores, fontes externas, caches, regras de risco, PDF, e-mail, configurações e testes.  
-**Restrição relevante:** nenhum e-mail real foi enviado. O ambiente bloqueou a saída de rede do processo Node e o pedido de liberação não pôde ser analisado por limite do revisor de permissões. Por isso, este relatório diferencia teste automatizado, conferência documental/página oficial e consulta real do endpoint.
+**Escopo:** fontes externas, cadastro das bases, normalização, unidades, fusos, caches, prioridade de fontes, regras de alerta e consistência entre painel, PDF e e-mail.
+
+**Restrições:** nenhum e-mail real foi enviado, nenhum upload no GED/SharePoint foi executado, nenhum serviço de produção foi reiniciado e nenhuma validação TLS foi desativada.
 
 ## A. Resumo executivo
 
-- **Integrações externas encontradas:** 16 canais/endpoints (incluindo SMTP, OAuth e Graph).
-- **Rotas HTTP internas encontradas:** 15.
-- **Integrações rastreadas no código:** 16 de 16.
-- **Integrações cobertas por testes automatizados de contrato/falha:** 12; as exceções são a conectividade real de OAuth, Graph, SMTP e o serviço Oceanop.
-- **Fontes confrontadas com documentação ou página oficial:** Open-Meteo Weather, Air Quality/CAMS, Clima e Saúde, ANA, IBGE e COR-Rio.
-- **Falhas de implementação comprovadas:** 4.
-- **Falhas corrigidas nesta auditoria:** 4.
-- **Verificações externas pendentes:** 5 grupos: execução ao vivo de todos os endpoints pelo processo da aplicação; coordenadas físicas das instalações; contrato Oceanop; SharePoint/GED; entrega SMTP.
+A auditoria confirmou que o fluxo operacional utiliza um objeto consolidado por base e emissão, posteriormente reutilizado pelo painel, PDF e e-mail. As fontes oficiais e complementares permanecem identificadas por campo; observações não são promovidas como previsões; valores ausentes continuam nulos em vez de receber zero ou número fictício.
 
-Conclusão executiva: não foi encontrado gerador aleatório nem valor meteorológico fictício no caminho de produção. Foram encontrados dados simulados apenas em testes e artefatos de verificação visual, claramente identificados e não importados pelo runtime. Quatro problemas podiam produzir atribuição ou classificação enganosa; todos foram corrigidos. O sistema **não pode ser declarado 100% validado** enquanto as consultas reais de ponta a ponta e as coordenadas físicas das instalações não forem confirmadas em ambiente com rede e documentação operacional.
+Foram encontrados quatro achados nesta rodada:
 
-## B. Inventário de APIs
+1. o adaptador OCEANOP validava a estrutura da resposta, mas não confrontava o campo `Local` com a área solicitada antes de armazenar e promover os dados;
+2. o script independente de auditoria não carregava a cadeia de certificados corporativos utilizada pelo runtime, produzindo falsos diagnósticos TLS para as APIs Open-Meteo;
+3. o README informava nove bases costeiras, enquanto o cadastro executável possui oito;
+4. o OCEANOP estava descrito como consulta sem token, mas a verificação real alcançou o serviço e recebeu HTTP 401 nas sete áreas cadastradas.
 
-### B.1 Serviços externos
+Os três primeiros achados foram corrigidos. O quarto permanece como pendência externa: a aplicação não deve inventar token, esquema de autenticação ou resposta da API. A documentação foi corrigida para não declarar a integração OCEANOP como operacional enquanto não houver autenticação oficial e resposta real com `success: true`.
 
-| API/serviço | Finalidade | Endpoint e método | Autenticação | Status | Última verificação |
+Resultado geral:
+
+- **3 correções concluídas** no código, testes e documentação;
+- **1 pendência externa principal**: autenticação/homologação operacional do OCEANOP;
+- **420 testes aprovados e 0 falhas**;
+- INMET, Open-Meteo Weather, Air Quality, Marine, Clima e Saúde, COR-Rio, ANA e IBGE responderam ao vivo nesta auditoria;
+- OCEANOP respondeu HTTP 401 em todas as áreas testadas, sem retentativa indevida e sem exposição de corpo privado;
+- o sistema não deve ser declarado integralmente homologado enquanto as pendências da seção H não forem resolvidas.
+
+## B. Diagnóstico das APIs
+
+| API/fonte | Endpoint e método | Situação encontrada | Problema identificado | Correção realizada | Status final |
 |---|---|---|---|---|---|
-| Open-Meteo Forecast | condição de modelo, temperatura, umidade, chuva, vento, rajada e previsão diária | `GET https://api.open-meteo.com/v1/forecast` | não | Contrato e transformação verificados; teste ao vivo pendente | 13/10/2026 |
-| Open-Meteo Air Quality / CAMS | PM2,5, PM10, European AQI PM2,5, UV, poeira e CO | `GET https://air-quality-api.open-meteo.com/v1/air-quality` | não | Contrato e faixas oficiais conferidos; teste ao vivo pendente | 13/10/2026 |
-| Open-Meteo Marine | ondas, marulho, período, direção e temperatura do mar | `GET https://marine-api.open-meteo.com/v1/marine` | não | Parser, unidades, ausência e cache testados; teste ao vivo pendente | 13/10/2026 |
-| INMET Previsão | previsão municipal por código IBGE | `GET https://apiprevmet3.inmet.gov.br/previsao/{codigoIbge}` | não | Parser e falhas testados; endpoint ao vivo pendente | 13/10/2026 |
-| INMET Avisos | avisos oficiais ativos | `GET https://apiprevmet3.inmet.gov.br/avisos/ativos` | não | CAP/legado, município, vigência e deduplicação testados; endpoint ao vivo pendente | 13/10/2026 |
-| Windy Point Forecast | fallback de meteorologia, PM2,5/AQI US e mar | `POST https://api.windy.com/api/point-forecast/v2` | chave `WINDY_API_KEY` | Configurado; cliente, unidades, cache e erros testados; chamada real pendente | 13/10/2026 |
-| Clima e Saúde — MS | EHF, risco combinado, temperatura prevista e vulnerabilidade | `GET https://clima.saude.gov.br/{uf}/{municipio}?modo=ehf&data=AAAA-MM-DD` | não | Página oficial e semântica conferidas; parser/testes completos; consulta Node ao vivo pendente | 13/10/2026 |
-| ANA Monitor de Secas | metadados mensais, data de elaboração e descrição por UF | `GET https://apimsbr.ana.gov.br/rest/cms-msne/mapa-monitor?...` | não | Validação de competência/finalização testada; há cache validado de agosto/2026; nova chamada pendente | 13/10/2026 |
-| ANA arquivos de mapas | mapa PNG oficial referenciado pela API | `GET https://ana-monitor-secas-files.s3.sa-east-1.amazonaws.com/uploads/mapas/...` | não | Assinatura PNG, caminho e hash testados; nova chamada pendente | 13/10/2026 |
-| COR-Rio estágio | estágio operacional da cidade | `GET https://appcor.cor-rio.work/estagio_cidade` | não | Parser estrito e cache testados; páginas oficiais acessíveis; endpoint JSON ao vivo pendente | 13/10/2026 |
-| COR-Rio calor | nível municipal de calor | `GET https://appcor.cor-rio.work/calor_api?formato=texto` | não | Parser estrito e cache testados; página oficial acessível; endpoint ao vivo pendente | 13/10/2026 |
-| COR-Rio WordPress | comunicados meteorológicos vigentes | `GET https://cor.rio/wp-json/wp/v2/posts?...` | não | filtragem temporal/conteúdo testada; portal publicou conteúdo de 13/10/2026; endpoint ao vivo da aplicação pendente | 13/10/2026 |
-| Oceanop / Petrobras | previsão por área Petrobras | `GET https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoAreaAsync?local=...` | contrato não informa | Parser testado; nenhum `oceanopLocalId` vinculado e unidades/fuso não documentados | 13/10/2026 |
-| Microsoft OAuth 2.0 | token do GED | `POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | client credentials | Não configurado no ambiente auditado | 13/10/2026 |
-| Microsoft Graph Drive | gravação do PDF no SharePoint/GED | `PUT https://graph.microsoft.com/v1.0/drives/{drive}/root:/...:/content` | bearer token | Não configurado no ambiente auditado | 13/10/2026 |
-| SMTP | envio de informativos e alertas | Gmail `smtp.gmail.com:587` ou relay configurável | credencial SMTP | Credenciais presentes, `EMAIL_ACTIVE=false`; deliberadamente não conectado | 13/10/2026 |
+| INMET — previsão | `GET https://apiprevmet3.inmet.gov.br/previsao/{codigoIbge}` | HTTP 200 para Rio; períodos e data corretos | Nenhum erro novo comprovado | Mantido parser estrito e prioridade oficial | **Operacional** |
+| INMET — avisos | `GET https://apiprevmet3.inmet.gov.br/avisos/ativos` | HTTP 200; 2 avisos nacionais e 1 aplicável ao Rio no instante auditado | Nenhum erro novo comprovado | Mantidos filtro municipal, vigência e deduplicação | **Operacional** |
+| INMET — observação | `GET https://apiprevmet3.inmet.gov.br/estacao/proxima/{codigoIbge}` | Contrato, estação, distância, horário UTC e conversão de vento cobertos por testes | A fonte pode omitir campos em determinadas estações | Ausência permanece indisponível e não vira zero | **Operacional com cobertura variável** |
+| INMET — catálogo | `GET https://apitempo.inmet.gov.br/estacoes/T` | Usado para validar estação e coordenadas | Pode ficar indisponível sem invalidar uma observação já identificada | Falha é registrada separadamente | **Auxiliar** |
+| Open-Meteo Weather | `GET https://api.open-meteo.com/v1/forecast` | HTTP 200 com fuso e unidades esperados | Script de auditoria não carregava CAs do Windows | Auditor passou a carregar `src/security/certificados.js` | **Operacional em teste; licença comercial exigida em produção** |
+| Open-Meteo Air Quality/CAMS | `GET https://air-quality-api.open-meteo.com/v1/air-quality` | HTTP 200; janela local e unidades válidas | Mesmo falso diagnóstico TLS do auditor | Mesma correção de certificados | **Operacional em teste; licença comercial exigida em produção** |
+| Open-Meteo Marine | `GET https://marine-api.open-meteo.com/v1/marine` | HTTP 200 para Natal; grade marítima e unidades válidas | Documentação contava nove bases costeiras | Contagem corrigida para oito | **Operacional nas bases costeiras; licença comercial exigida em produção** |
+| Clima e Saúde | `GET https://clima.saude.gov.br/{uf}/{municipio}?modo=ehf` | HTTP 200; município, UF, data e EHF reconhecidos | Não há API/Swagger público estável; integração depende do HTML oficial | Parser continua falhando de forma segura quando o formato muda | **Operacional, sujeito ao formato do portal** |
+| COR-Rio — estágio | `GET https://appcor.cor-rio.work/estagio_cidade` | HTTP 200; Estágio 1 no instante auditado | Nenhum erro novo comprovado | Mantido parser estrito de Estágio 1–5 | **Operacional para Rio de Janeiro** |
+| COR-Rio — calor | `GET https://appcor.cor-rio.work/calor_api?formato=texto` | HTTP 200; Estágio de Calor 1 | Nenhum erro novo comprovado | Mantido separado do estágio operacional e do EHF | **Operacional para Rio de Janeiro** |
+| COR-Rio — comunicados | `GET https://cor.rio/wp-json/wp/v2/posts` | HTTP 200; um comunicado vigente | Posts não equivalem automaticamente a mudança de estágio | Estado e comunicados continuam separados | **Operacional para Rio de Janeiro** |
+| ANA — Monitor de Secas | `GET https://apimsbr.ana.gov.br/rest/cms-msne/mapa-monitor` e mapas S3 | HTTP 200; competência 2026-09, mapa final 308 e 27 mapas estaduais | Nenhum erro novo comprovado | Mantidas validação de competência, UF, PNG e ETag | **Operacional; produto mensal** |
+| OCEANOP/Petrobras | `GET https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoAreaAsync?local=...` | TLS válido com CA do Windows; HTTP 401 nas sete áreas; nenhum payload `success:true` obtido | Ausência de autenticação oficial e falta de validação entre área pedida e `Local` retornado | Resposta com local diferente agora é descartada antes do cache; documentação registra o 401 | **Não homologado operacionalmente** |
+| Tetra Tech/OCEANOP | `GET /api/v1/areas/json` e `/api/v1/bulletins/{idArea}` | Cliente suporta `X-API-Key` ou OAuth e cache por data | Consulta real depende de credencial oficial | Sem credencial, falha antes da chamada e mantém fallback | **Condicional à credencial** |
+| IBGE — Localidades | `GET https://servicodados.ibge.gov.br/api/v1/localidades/municipios/{codigo}` | 11/11 códigos responderam HTTP 200 e coincidiram com município/UF | Código municipal não comprova a posição física da instalação | Mantida ressalva de homologação patrimonial | **Validado para município/UF** |
+| Windy | Nenhum endpoint no runtime atual | Não há módulo ou rota executável ativa | Não aplicável | Nenhuma alteração | **Não utilizado** |
 
-Locais de chamada: `src/sources/openMeteo.js`, `airQuality.js`, `marine.js`, `inmet.js`, `windy.js`, `climaSaudeService.js`, `monitorSecas.js`, `corRio.js`, `oceanop.js`, `src/integrations/sharepointGed.js` e `src/email/transport.js`.
+### Evidências reais de 22/10/2026
 
-### B.2 Rotas internas
+- Open-Meteo Weather, Rio de Janeiro: grade `-22.952549, -43.215027`, fuso `America/Sao_Paulo`, temperatura de modelo 23,4 °C às 14:15, mínima 19,9 °C, máxima 23,7 °C, chuva diária 6 mm e rajada diária 51,1 km/h no payload. O relatório normalizou a janela consultada para 20–24 °C, 3,7 mm e 51 km/h. Essa diferença é de janela/agregação e arredondamento, não erro de associação.
+- Open-Meteo Air Quality/CAMS, Rio: UV máximo 3,3; PM2,5 médio 16,3 µg/m³; PM10 médio 20,6 µg/m³; European AQI PM2,5 igual a 43.
+- Open-Meteo Marine, Natal: grade `-5.791664, -35.124985`, altura máxima diária 1,1 m e temperatura do mar 28,3 °C.
+- INMET, Rio: 19–26 °C, umidade de 50–100%, condição de muitas nuvens com pancadas isoladas e vento textual oficial. O produto não publicou chuva, probabilidade, velocidade ou rajada numéricas; esses campos permanecem ausentes ou recebem complemento explicitamente identificado.
+- Clima e Saúde, Rio: EHF 0,91, classificação `Sem excesso`, risco combinado `Normal` e GeoSES 0,38.
+- COR-Rio: Estágio operacional 1, Estágio de Calor 1 e um comunicado vigente.
+- ANA: publicação de setembro/2026, elaborada em 16/10/2026, com mapas das 27 UFs.
 
-Na versão histórica foram localizadas 15 rotas, incluindo `/api/logos` e `/api/windy/map-config`. Ambas foram removidas posteriormente. Consulte `server.js` e a auditoria final de 14/10/2026 para o inventário vigente.
+Esses valores registram a consulta daquele instante. Não devem ser reutilizados como valores atuais em documentos futuros.
 
-### B.3 Contratos, frequência, fuso e unidades
+## C. Auditoria por base
 
-| Integração | Dados/retorno consumido | Atualização usada pelo sistema | Fuso | Unidades validadas |
+| Base | Geolocalização/código | Dados oceanográficos | OCEANOP | Resultado da validação |
 |---|---|---|---|---|
-| Open-Meteo | séries `current`, `hourly` e `daily` | a cada coleta; modelos atualizam em ciclos próprios | fuso IANA da base | °C, %, mm, km/h, graus |
-| Air Quality/CAMS | série horária do dia | a cada coleta | fuso IANA da base | µg/m³, European AQI, índice UV |
-| Marine | série horária do dia | a cada coleta; último válido pode ser usado com carimbo de data | fuso IANA da base | m, s, °C, graus |
-| INMET previsão | manhã/tarde/noite do dia | a cada coleta | data civil de Brasília | campos oficiais; números só quando publicados explicitamente |
-| INMET avisos | lista nacional ativa | a cada coleta | horário oficial normalizado para Brasília | severidade/texto oficial; sem conversão numérica inventada |
-| Windy | série geralmente trihorária | cache de 10 min | fuso IANA da base | K→°C; m/s→km/h; m/mm; µg/m³; graus |
-| Clima e Saúde | hoje + quatro dias | pipeline oficial diário: coleta 04h, painel 05h | data do município/painel | °C, EHF e classes oficiais |
-| ANA | competência mensal | mensal; cache estrito por `AAAA-MM` | não aplicável | categorias S0–S4 e descrição oficial |
-| COR-Rio | estado atual e posts das últimas 24 h | TTL interno e horários próprios por parte | Brasília | níveis textuais 1–5 |
-| Oceanop | campos numéricos/textuais do contrato observado | sob demanda | **não documentado** | **não documentadas**; por isso não alimenta os campos meteorológicos principais |
+| Rio de Janeiro/RJ | IBGE `3304557`, confirmado | Aplicável (`costeira: true`) | Área cadastrada para vento; resposta real bloqueada por 401 | Cadastro municipal válido; sem evidência de troca com outra base |
+| Macaé/RJ | IBGE `3302403`, confirmado | Aplicável | Área cadastrada para vento; resposta real bloqueada por 401 | Cadastro municipal válido; cache identificado por área |
+| Brasília/DF | IBGE `5300108`, confirmado; `-15.7939869, -47.8828` | **Não se aplica** | Apenas vento/rajada; `usarMar` não está habilitado; resposta real bloqueada por 401 | Proteção reforçada contra retorno de outra localidade |
+| Manaus/AM | IBGE `1302603`, confirmado; fuso `America/Manaus` | Não aplicável no cadastro atual | Área de vento com fuso próprio; resposta real bloqueada por 401 | Conversão temporal isolada por fuso |
+| Santos/SP | IBGE `3548500`, confirmado | Aplicável | Área cadastrada para vento; resposta real bloqueada por 401 | Cadastro municipal válido |
+| Aracaju/SE | IBGE `2800308`, confirmado | Aplicável | Sem área OCEANOP por área | Usa somente fontes habilitadas/fallback identificado |
+| Natal/RN | IBGE `2408102`, confirmado; fuso `America/Fortaleza` | Aplicável | Sem área OCEANOP por área | Marine validado ao vivo; grade marítima coerente com o ponto solicitado |
+| Oiapoque/AP | IBGE `1600501`, confirmado; fuso `America/Belem` | Aplicável | Sem área OCEANOP por área | Cadastro municipal válido |
+| Vitória/ES | IBGE `3205309`, confirmado | Aplicável | Área cadastrada para vento; resposta real bloqueada por 401 | Cadastro municipal válido |
+| Araucária/PR | IBGE `4101804`, confirmado | Não se aplica | Área cadastrada para vento; resposta real bloqueada por 401 | Produto marítimo não é promovido |
+| Salvador/BA | IBGE `2927408`, confirmado | Aplicável | Sem área OCEANOP por área | Cadastro municipal válido |
 
-Documentação oficial consultada: [Open-Meteo Forecast](https://open-meteo.com/en/docs), [Air Quality API](https://open-meteo.com/en/docs/air-quality-api), [Marine API](https://open-meteo.com/en/docs/marine-weather-api), [Clima e Saúde — perguntas frequentes](https://clima.saude.gov.br/perguntas-frequentes), [ANA — Monitor de Secas](https://www.gov.br/ana/pt-br/assuntos/monitoramento-e-eventos-criticos/eventos-criticos/monitor-de-secas), [IBGE — códigos dos municípios](https://www.ibge.gov.br/explica/codigos-dos-municipios.php), [COR-Rio](https://cor.rio/), [estágios operacionais](https://cor.rio/estagios-operacionais-da-cidade/) e [níveis de calor](https://cor.rio/niveis-de-calor/).
+Cabiúnas, Linhares e Anchieta não estão no cadastro meteorológico executável atual. A auditoria não os tratou como bases ativas nem criou mapeamentos implícitos.
 
-## C. Rastreabilidade dos dados
+As coordenadas cadastradas são referências municipais. A confirmação do ponto físico exato de cada instalação depende de cadastro patrimonial/geoespacial corporativo autorizado; o serviço do IBGE confirmou município e UF, não o ativo industrial.
 
-| Informação | Fonte e campo original | Localidade | Transformação | Site/PDF/e-mail | Resultado |
+## D. Investigação específica do OCEANOP e Brasília/DF
+
+### Contrato efetivamente implementado
+
+O código atual não usa o endpoint antigo de lista de pontos por latitude/longitude. O contrato executável é:
+
+`GET /api/v1/previsao/JsonPrevisaoAreaAsync?local={identificador}`
+
+A requisição envia somente `local`, usa `Accept: application/json`, timeout de 15 segundos, retentativas apenas para falhas transitórias, cache de cinco minutos e deduplicação de chamadas simultâneas. HTTP 401, 403 e 404 são tratados como erros permanentes e não são repetidos.
+
+O endpoint antigo `POST .../JsonPrevisaoPorListaDePontosLatLonAsync` aparece em documentação histórica, mas não é chamado pelo runtime atual. Não houve alteração de volta para esse contrato porque sua estrutura, autenticação e autorização não foram comprovadas nesta rodada.
+
+### Diagnóstico de Brasília
+
+Brasília está corretamente cadastrada como localidade interiorana:
+
+- coordenadas municipais: `-15.7939869, -47.8828`;
+- código IBGE: `5300108`, confirmado pela API oficial do IBGE;
+- não possui `costeira: true`;
+- a configuração OCEANOP habilita somente `usarVento: true`;
+- não possui `usarMar: true` nem unidades marítimas homologadas;
+- `reportBuilder` chama o mapeamento marítimo somente quando a base é costeira **e** a área possui `usarMar: true`.
+
+Portanto, Brasília pode receber vento e rajada de uma área meteorológica autorizada, mas nunca altura de onda, ondulação ou condição de mar. Quando esses dados não são aplicáveis, o relatório segue com o produto marítimo nulo/não aplicável.
+
+### Causa raiz e correção
+
+Não foi possível provar que dados de outra localidade estavam efetivamente sendo exibidos em Brasília, porque a API não forneceu payload autenticado. Foi, porém, comprovada uma vulnerabilidade de associação: qualquer payload estruturalmente válido poderia ser aceito mesmo se cada registro declarasse outro valor em `Local`.
+
+A correção implementada:
+
+1. normaliza somente variações textuais equivalentes do identificador, ignorando caixa, acentos, pontuação e espaços;
+2. compara todos os valores `Local` retornados com o `local` solicitado;
+3. rejeita campo ausente, vazio ou diferente com `OCEANOP_LOCATION_MISMATCH`;
+4. executa a validação antes de gravar no cache;
+5. mantém caches separados por identificador de área normalizado;
+6. permite aliases apenas quando forem declarados explicitamente em `locaisRetorno`, sem inferência geográfica.
+
+Testes novos comprovaram que uma resposta do Rio solicitada como Brasília é rejeitada, que os caches das duas bases não se misturam e que Brasília não habilita produto marítimo.
+
+### Autenticação e validação real
+
+Com a cadeia certificadora do Windows, DNS, TCP e TLS chegaram corretamente ao serviço. As sete áreas retornaram HTTP 401. O cliente não envia `Authorization` porque o esquema oficial não está documentado no projeto. Não foi introduzido token genérico, bypass TLS ou credencial inventada.
+
+Status: **adaptador validado por contrato e testes; dados reais pendentes de autenticação oficial**.
+
+## E. Processamento, regras e consistência das superfícies
+
+### Prioridade e procedência
+
+- INMET permanece prioritário para previsão oficial, avisos e observações.
+- Open-Meteo complementa somente campos numéricos ausentes e mantém a origem explícita.
+- Observações INMET permanecem separadas de previsões.
+- OCEANOP só substitui vento/rajada quando o produto, local, fuso e unidades são válidos.
+- Marine só é consultado para bases marcadas como costeiras.
+- EHF do Clima e Saúde não é inferido a partir da temperatura.
+- Dados ausentes não são transformados em zero, Normal ou ausência de risco.
+
+### Cache e concorrência
+
+- cache do painel: separado por `cidade.chave`;
+- observações INMET: histórico separado por base;
+- Marine: cache separado por base;
+- COR-Rio: cache próprio e exclusivo do Rio;
+- OCEANOP: cache por identificador normalizado, agora validado contra o `Local` retornado;
+- chamadas simultâneas da mesma área são deduplicadas; áreas diferentes não compartilham a promessa ou o resultado.
+
+### Fuso, períodos e unidades
+
+- Manaus usa `America/Manaus`, Natal `America/Fortaleza` e Oiapoque `America/Belem`; as demais usam `America/Sao_Paulo` quando não há configuração específica.
+- APIs Open-Meteo têm fuso e unidades verificados no payload.
+- vento observado INMET em m/s é convertido para km/h; a origem observacional permanece identificada.
+- OCEANOP está configurado em km/h e não recebe multiplicação adicional.
+- Tetra Tech converte nós para km/h por `km/h = nós × 1,852`.
+- direção média utiliza cálculo circular, evitando que 350° e 10° resultem em sul.
+- janelas da edição e data civil local são aplicadas antes das agregações.
+
+### Alertas
+
+A ordem operacional validada é:
+
+`EMERGÊNCIA → ALERTA → ATENÇÃO → NORMAL`
+
+Os testes cobrem agravamento, redução, retorno ao normal, primeiro ciclo sem disparo retroativo, falha de fonte sem normalização falsa, deduplicação e isolamento por base. O estado só é confirmado após o envio SMTP ser confirmado; falhas permanecem pendentes para nova tentativa.
+
+### Painel, PDF e e-mail
+
+As três superfícies reutilizam o mesmo relatório consolidado da emissão. A suíte cobre:
+
+- mesma rajada e respectiva fonte;
+- mesma condição geral;
+- chuva prevista separada da observada;
+- qualidade do ar e UV sem classificação inventada;
+- calor baseado somente no EHF;
+- mar somente quando aplicável;
+- avisos oficiais preservados sem reescrever o fenômeno;
+- dados armazenados marcados como desatualizados;
+- textos externos escapados.
+
+Nenhuma alteração visual foi realizada nesta auditoria.
+
+## F. Modificações no código
+
+| Arquivo | Comportamento anterior | Alteração implementada | Justificativa | Validação |
+|---|---|---|---|---|
+| `src/sources/oceanop.js` | Aceitava payload válido sem conferir `Local` | Normalização e validação de todos os locais retornados antes do cache | Impedir associação de outra área a Brasília ou qualquer base | Testes de mismatch, cache e contrato |
+| `tests/oceanop.test.js` | Não havia regressão de local cruzado nem Brasília marítima | Quatro testes novos e ajuste da fixture válida | Cobrir a causa raiz e aplicabilidade | 20/20 testes focados aprovados |
+| `scripts/auditarFontesReais.js` | Não carregava as CAs corporativas do runtime | Passou a carregar `src/security/certificados.js` | Evitar falso negativo TLS sem desativar validação | Auditor executado sem flag extra; fontes responderam HTTP 200 |
+| `README.md` | Informava nove bases costeiras e não registrava o 401 OCEANOP | Corrigido para oito; status/autenticação e validação de local documentados | Alinhar documentação ao código e à evidência real | Revisão estática e auditoria ao vivo |
+| `OCEANOP.md` | Contrato não registrava a validação de `Local` nem a rodada atual | Incluída proteção e situação de 22/10/2026 | Rastreabilidade operacional | Revisão estática e testes |
+
+## G. Comparação antes e depois
+
+| Base/integração | Variável | Antes | Referência oficial | Depois | Resultado |
 |---|---|---|---|---|---|
-| Condição do tempo | Open-Meteo `weather_code` (`current`, `hourly` ou `daily`) | coordenadas da base | tabela WMO; agora marcada como previsão de modelo | mesmo objeto `report` | VERIFICADO |
-| Temperatura mín./máx. | Clima e Saúde `temperatura.minima/maxima`; fallback Open-Meteo `temperature_2m_min/max` | município MS ou coordenadas da base | arredondamento documentado; fonte por campo | mesmo `report` | VERIFICADO |
-| Umidade mín./máx. | Clima e Saúde quando publicada; fallback `relative_humidity_2m` | base | mínimo/máximo da janela; % | mesmo `report` | VERIFICADO |
-| Vento médio | Open-Meteo `wind_speed_10m`; INMET fornece direção/intensidade textual | base/período | máximo do período e faixa textual | tabelas do relatório | VERIFICADO |
-| Rajada | INMET somente se houver campo numérico oficial; fallback `wind_gusts_10m` | base/período | máximo em km/h; sem valor vira `null` | cards/tabelas | VERIFICADO |
-| Chuva horária/período | INMET somente se publicar mm; fallback Open-Meteo `precipitation` | base/período | soma apenas de série completa; máximo horário separado | site/PDF/e-mail | VERIFICADO |
-| Probabilidade de chuva | Open-Meteo `precipitation_probability` | base/período | máximo do período | site/PDF | VERIFICADO |
-| Tempestade | código WMO de trovoada | base/período | conjunto explícito de códigos | classificação interna, nunca aviso oficial | VERIFICADO |
-| PM2,5/PM10 | CAMS via Open-Meteo `pm2_5`/`pm10`; fallback Windy só para concentração PM2,5 | coordenadas | média das amostras; uma casa decimal | PDF; resumo do e-mail usa apenas AQI oficial | VERIFICADO |
-| Qualidade do ar | `european_aqi_pm2_5` | coordenadas | máximo diário e faixas europeias oficiais | site/PDF/e-mail | VERIFICADO após correção |
-| Índice UV | Open-Meteo Air `uv_index` | coordenadas | máximo e horário do pico; faixas técnicas | site/PDF/e-mail | VERIFICADO |
-| Ondas/marulho | Marine `wave_height`, `wave_period`, `wave_direction`, `swell_wave_height`, `swell_wave_period` | ponto costeiro | máximo/média/direção circular | site/PDF/e-mail | VERIFICADO por contrato/teste |
-| EHF | HTML oficial Clima e Saúde, rótulos semânticos por data | município | nenhuma inferência por temperatura; mapeia classe oficial para prontidão CIM | site/PDF/e-mail | VERIFICADO por página/contrato/teste |
-| Risco combinado | Clima e Saúde/GeoSES | município | preservado como informação de saúde; não substitui EHF | seção técnica | VERIFICADO |
-| Aviso oficial | INMET `/avisos/ativos` | código IBGE/geocodes | preserva fenômeno, severidade, vigência, riscos e instruções | tabelas/cards quando aplicável | VERIFICADO por parser/teste |
-| Classificação CIM | `riskEngine.js` e protocolos internos | base | limiares documentados de chuva, vento, UV, ar e mar | identificada como classificação interna | VERIFICADO |
-| Monitor de Secas | ANA, competência e descrição por UF | UF | sem interpolar município; mapa mensal validado por hash | PDF | VERIFICADO por cache/contrato |
+| Brasília/OCEANOP | Localidade retornada | Um payload válido poderia declarar outra área e ainda ser aceito | O próprio campo `Local` do contrato | Resposta diferente é descartada antes do cache | **Corrigido** |
+| Brasília/OCEANOP | Condição marítima | Já era bloqueada pela combinação `costeira`/`usarMar` | Brasília é interiorana | Proteção preservada e coberta por teste explícito | **Validado** |
+| OCEANOP | Autenticação | Documentação sugeria uso sem token | Serviço respondeu HTTP 401 | Status alterado para pendente; nenhum token inventado | **Pendente externo** |
+| Auditor/Open-Meteo | TLS | `SELF_SIGNED_CERT_IN_CHAIN` no script isolado | Cadeia confiada pelo Windows | HTTP 200 sem desativar TLS | **Corrigido** |
+| Open-Meteo/Rio | Temperatura | Payload 19,9–23,7 °C | Mesma resposta oficial da API | Exibição 20–24 °C por arredondamento documentado | **Diferença metodológica legítima** |
+| Open-Meteo/Rio | Chuva | Payload diário 6 mm | Total diário 00h–24h | Janela da emissão 3,7 mm | **Diferença temporal legítima** |
+| INMET/Rio | Rajada numérica | Campo ausente | Produto municipal retornou apenas intensidade textual | Permanece nulo ou complemento identificado | **Tratamento correto de ausência** |
 
-O fluxo diário é `fonte → normalização → reportBuilder → mesmo snapshot em memória → painel/PDF/e-mail`. `geradoEmISO`, `horaConsulta`, `fontesPorCampo`, os diagnósticos de fallback e os horários de cache fornecem a referência do snapshot. Gerações feitas em horários distintos podem legitimamente divergir.
+Nenhum valor foi alterado artificialmente para coincidir com site ou provedor.
 
-## D. Verificação de dados reais
+## H. Pendências, limitações e conclusão
 
-- **VERIFICADO:** origem e transformação de temperatura, umidade, vento, rajada, chuva, probabilidade, condição WMO, PM, AQI, UV, ondas, EHF, avisos INMET e classificações internas. “Verificado” aqui significa contrato + código + testes; não significa que todos os endpoints responderam ao vivo nesta execução.
-- **DIVERGENTE:** nenhum valor numérico concreto pôde ser comparado ponta a ponta com uma resposta ao vivo, porque a rede do processo estava bloqueada. As divergências de semântica encontradas foram corrigidas: `current` de modelo, classificação de ar no fallback e fuso Windy.
-- **INDISPONÍVEL:** SharePoint/GED não configurado; Oceanop sem vínculo de área; consultas ao vivo indisponíveis nesta sessão; SMTP intencionalmente desativado.
-- **NÃO VERIFICADO:** correspondência das coordenadas com o ponto físico exato de cada instalação e unidades/fuso do contrato Oceanop.
+### Pendências e limitações
 
-Classificação de natureza:
+1. Obter da responsável pelo OCEANOP o esquema oficial de autenticação, escopo, credencial, limites de uso e contrato atualizado do endpoint por área.
+2. Repetir a validação OCEANOP até obter HTTP 2xx com `success:true`, conferir `Local`, fuso, unidades e períodos em cada uma das sete áreas.
+3. Homologar coordenadas físicas das instalações em cadastro corporativo; o IBGE confirmou apenas município/UF.
+4. Configurar licença e chave comercial Open-Meteo em produção. O código bloqueia uso comercial sem chave quando `NODE_ENV=production`.
+5. Homologar as credenciais Tetra Tech/OCEANOP, GED/SharePoint e SMTP em ambiente controlado.
+6. A integração Clima e Saúde depende do HTML do portal; alteração de layout deve aparecer como formato alterado, nunca como Normal.
+7. Os endpoints `apiprevmet3`, `appcor` e `apimsbr` responderam, mas não possuem contrato público de SLA comprovado no projeto.
 
-- Open-Meteo Weather, Air, Marine e Windy: **previsões/estimativas de modelo**, não estações observadas.
-- Clima e Saúde para hoje e D+1…D+4: **previsão oficial do painel**; o próprio MS informa que hoje só vira observado no dia seguinte.
-- ANA: **produto mensal de monitoramento/classificação regional**.
-- INMET `/avisos/ativos`: **aviso oficial**.
-- Regras de `riskEngine.js`, `weeklyBuilder.js` e `alertWatcher.js`: **classificações internas CIM**, mesmo quando calculadas de dados legítimos.
-- COR-Rio: **estado e comunicados oficiais municipais**, exclusivos do Rio e com distribuição própria.
+### Testes executados
 
-## E. Falhas identificadas
+- suíte completa: **420 aprovados, 0 falhas**;
+- testes focados OCEANOP e bases: **20 aprovados, 0 falhas**;
+- auditoria real somente leitura: Open-Meteo Weather/Air/Marine, INMET previsão/avisos, Clima e Saúde, COR-Rio e ANA com respostas válidas;
+- IBGE: **11/11 códigos municipais confirmados**;
+- OCEANOP: **7/7 áreas alcançaram o serviço e receberam HTTP 401**;
+- nenhum SMTP, GED, deploy ou reinício de servidor executado.
 
-| Arquivo/função | Problema | Impacto | Evidência | Correção |
-|---|---|---|---|---|
-| `src/sources/openMeteo.js` — `buscarOpenMeteo` | bloco `current` não indicava que era saída de modelo | painel podia chamar previsão de “condição atual” como se fosse observação | documentação Open-Meteo diz que current usa dados de modelo de 15 min | adicionados `fonte: Open-Meteo` e `previsao: true` |
-| `src/sources/windy.js` + `src/logic/windyMerge.js` | concentração PM2,5 do fallback Windy recebia classificação interna e podia parecer European AQI/CAMS | atribuição indevida da classificação | o Windy fornecia PM2,5/AQI US, não `european_aqi_pm2_5` | fallback mantém concentração, remove classificação; render exige AQI oficial |
-| `src/sources/windy.js` — `bounds`/cache | dia civil era sempre São Paulo e o fuso não fazia parte da chave | Manaus podia usar horas/data erradas e compartilhar entrada incompatível | limite fixo `-03:00` e `America/Sao_Paulo` | cálculo por IANA da base e chave de cache com fuso |
-| `src/logic/weeklyBuilder.js` — `avaliarDia` | ausência de indicadores podia resultar em “Normal” | normalidade presumida sem dados | `null ?? 0` e redutor iniciado em NORMAL | novo estado INDISPONÍVEL; Normal exige os indicadores; risco confirmado ainda prevalece |
+### Conclusão
 
-### Dados simulados e hardcoded
+- **Problemas encontrados nesta rodada:** 4.
+- **Problemas corrigidos:** 3.
+- **Problemas pendentes por dependência externa:** 1, referente à autenticação/homologação real do OCEANOP.
+- **Bases verificadas cadastralmente:** 11.
+- **Bases OCEANOP verificadas por configuração e teste:** 7.
+- **Bases OCEANOP validadas com dados reais:** 0, devido ao HTTP 401.
 
-- Não há `Math.random()` nem gerador meteorológico aleatório no código de produção.
-- Fixtures e mocks estão em `tests/`.
-- `artifacts/verify-*.cjs` e arquivos sob `artifacts/` contêm textos simulados explicitamente marcados para validação visual e não são importados pelas rotas ou agendadores.
-- Limiares hardcoded encontrados são regras do protocolo CIM ou faixas oficiais, não medições meteorológicas.
-- Placeholders encontrados são apenas exemplos de campos HTML.
-
-## F. Comparação das informações
-
-Não é apresentado “exemplo real” numérico, pois nenhuma resposta de endpoint pôde ser obtida pelo processo nesta execução. Inventar um exemplo contrariaria o objetivo da auditoria.
-
-As comparações matemáticas comprovadas com fixtures identificadas como teste foram:
-
-- velocidade Windy: `10 m/s × 3,6 = 36 km/h`;
-- temperatura Windy: `300 K − 273,15 = 26,85 °C`, exibida como `26,9 °C`;
-- direção circular: 359° e 1° resultam em Norte, não em 180°;
-- chuva Windy: só soma janelas trihorárias completas e não preenche lacunas com zero;
-- Open-Meteo: somas/máximos usam as mesmas janelas 05h–12h, 12h–18h e 18h–00h exibidas;
-- AQI: a classe só é calculada quando `european_aqi_pm2_5` é numérico.
-
-Esses números são evidência de transformação do software, **não evidência de produção**.
-
-## G. Alterações realizadas
-
-- `src/sources/openMeteo.js`: marcou `current` como previsão de modelo e registrou a fonte.
-- `src/logic/informativoValidity.js`: exportou utilitários existentes de conversão de fuso para reutilização segura.
-- `src/sources/windy.js`: passou a respeitar o fuso da base, incluiu fuso na chave de cache e removeu classificação local de PM2,5.
-- `src/logic/windyMerge.js`: limitou o fallback de ar a concentração/AQI US e impediu classificação falsa como CAMS.
-- `src/render/emailTemplate.js`: mostra qualidade do ar classificada apenas com AQI oficial.
-- `src/render/pdfTemplate.js`: não atribui classificação Open-Meteo/CAMS quando o AQI oficial está ausente.
-- `src/logic/weeklyBuilder.js`: impede que dado ausente vire “Normal”.
-- `tests/relatorioAgendado.test.js`, `tests/windy.test.js`, `tests/emailInformativoCompleto.test.js`, `tests/pdfInformativoCards.test.js` e `tests/weeklyBuilder.test.js`: regressões específicas.
-
-As demais alterações já existentes no worktree não foram revertidas nem reivindicadas como parte desta auditoria.
-
-## H. Resultados dos testes
-
-### Executados
-
-- Suíte completa final: **313 aprovados, 0 falhas**.
-- Testes focados nas correções: **52 aprovados, 0 falhas**.
-- Cobertura exercitada: resposta válida mockada, vazio, HTTP 204/400/401/403/429/500/503, timeout real/simulado, DNS/reset, unidade e fuso divergentes, campos ausentes, cache antigo identificado, isolamento por base, deduplicação, avisos oficiais, classes internas, geração HTML/PDF e montagem de e-mail com transporte mockado.
-- Nenhum teste disparou e-mail real; testes de envio substituem o transporte.
-
-### Não executados
-
-- Consulta real dos endpoints a partir do processo Node: egress bloqueado; tentativa direta resultou em `fetch failed` e a liberação externa não pôde ser processada pelo ambiente.
-- SMTP real: proibido pelo escopo e `EMAIL_ACTIVE=false`.
-- Upload Graph/SharePoint: variáveis ausentes.
-- Oceanop real: nenhuma área vinculada e contrato incompleto.
-
-## I. Localidades e pendências
-
-### I.1 Bases cadastradas
-
-| Base | Município/UF para APIs municipais | Coordenadas meteorológicas | IBGE | Fuso | Observação |
-|---|---|---:|---:|---|---|
-| Rio de Janeiro | Rio de Janeiro/RJ | -22.9068, -43.1729 | 3304557 | America/Sao_Paulo | COR-Rio só nesta base |
-| Macaé | Macaé/RJ | -22.2828305, -41.9649091 | 3302403 | America/Sao_Paulo | costeira |
-| Cabiúnas (Terminal) | Macaé/RJ | -22.2877258, -41.719347 | 3302403 | America/Sao_Paulo | município compartilhado legitimamente; coordenada própria |
-| Brasília | Brasília/DF | -15.7939869, -47.8828 | 5300108 | America/Sao_Paulo | não costeira |
-| Manaus | Manaus/AM | -3.1316333, -59.9825041 | 1302603 | America/Manaus | fuso especial coberto pela correção Windy |
-| Santos | Santos/SP | -23.9609448, -46.3166316 | 3548500 | America/Sao_Paulo | costeira |
-| Aracaju | Aracaju/SE | -10.9162061, -37.0774655 | 2800308 | America/Sao_Paulo | costeira |
-| Linhares | Linhares/ES | -19.3796775, -40.0610087 | 3203205 | America/Sao_Paulo | mar usa ponto Regência: -19.6486, -39.8258 |
-| Anchieta | Anchieta/ES | -20.8057672, -40.6454564 | 3200409 | America/Sao_Paulo | costeira |
-| Vitória | Vitória/ES | -20.3200917, -40.3376682 | 3205309 | America/Sao_Paulo | costeira |
-| Araucária | Araucária/PR | -25.5861107, -49.4051209 | 4101804 | America/Sao_Paulo | não costeira |
-| Salvador | Salvador/BA | -12.9777, -38.5016 | 2927408 | America/Sao_Paulo | costeira |
-
-Os 11 municípios/códigos distintos correspondem à tabela oficial do IBGE; Cabiúnas usa corretamente Macaé. Isso valida o identificador municipal, **não a posição física exata da instalação**. A confirmação patrimonial/geográfica das coordenadas, especialmente Terminal Cabiúnas e o ponto marítimo de Regência, depende de cadastro oficial da organização.
-
-Caches: painel, Clima e Saúde e Marine são indexados por `cidade.chave`; Windy agora usa latitude, longitude, grupo, modelo, fuso e chave; ANA usa competência `AAAA-MM`; COR-Rio mantém partes independentes para estágio, calor e comunicados. Não foi encontrado cruzamento acidental de cache entre bases.
-
-### I.2 Pendências obrigatórias
-
-1. Reexecutar uma matriz ao vivo para as 12 bases em ambiente com egress: Open-Meteo, Air, Marine, INMET, Windy e Clima e Saúde; registrar payload bruto sanitizado, horário, ponto de grade e valor renderizado.
-2. Validar as coordenadas das instalações contra cadastro corporativo/geodésico autorizado.
-3. Obter contrato Oceanop com unidade, fuso, atualização, autenticação e identificadores; só então vincular áreas.
-4. Configurar e testar GED/SharePoint em tenant de homologação.
-5. Testar SMTP apenas em caixa de homologação e mediante autorização expressa; não usar destinatários operacionais para auditoria.
-6. Considerar um `snapshotId` persistente se for necessário comparar uma geração do painel com outra geração posterior. Hoje, `geradoEmISO` rastreia cada objeto, mas não há hash persistido do payload integral.
-
-## J. Conclusão
-
-1. **Existem dados fictícios sendo utilizados em produção?** Não foi encontrado caminho de produção que gere ou importe valores meteorológicos fictícios. Há simulações isoladas em testes/artefatos, identificadas e fora do runtime.
-2. **Todas as APIs estão funcionando?** Não é possível afirmar. A conectividade real dos endpoints não pôde ser executada nesta sessão; Oceanop e SharePoint também não estão operacionalmente configurados.
-3. **Todas as informações exibidas possuem origem rastreável?** Após as correções, os campos principais têm origem e fallback rastreáveis no código. A lacuna restante é contratual/operacional: Oceanop, coordenadas físicas e prova ao vivo.
-4. **Existem divergências entre API, site, PDF e e-mail?** Não nos testes automatizados que reutilizam o mesmo `report`. Não houve comparação numérica real com API ao vivo; portanto, a ausência de divergência de produção não está provada.
-5. **Existem alertas incorretos ou sem sustentação?** Não após as correções testadas. Avisos INMET permanecem oficiais; regras CIM permanecem internas. A qualidade do ar sem European AQI deixa de receber classificação atribuída à CAMS, e o semanal deixa de tratar ausência como normal.
-6. **O que impede considerar o sistema totalmente confiável?** Falta da bateria real de endpoints nas 12 bases, validação corporativa das coordenadas, contrato Oceanop, homologação SharePoint/SMTP e evidência ponta a ponta com payload real contemporâneo.
-
-**Parecer:** o código ficou mais seguro quanto a proveniência, fuso e ausência de dados, e todos os testes executados passaram. Ainda assim, o sistema está **tecnicamente auditado, mas não 100% validado em produção**.
+O código está consistente com a política de fontes, isolamento por base, tratamento de ausências e apresentação nas três superfícies. A correção impede que um retorno OCEANOP de outra localidade seja atribuído a Brasília ou a qualquer outra base. Contudo, o projeto permanece **condicionalmente apto**: as integrações validadas responderam corretamente, mas o OCEANOP não pode ser considerado operacional até que a autenticação oficial e os payloads reais sejam homologados.

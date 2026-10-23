@@ -222,7 +222,7 @@ function detectarAlertasGraves(report) {
     marGrosso: report.fontesPorCampo?.["mar.alturaMaxDiaM"],
     marModerado: report.fontesPorCampo?.["mar.alturaMaxDiaM"],
     uvAlto: report.fontesPorCampo?.["ar.uvMax"],
-    qualidadeArRuim: report.fontesPorCampo?.["ar.aqiPm25"],
+    qualidadeArRuim: report.fontesPorCampo?.["ar.iqar"],
     tempestadePrevista: report.fontesPorCampo?.temTempestadeHoje,
   };
   for (const evento of eventos) {
@@ -428,11 +428,11 @@ async function verificarAlertas({
         if (assinatura === "calor") return Number.isFinite(report.tempMax);
         if (assinatura === "calor-ehf") return report.climaSaude?.status === "operacional" && Boolean(report.climaSaude.dados?.nivel);
         if (assinatura === "uv") return Number.isFinite(report.qualidadeAr?.uvMax);
-        if (assinatura === "ar") return Number.isFinite(report.qualidadeAr?.aqiPm25);
+        if (assinatura === "ar") return Number.isFinite(report.qualidadeAr?.iqar);
         if (assinatura === "umidade") return Number.isFinite(report.umidadeMin);
         if (assinatura === "tempestade") return typeof report.temTempestadeHoje === "boolean";
         if (assinatura === "raios") return report.monitoramentoApis?.some((api) =>
-          ["open-meteo", "inmet-avisos"].includes(api.id) && api.status === "operacional");
+          ["oceanop", "inmet-avisos"].includes(api.id) && api.status === "operacional");
         return true;
       };
 

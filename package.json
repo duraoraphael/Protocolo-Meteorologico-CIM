@@ -8,6 +8,7 @@
     "start": "node server.js",
     "send-now": "node src/cli.js",
     "verificar-fontes": "node src/cliVerificarFontes.js",
+    "validar-integracao-meteo": "node scripts/validarIntegracaoOpenMeteo.js",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "license": "UNLICENSED",

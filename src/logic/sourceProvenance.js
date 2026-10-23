@@ -40,15 +40,15 @@ function mapearFontesDoRelatorio(base, mar, qualidadeAr, fonteMeteorologica) {
     }
   }
 
-  const fonteMar = mar?.fonte || "Open-Meteo Marine";
+  const fonteMar = mar?.fonte || "Informação indisponível";
   fontesPorCampo["mar.alturaMaxDiaM"] = fonteDo(mar?.alturaMaxDiaM, fonteMar);
   fontesPorCampo["mar.temperaturaMarC"] = fonteDo(mar?.temperaturaMarC, fonteMar);
 
-  const fonteAr = qualidadeAr?.fonte || "Open-Meteo Air Quality / CAMS";
+  const fonteAr = qualidadeAr?.fonte || "Informação indisponível";
   fontesPorCampo["ar.pm25Medio"] = fonteDo(qualidadeAr?.pm25Medio, fonteAr);
   fontesPorCampo["ar.pm10Medio"] = fonteDo(qualidadeAr?.pm10Medio, fonteAr);
-  fontesPorCampo["ar.aqiPm25"] = fonteDo(qualidadeAr?.aqiPm25, fonteAr);
-  fontesPorCampo["ar.uvMax"] = fonteDo(qualidadeAr?.uvMax, fonteAr);
+  fontesPorCampo["ar.iqar"] = fonteDo(qualidadeAr?.iqar, fonteAr);
+  fontesPorCampo["ar.uvMax"] = fonteDo(qualidadeAr?.uvMax, qualidadeAr?.fonteUv || fonteAr);
   fontesPorCampo.atual = fonteDo(base?.atual, base?.atual?.fonte || fonteMeteorologica);
 
   return {

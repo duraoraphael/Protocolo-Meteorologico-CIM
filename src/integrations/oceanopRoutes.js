@@ -1,7 +1,7 @@
 const express = require("express");
-const { buscarOceanop, validarConsulta, obterDiagnosticoOceanop } = require("../sources/oceanop");
+const { buscarOceanopPorCoordenadas, validarPonto, obterDiagnosticoOceanop } = require("../sources/oceanop");
 const { CIDADES } = require("../config/cities");
-const pontos = require("../config/oceanopAreas");
+const pontos = require("../config/oceanopPontos");
 
 function pontoHabilitado(chave) {
   const ponto = pontos[chave];
@@ -39,8 +39,8 @@ function criarOceanopRouter({ verificarSenha } = {}) {
           erro: "Esta base ainda não possui ponto OCEANOP autorizado e homologado.",
         });
       }
-      validarConsulta(ponto);
-      const resultado = await buscarOceanop(ponto);
+      validarPonto(ponto);
+      const resultado = await buscarOceanopPorCoordenadas(ponto);
       res.json({ ok: true, cidade: chave, ...resultado, diagnostico: obterDiagnosticoOceanop() });
     } catch (erro) {
       res.status(erro.status === 400 ? 400 : 502).json({

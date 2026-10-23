@@ -18,8 +18,8 @@ const CIDADES = {
     uf: "RJ",
     latitude: -22.9068,
     longitude: -43.1729,
+    pontoMar: { latitude: -23.10, longitude: -43.12, referencia: "Atlântico ao sul da costa do Rio de Janeiro" },
     codigoIbge: "3304557",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_RIO_DE_JANEIRO", municipio: "Rio de Janeiro" },
     climaSaudeUrl: "https://clima.saude.gov.br/rj/rio-de-janeiro?modo=ehf",
     integracaoCorRio: true,
     links: {
@@ -27,8 +27,6 @@ const CIDADES = {
       alertaRio:
         "https://websempre.rio.rj.gov.br/procedimentos/previsao/mural/boletim",
       corRio: "https://cor.rio/category/estagios/",
-      climatempo:
-        "https://www.climatempo.com.br/previsao-do-tempo/15-dias/cidade/321/riodejaneiro-rj",
       defesaCivilTelefone: "199",
     },
   },
@@ -40,8 +38,8 @@ const CIDADES = {
     uf: "RJ",
     latitude: -22.2828305,
     longitude: -41.9649091,
+    pontoMar: { latitude: -22.40, longitude: -41.70, referencia: "Atlântico a leste da costa de Macaé" },
     codigoIbge: "3302403",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_MACAE", municipio: "Macaé" },
     climaSaudeUrl: "https://clima.saude.gov.br/rj/macae?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3302403",
@@ -56,7 +54,6 @@ const CIDADES = {
     latitude: -15.7939869,
     longitude: -47.8828,
     codigoIbge: "5300108",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_BRASILIA", municipio: "Brasília" },
     climaSaudeUrl: "https://clima.saude.gov.br/df/brasilia?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/5300108",
@@ -74,7 +71,6 @@ const CIDADES = {
     latitude: -3.1316333,
     longitude: -59.9825041,
     codigoIbge: "1302603",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_MANAUS", municipio: "Manaus" },
     climaSaudeUrl: "https://clima.saude.gov.br/am/manaus?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/1302603",
@@ -89,8 +85,8 @@ const CIDADES = {
     uf: "SP",
     latitude: -23.9609448,
     longitude: -46.3166316,
+    pontoMar: { latitude: -24.10, longitude: -46.25, referencia: "Atlântico ao largo de Santos" },
     codigoIbge: "3548500",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_SANTOS", municipio: "Santos" },
     climaSaudeUrl: "https://clima.saude.gov.br/sp/santos?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3548500",
@@ -105,8 +101,8 @@ const CIDADES = {
     uf: "SE",
     latitude: -10.9162061,
     longitude: -37.0774655,
+    pontoMar: { latitude: -11.05, longitude: -36.98, referencia: "Atlântico ao largo de Aracaju" },
     codigoIbge: "2800308",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_ARACAJU", municipio: "Aracaju" },
     climaSaudeUrl: "https://clima.saude.gov.br/se/aracaju?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/2800308",
@@ -122,8 +118,8 @@ const CIDADES = {
     fusoHorario: "America/Fortaleza",
     latitude: -5.8115,
     longitude: -35.2415,
+    pontoMar: { latitude: -5.82, longitude: -35.10, referencia: "Atlântico a leste de Natal" },
     codigoIbge: "2408102",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_NATAL", municipio: "Natal" },
     climaSaudeUrl: "https://clima.saude.gov.br/rn/natal?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/2408102",
@@ -139,8 +135,8 @@ const CIDADES = {
     fusoHorario: "America/Belem",
     latitude: 3.861224,
     longitude: -51.796699,
+    pontoMar: { latitude: 4.10, longitude: -51.20, referencia: "Atlântico na costa do Amapá, referência para Oiapoque" },
     codigoIbge: "1600501",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_OIAPOQUE", municipio: "Oiapoque" },
     climaSaudeUrl: "https://clima.saude.gov.br/ap/oiapoque?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/1600501",
@@ -155,8 +151,8 @@ const CIDADES = {
     uf: "ES",
     latitude: -20.3200917,
     longitude: -40.3376682,
+    pontoMar: { latitude: -20.38, longitude: -40.20, referencia: "Atlântico ao largo de Vitória" },
     codigoIbge: "3205309",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_VITORIA", municipio: "Vitória" },
     climaSaudeUrl: "https://clima.saude.gov.br/es/vitoria?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/3205309",
@@ -171,9 +167,6 @@ const CIDADES = {
     latitude: -25.5861107,
     longitude: -49.4051209,
     codigoIbge: "4101804",
-    // A validação do retorno exige explicitamente Araucária/PR; um ID de
-    // Wenceslau Braz ou de qualquer outra cidade é rejeitado.
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_ARAUCARIA", municipio: "Araucária" },
     climaSaudeUrl: "https://clima.saude.gov.br/pr/araucaria?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/4101804",
@@ -188,14 +181,12 @@ const CIDADES = {
     uf: "BA",
     latitude: -12.9777,
     longitude: -38.5016,
+    pontoMar: { latitude: -13.05, longitude: -38.30, referencia: "Atlântico a leste de Salvador" },
     codigoIbge: "2927408",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_SALVADOR", municipio: "Salvador" },
     climaSaudeUrl: "https://clima.saude.gov.br/ba/salvador?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/2927408",
       codesal: "https://codesal.salvador.ba.gov.br/",
-      climatempo:
-        "https://www.climatempo.com.br/previsao-do-tempo/15-dias/cidade/56/salvador-ba",
       defesaCivilTelefone: "199",
     },
   },

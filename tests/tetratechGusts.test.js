@@ -7,6 +7,8 @@ const {
   METROS_POR_SEGUNDO_POR_NO,
   converterParaKmH,
   calcularPicosDiarios,
+  extrairRegistrosRajada,
+  selecionarMaximaJanela,
   buscarRajadasTetraTech,
   limparCacheTetraTech,
 } = require("../src/sources/tetratechGusts");
@@ -20,13 +22,13 @@ const resposta = (json, status = 200) => ({
   text: async () => JSON.stringify(json),
 });
 
-test("converte nós para km/h, preserva km/h e rejeita unidade desconhecida", () => {
+test("converte nós e m/s para km/h, preserva km/h e rejeita unidade desconhecida", () => {
   assert.equal(converterParaKmH(10, "kt"), 18.52);
   assert.ok(Math.abs(converterParaKmH("15,5", "nós") - 28.706) < 1e-12);
   assert.equal(converterParaKmH("36", "km/h"), 36);
   assert.equal(converterParaKmH("", "kt"), null);
   assert.equal(converterParaKmH(-1, "kt"), null);
-  assert.equal(converterParaKmH(10, "m/s"), null);
+  assert.equal(converterParaKmH(10, "m/s"), 36);
 });
 
 test("seleciona o maior pico de cada dia, mantém o primeiro empate e não usa média", () => {
@@ -153,14 +155,27 @@ test("armazena o horizonte e reutiliza somente datas ainda válidas quando o tok
   }), { code: "TETRATECH_CREDENTIALS_MISSING" });
 });
 
-test("mapeia as páginas por cidade e bloqueia Climatempo e Araucária sem autorização", () => {
+test("mapeia as páginas por cidade e bloqueia áreas sem validação", () => {
   assert.equal(portais.rio_de_janeiro.pagina.endsWith("/Rio%20de%20Janeiro"), true);
   assert.equal(portais.macae.pagina.endsWith("/Maca%C3%A9"), true);
   assert.equal(portais.brasilia.pagina.endsWith("/Bras%C3%ADlia"), true);
   assert.equal(portais.salvador.areaName, "Salvador");
   assert.equal(portais.manaus.fusoHorario, "America/Manaus");
-  assert.equal(portais.aracaju.habilitado, false);
-  assert.match(portais.aracaju.motivo, /não autorizado/i);
+  assert.equal(portais.aracaju.habilitado, true);
+  assert.match(portais.aracaju.pagina, /forecast-table\/Terrestre\/Aracaju$/);
   assert.equal(portais.araucaria.habilitado, false);
   assert.match(portais.araucaria.motivo, /não validada/i);
+});
+
+test("seleciona a rajada máxima somente dentro da janela do card", () => {
+  const payload = {
+    timestamps: [Date.parse("2026-10-23T11:00:00Z"), Date.parse("2026-10-23T16:00:00Z"), Date.parse("2026-10-23T21:00:00Z")],
+    [CAMPO_RAJADA]: [30, 12, 20],
+  };
+  const contexto = { cidade: "Rio de Janeiro", areaName: "Rio de Janeiro", fusoHorario: "America/Sao_Paulo", consultadoEm: "2026-10-23T08:00:00Z" };
+  const registros = extrairRegistrosRajada(payload, contexto);
+  const picoAte15 = selecionarMaximaJanela(registros, "2026-10-23", 8, 15);
+  const picoAte00 = selecionarMaximaJanela(registros, "2026-10-23", 15, 24);
+  assert.equal(picoAte15.rajadaPrevistaKmH, 108);
+  assert.equal(picoAte00.rajadaPrevistaKmH, 72);
 });

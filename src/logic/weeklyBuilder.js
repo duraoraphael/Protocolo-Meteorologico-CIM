@@ -11,8 +11,10 @@
 // pode dar problema.
 
 const { CIDADES, getCidade } = require("../config/cities");
-const { buscarSemanaMarEmLote } = require("../sources/openMeteoSemanal");
-const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
+const { buscarAvisosInmet } = require("../sources/inmet");
+const { buscarSemanaEmLote, buscarSemanaMarEmLote } = require("../sources/openMeteoSemanal");
+const { buscarRajadasTetraTech } = require("../sources/tetratechGusts");
+const rajadaPortais = require("../config/rajadaPortais");
 const { LIMIARES } = require("./riskEngine");
 const { registrarDocumentoOperacional } = require("./documentProvenance");
 const { formatarRajadaPrevista } = require("../../public/weather-format");
@@ -40,7 +42,7 @@ function formatarDia(dataIso) {
   return registrarDocumentoOperacional(relatorio, {
     tipo: "semanal",
     localidade: "multiplas-bases",
-    fontes: ["INMET — previsão municipal", "Open-Meteo Marine", "INMET — avisos oficiais", "Clima e Saúde — UV indisponível"],
+    fontes: ["Open-Meteo", "Open-Meteo Marine", "Tetra Tech — portal TTForecast", "INMET — avisos oficiais", "Clima e Saúde — excesso de calor"],
   });
 }
 
@@ -203,48 +205,27 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
   const chaves = bases && bases.length ? bases : Object.keys(CIDADES);
   const cidades = chaves.map((c) => getCidade(c));
 
-  // O semanal obedece à mesma matriz do informativo diário: previsão
-  // meteorológica exclusivamente municipal do INMET. Falhas ficam isoladas
-  // por base e não acionam fallback de outro provedor.
-  const previsoes = [];
-  for (const cidade of cidades) {
+  const previsoes = await buscarSemanaEmLote(cidades.map(({ latitude, longitude }) => ({ latitude, longitude })), diasPrevisao);
+
+  // Rajada continua separada: somente os picos diários do portal Tetra Tech
+  // podem preencher o campo de rajada da previsão semanal.
+  for (const [i, cidade] of cidades.entries()) {
+    const portal = rajadaPortais[cidade.chave];
+    if (!portal?.habilitado || previsoes[i]?.erro) continue;
     try {
-      const resposta = await buscarPrevisaoInmet(cidade.codigoIbge);
-      previsoes.push({
-        fonte: "INMET — previsão oficial",
-        dias: (resposta.dias || []).slice(0, diasPrevisao).map((dia) => ({
-          data: dia.data,
-          condicao: dia.resumo,
-          tempMin: dia.tempMin,
-          tempMax: dia.tempMax,
-          umidadeMin: dia.umidadeMin,
-          umidadeMax: dia.umidadeMax,
-          precipitacaoMm: dia.precipitacaoMm ?? null,
-          probabilidadeChuva: null,
-          rajadaMaxKmh: dia.rajadaMaxKmh ?? null,
-          uvMax: null,
-          codigoTempo: null,
-          temMuitaChuva: false,
-        })),
-      });
+      const rajadas = await buscarRajadasTetraTech(cidade.nome, portal);
+      const porData = new Map(rajadas.picosDiarios.map((item) => [item.data, item.rajadaPrevistaKmH]));
+      previsoes[i].dias = previsoes[i].dias.map((dia) => ({ ...dia, rajadaMaxKmh: porData.get(dia.data) ?? null }));
     } catch (erro) {
-      previsoes.push({ erro: `Previsão INMET indisponível: ${erro.message}` });
+      previsoes[i].avisoRajada = `Rajada prevista indisponível: ${erro.message}`;
     }
   }
 
-  // Mar: só as costeiras entram no lote, mas o índice precisa voltar a
-  // apontar para a base certa.
-  const indicesCosteiras = cidades
-    .map((c, i) => (c.costeira ? i : -1))
-    .filter((i) => i >= 0);
-  const pontosMar = indicesCosteiras.map((i) => {
-    const c = cidades[i];
-    return c.pontoMar || { latitude: c.latitude, longitude: c.longitude };
-  });
   const maresPorIndice = new Map();
-  if (pontosMar.length) {
-    const mares = await buscarSemanaMarEmLote(pontosMar, diasPrevisao);
-    indicesCosteiras.forEach((indiceBase, k) => maresPorIndice.set(indiceBase, mares[k]));
+  const costeiras = cidades.map((cidade, indice) => ({ cidade, indice })).filter(({ cidade }) => cidade.costeira && cidade.pontoMar);
+  if (costeiras.length) {
+    const mares = await buscarSemanaMarEmLote(costeiras.map(({ cidade }) => cidade.pontoMar), diasPrevisao);
+    costeiras.forEach(({ indice }, posicao) => maresPorIndice.set(indice, mares[posicao]));
   }
 
   // Avisos oficiais do INMET: uma chamada por base (endpoint aceita só um
@@ -266,10 +247,9 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
     }
 
     const avisos = [];
+    if (previsao.avisoRajada) avisos.push(previsao.avisoRajada);
     const mar = maresPorIndice.get(i);
-    if (cidade.costeira && mar?.erro) {
-      avisos.push(`Dados de mar indisponíveis: ${mar.erro}`);
-    }
+    if (cidade.costeira && !mar) avisos.push("Condições marítimas: informação indisponível; nenhuma fonte autorizada e homologada respondeu.");
     const inmet = avisosPorIndice.get(i) || { avisos: [] };
     if (inmet.falha) avisos.push(inmet.falha);
 

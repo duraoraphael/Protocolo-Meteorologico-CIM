@@ -8,22 +8,22 @@
 //   campos_ausentes   — respondeu, mas sem campos que o informativo usa
 //   formato_alterado  — respondeu em formato não reconhecido (layout/contrato mudou)
 //   indisponivel      — não respondeu (rede, DNS, timeout, HTTP de erro)
-//   bloqueada         — o próprio sistema bloqueou (ex.: licença Open-Meteo em produção)
+//   bloqueada         — o próprio sistema bloqueou a integração
 //   nao_configurada   — integração sem configuração; informativo, não gera alerta
 const { CIDADES, getCidade } = require("../config/cities");
-const { buscarOpenMeteo } = require("../sources/openMeteo");
-const { buscarQualidadeAr } = require("../sources/airQuality");
-const { buscarMar } = require("../sources/marine");
 const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
 const { buscarObservacaoInmet } = require("../sources/inmetObservations");
+const { buscarOpenMeteo } = require("../sources/openMeteo");
+const { buscarMarComFallback } = require("../sources/marine");
+const { buscarRajadasTetraTech } = require("../sources/tetratechGusts");
+const rajadaPortais = require("../config/rajadaPortais");
 const { criarServicoCorRio } = require("../sources/corRio");
 const climaSaude = require("../sources/climaSaudeService");
 const { competenciaConfigurada, descobrirPublicacao } = require("../sources/monitorSecas");
 const { tipoErro } = require("../sources/httpJsonClient");
 const { credenciaisConfiguradas, destinoConfigurado } = require("../integrations/sharepointGed");
-const oceanopAreas = require("../config/oceanopAreas");
-const { buscarOceanop, validarConsulta } = require("../sources/oceanop");
-const { obterChuvaDiariaClimatempo } = require("../sources/climatempoDaily");
+const oceanopPontos = require("../config/oceanopPontos");
+const { buscarOceanopPorCoordenadas, validarPonto } = require("../sources/oceanop");
 
 const SITUACAO = Object.freeze({
   OK: "ok",
@@ -54,7 +54,6 @@ const TIPOS_FORMATO = new Set(["parser", "invalid_json", "empty_response"]);
 const OPCOES_HTTP = Object.freeze({ timeoutMs: 15000, tentativas: 2 });
 
 function situacaoDoErro(erro) {
-  if (erro?.code === "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED") return SITUACAO.BLOQUEADA;
   return TIPOS_FORMATO.has(erro?.tipo || tipoErro(erro)) ? SITUACAO.FORMATO_ALTERADO : SITUACAO.INDISPONIVEL;
 }
 
@@ -101,6 +100,13 @@ const CAMPOS_INMET_OBSERVACAO = {
   "observacao.ventoDirecaoGraus": "direção do vento observada",
   "observacao.rajadaKmh": "rajada medida pela estação",
 };
+const CAMPOS_OPEN_METEO = {
+  tempMin: "temperatura mínima", tempMax: "temperatura máxima",
+  umidadeMin: "umidade mínima", umidadeMax: "umidade máxima",
+  precipitacaoTotalMm: "chuva prevista", probabilidadeChuvaMax: "probabilidade de chuva",
+  uvMax: "índice UV máximo", "periodos.manha.velocidadeMediaKmh": "vento médio",
+  "periodos.manha.direcao": "direção do vento",
+};
 
 function verificarClimaSaude(cidade, consultar) {
   const escopo = cidade.nome;
@@ -125,25 +131,6 @@ function verificarClimaSaude(cidade, consultar) {
     const reserva = r.status === "degradado" ? ` ${r.mensagem}` : " Sem coleta válida anterior.";
     return item("Clima e Saúde", escopo, situacao, `${motivo}${reserva}`);
   });
-}
-
-async function verificarClimatempo(cidade, consultar, { env, fetchImpl }) {
-  const resultado = await consultar(cidade, { env, fetchImpl, salvarEvidencia: false });
-  if (resultado.status === "nao_configurada") {
-    return item("Climatempo Advisor", cidade.nome, SITUACAO.NAO_CONFIGURADA,
-      resultado.motivo || "Token ou ID oficial da localidade não configurado.");
-  }
-  if (resultado.status !== "operacional") {
-    return item("Climatempo Advisor", cidade.nome, SITUACAO.INDISPONIVEL,
-      resultado.erro || "A API não retornou uma resposta operacional.");
-  }
-  const diasValidos = (resultado.dias || []).filter((dia) =>
-    Number.isFinite(dia?.chuvaAcumuladaPrevistaMm) || Number.isFinite(dia?.probabilidadeChuvaPercentual));
-  return diasValidos.length
-    ? item("Climatempo Advisor", cidade.nome, SITUACAO.OK,
-      `${diasValidos.length} dia(s) com chuva acumulada ou probabilidade diária validada(s).`)
-    : item("Climatempo Advisor", cidade.nome, SITUACAO.CAMPOS_AUSENTES,
-      "Resposta sem chuva acumulada e probabilidade diária válidas.");
 }
 
 async function verificarCorRio(criarServico) {
@@ -181,19 +168,13 @@ async function verificarMonitorSecas(fetchFn) {
 
 function verificarConfiguracoes(env) {
   const itens = [];
-  const producao = String(env.NODE_ENV || "").toLowerCase() === "production";
-  const chave = String(env.OPEN_METEO_API_KEY || "").trim();
-  if (chave) itens.push(item("Licença Open-Meteo", "Configuração", SITUACAO.OK, "Chave comercial configurada (hosts customer-*)."));
-  else if (producao) itens.push(item("Licença Open-Meteo", "Configuração", SITUACAO.BLOQUEADA, "NODE_ENV=production sem OPEN_METEO_API_KEY: Open-Meteo bloqueada até a licença comercial ser configurada."));
-  else itens.push(item("Licença Open-Meteo", "Configuração", SITUACAO.NAO_CONFIGURADA, "Sem OPEN_METEO_API_KEY: usando API gratuita (uso não comercial). Produção ficará bloqueada."));
-
-  const pontosOceanop = Object.values(oceanopAreas).filter((ponto) => ponto?.habilitado === true);
+  const pontosOceanop = Object.values(oceanopPontos).filter((ponto) => ponto?.habilitado === true);
   if (!pontosOceanop.length) {
-    itens.push(item("Oceanop", "Configuração", SITUACAO.NAO_CONFIGURADA, "Nenhum ponto autorizado em src/config/oceanopAreas.js."));
+    itens.push(item("Oceanop", "Configuração", SITUACAO.NAO_CONFIGURADA, "Nenhum ponto cadastrado em src/config/oceanopPontos.js."));
   } else {
     try {
-      pontosOceanop.forEach(validarConsulta);
-      itens.push(item("Oceanop", "Configuração", SITUACAO.OK, `${pontosOceanop.length} área(s) com identificador local homologado.`));
+      pontosOceanop.forEach(validarPonto);
+      itens.push(item("Oceanop", "Configuração", SITUACAO.OK, `${pontosOceanop.length} ponto(s) individualizado(s) por coordenadas.`));
     } catch (erro) {
       itens.push(item("Oceanop", "Configuração", SITUACAO.BLOQUEADA, erro.message));
     }
@@ -218,38 +199,29 @@ async function executarVerificacao({
   fontes = {},
 } = {}) {
   const f = {
-    openMeteo: buscarOpenMeteo,
-    qualidadeAr: buscarQualidadeAr,
-    mar: buscarMar,
     previsaoInmet: buscarPrevisaoInmet,
     observacaoInmet: buscarObservacaoInmet,
+    openMeteo: buscarOpenMeteo,
+    marine: buscarMarComFallback,
+    rajadasTetraTech: buscarRajadasTetraTech,
     avisosInmet: buscarAvisosInmet,
     climaSaude: climaSaude.consultar,
     corRio: criarServicoCorRio,
-    oceanop: buscarOceanop,
-    climatempo: obterChuvaDiariaClimatempo,
+    oceanop: buscarOceanopPorCoordenadas,
     fetch: globalThis.fetch,
     ...fontes,
   };
   const rio = getCidade("rio_de_janeiro");
-  const costeira = getCidade("natal");
-  const pontoMar = costeira.pontoMar || costeira;
   const fuso = rio.fusoHorario || "America/Sao_Paulo";
   const opcoes = { fuso, timeoutMs: OPCOES_HTTP.timeoutMs, logger: { log() {}, warn() {}, error() {} } };
-  const pontosOceanop = Object.values(oceanopAreas).filter((ponto) => ponto?.habilitado === true);
+  const pontosOceanop = Object.values(oceanopPontos).filter((ponto) => ponto?.habilitado === true);
 
   const gerais = await Promise.all([
-    verificar("Open-Meteo Air Quality", "Rio de Janeiro", () => f.qualidadeAr(rio.latitude, rio.longitude, opcoes), {
-      pm25Medio: "PM2,5", uvMax: "índice UV",
-    }),
-    verificar("Open-Meteo Marine", costeira.nome, () => f.mar(pontoMar.latitude, pontoMar.longitude, opcoes), {
-      alturaMaxDiaM: "altura de onda", temperaturaMarC: "temperatura do mar",
-    }),
     verificar("INMET Avisos", "Nacional", () => f.avisosInmet(rio.codigoIbge, opcoes), { avisos: "lista de avisos" }),
     verificarCorRio(f.corRio).catch((erro) => [item("COR-Rio", "Rio de Janeiro", situacaoDoErro(erro), erro.message)]),
     verificarMonitorSecas(f.fetch),
     ...pontosOceanop.map((area) => verificar("Oceanop", area.referencia || "área homologada",
-      () => f.oceanop(area, { ...opcoes, tentativas: 2 }), { "previsoes.0.local": "área retornada" })),
+      () => f.oceanop(area, { ...opcoes, tentativas: 2, env }), { "previsoes.0.local": "ponto retornado" })),
   ]);
 
   // Por base em sequência: evita disparar dezenas de requisições simultâneas
@@ -257,19 +229,24 @@ async function executarVerificacao({
   const porBase = [];
   for (const cidade of cidades) {
     const opcoesCidade = { ...opcoes, fuso: cidade.fusoHorario || "America/Sao_Paulo" };
-    const [openMeteo, inmet, observacao, clima, climatempo] = await Promise.all([
-      verificar("Open-Meteo Weather", cidade.nome, () => f.openMeteo(cidade.latitude, cidade.longitude, opcoesCidade), {
-        tempMin: "temperatura mínima", tempMax: "temperatura máxima",
-        umidadeMin: "umidade mínima", umidadeMax: "umidade máxima",
-        precipitacaoTotalMm: "precipitação prevista", rajadaMaxKmh: "rajada prevista",
-      }),
+    const portalRajada = rajadaPortais[cidade.chave];
+    const [inmet, observacao, previsao, mar, rajada, clima] = await Promise.all([
       verificar("INMET Previsão", cidade.nome, () => f.previsaoInmet(cidade.codigoIbge, opcoes), CAMPOS_INMET),
       verificar("INMET Observação", cidade.nome, () => f.observacaoInmet(cidade, opcoes), CAMPOS_INMET_OBSERVACAO),
+      verificar("Open-Meteo", cidade.nome, () => f.openMeteo(cidade.latitude, cidade.longitude, { ...opcoesCidade, diasPrevisao: 4 }), CAMPOS_OPEN_METEO),
+      cidade.costeira
+        ? verificar("Open-Meteo Marine", cidade.nome, async () => {
+          const resultado = await f.marine(cidade);
+          if (!resultado.dados) throw resultado.erro || new Error("Condições marítimas indisponíveis.");
+          return resultado.dados;
+        }, { alturaMaxDiaM: "altura de onda", "periodos.0.periodoOndaS": "período de onda" })
+        : Promise.resolve(item("Open-Meteo Marine", cidade.nome, SITUACAO.NAO_CONFIGURADA, "Não se aplica: base interior.")),
+      portalRajada?.habilitado
+        ? verificar("Tetra Tech — rajada", cidade.nome, () => f.rajadasTetraTech(cidade.nome, portalRajada, { env }), { "picosDiarios.0.rajadaPrevistaKmH": "máxima diária em km/h" })
+        : Promise.resolve(item("Tetra Tech — rajada", cidade.nome, SITUACAO.NAO_CONFIGURADA, portalRajada?.motivo || "Base sem tabela cadastrada.")),
       verificarClimaSaude(cidade, f.climaSaude).catch((erro) => item("Clima e Saúde", cidade.nome, situacaoDoErro(erro), erro.message)),
-      verificarClimatempo(cidade, f.climatempo, { env, fetchImpl: f.fetch })
-        .catch((erro) => item("Climatempo Advisor", cidade.nome, situacaoDoErro(erro), erro.message)),
     ]);
-    porBase.push(openMeteo, inmet, observacao, clima, climatempo);
+    porBase.push(inmet, observacao, previsao, mar, rajada, clima);
   }
 
   const itens = [...gerais.flat(), ...porBase, ...verificarConfiguracoes(env)];

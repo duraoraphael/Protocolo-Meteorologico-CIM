@@ -3,6 +3,11 @@ const crypto = require("crypto");
 const registros = new WeakMap();
 const FONTE_PROIBIDA = /\bsimula(?:cao|ção|do|da|dos|das)?\b/i;
 
+function fonteIndisponivel(fonte) {
+  return typeof fonte === "string"
+    && /^(?:informação\s+)?indisponível$/i.test(fonte.trim());
+}
+
 class ErroProcedencia extends Error {
   constructor(message, code = "PROVENANCE_REJECTED") {
     super(message);
@@ -156,7 +161,7 @@ function validarFontesDosCampos(documento, { exigirCamposCriticos = false } = {}
     if (!Number.isFinite(documento[campo])) {
       if (exigirCamposCriticos) {
         const metadado = documento?.metadadosMeteorologicos?.[metadadoPorCampo[campo]];
-        const ausenciaRastreada = fontes[campo] === "Indisponível"
+        const ausenciaRastreada = fonteIndisponivel(fontes[campo])
           && metadado
           && typeof metadado.fonte === "string"
           && ["indisponivel", "degradado", "desatualizado"].includes(metadado.status);
@@ -167,7 +172,7 @@ function validarFontesDosCampos(documento, { exigirCamposCriticos = false } = {}
       continue;
     }
     const fonte = fontes[campo];
-    if (!fonte || fonte === "Indisponível" || FONTE_PROIBIDA.test(fonte)) {
+    if (!fonte || fonteIndisponivel(fonte) || FONTE_PROIBIDA.test(fonte)) {
       throw new ErroProcedencia(`Campo operacional sem fonte verificável: ${campo}.`, "UNTRACEABLE_FIELD");
     }
   }

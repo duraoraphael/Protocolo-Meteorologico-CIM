@@ -85,7 +85,7 @@ test("painel distingue chuva diária da última hora oficial", () => {
   assert.match(html, />1\.2 <small>mm<\/small>/);
 });
 
-test("painel aplica INMET a chuva/vento/rajada e Open-Meteo a UV/mar", () => {
+test("painel identifica fontes autorizadas e indisponibilidade de UV/rajada", () => {
   const painel = carregarPainel();
   const home = painel.executar("Dashboard.home");
   const html = home({
@@ -94,25 +94,25 @@ test("painel aplica INMET a chuva/vento/rajada e Open-Meteo a UV/mar", () => {
     precipitacaoDiariaMm: null,
     precipitacaoHoraMm: null,
     precipitacaoUltimas24hMm: null,
-    indiceUv: { maximoPrevisto: 8.4, classificacao: "Muito alto", fonte: "Open-Meteo Air Quality / CAMS" },
-    qualidadeAr: { uvMax: 8.4, horaPicoUv: "12:00", uvClassificacao: { nivel: "Muito alto" } },
-    mar: { alturaMaxDiaM: 0.5, estadoMarDia: "Leve", periodos: [] },
+    indiceUv: { maximoPrevisto: null, classificacao: null, fonte: "Informação indisponível" },
+    qualidadeAr: null,
+    mar: { fonte: "Petrobras — OCEANOP", alturaMaxDiaM: 0.5, estadoMarDia: "Leve", periodos: [] },
     fontesPorCampo: {
       "periodos.tarde.rajadaMaxKmh": "Indisponível",
       precipitacaoDiariaMm: "Indisponível",
       precipitacaoHoraMm: "Indisponível",
       precipitacaoUltimas24hMm: "Indisponível",
-      "ar.uvMax": "Open-Meteo Air Quality / CAMS",
-      "mar.alturaMaxDiaM": "Open-Meteo Marine",
+      "ar.uvMax": "Informação indisponível",
+      "mar.alturaMaxDiaM": "Petrobras — OCEANOP",
     },
-    monitoramentoApis: [{ id: "open-meteo-marine", status: "operacional" }],
+    monitoramentoApis: [{ id: "condicoes-maritimas", status: "operacional" }],
     severidade: { eventos: [] }, avisosInmet: [],
   });
 
-  assert.match(html, /Rajada prevista[\s\S]*Dado indisponível[\s\S]*INMET prioritário · Open-Meteo complementar/);
+  assert.match(html, /Rajada prevista[\s\S]*Dado indisponível[\s\S]*Informação indisponível/);
   assert.match(html, /Chuva acumulada\/dia[\s\S]*INMET — estação automática/);
-  assert.match(html, /Índice UV[\s\S]*8\.4[\s\S]*Open-Meteo Air Quality \/ CAMS/);
-  assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>[\s\S]*Open-Meteo Marine/);
+  assert.match(html, /Índice UV[\s\S]*Dado indisponível[\s\S]*Informação indisponível/);
+  assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>[\s\S]*Petrobras — OCEANOP/);
   assert.doesNotMatch(html, /O portal Clima e Saúde não publica índice UV/);
 });
 

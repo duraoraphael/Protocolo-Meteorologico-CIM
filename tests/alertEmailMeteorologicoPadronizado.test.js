@@ -38,7 +38,7 @@ function relatorio(extra = {}) {
       precipitacaoHorariaMaxMm: "Open-Meteo",
       precipitacaoTotalMm: "Open-Meteo",
       "ar.uvMax": "Open-Meteo Air Quality / CAMS",
-      "ar.aqiPm25": "Open-Meteo Air Quality / CAMS",
+      "ar.iqar": "Qualidade do ar estimada — Open-Meteo/CAMS",
     },
     mar: null,
     qualidadeAr: null,
@@ -189,9 +189,9 @@ test("UV e qualidade do ar usam títulos humanos sem metadados técnicos", () =>
       uvMax: 11,
       horaPicoUv: "11:00",
       uvClassificacao: { nivel: "Extremo" },
-      aqiPm25: 85,
+      iqar: 150,
       pm25Medio: 29,
-      pm25Classificacao: { nivel: "Muito ruim" },
+      classificacao: { nivel: "Muito Ruim", exibicao: "Muito Ruim" },
     },
   });
   const html = renderAlertEmailHtml(base(detectarAlertasGraves(report), report));

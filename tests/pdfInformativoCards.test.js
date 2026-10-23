@@ -86,11 +86,14 @@ test("condições de mar OCEANOP distinguem altura, máxima, período e pico sem
   assert.equal(bloco.find("th").length, 6, "a integração não cria colunas nem altera o layout aprovado");
 });
 
-test("qualidade do ar mantém classificação e referências técnicas", () => {
+test("qualidade do ar mantém o IQAr brasileiro, fonte e referência temporal", () => {
   const $ = cheerio.load(renderPdfHtml(report({
     qualidadeAr: {
-      aqiPm25: 42,
-      pm25Classificacao: { nivel: "Moderada" },
+      iqar: 42,
+      classificacao: { nivel: "Moderada", exibicao: "Moderada", cor: "#F2C500" },
+      subindiceResponsavel: "MP2,5",
+      fonte: "Qualidade do ar estimada — Open-Meteo/CAMS",
+      referenciaEm: "2026-10-23T09:00",
       pm25Medio: 12,
       pm10Medio: 17,
       uvMax: 9,
@@ -100,23 +103,25 @@ test("qualidade do ar mantém classificação e referências técnicas", () => {
   const primeiraLinha = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV")
     .closest("section").find("tbody tr").first();
   assert.deepEqual(primeiraLinha.find("td").map((_, td) => $(td).text().trim()).get(), [
-    "Qualidade do Ar",
+    "Índice brasileiro (IQAr)",
     "42",
     "Moderada",
-    "Classificação informada pela Open-Meteo/CAMS",
+    "Maior subíndice: MP2,5",
   ]);
   const bloco = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV").closest("section").text();
-  assert.match(bloco, /PM2,5|PM10|µg\/m³|Diretriz OMS/i);
+  assert.match(bloco, /Open-Meteo\/CAMS/);
+  assert.match(bloco, /2026-10-23T09:00/);
+  assert.doesNotMatch(bloco, /Diretriz OMS/i);
 });
 
-test("qualidade do ar sem AQI oficial não atribui classificação CAMS", () => {
+test("qualidade do ar sem IQAr válido permanece indisponível", () => {
   const $ = cheerio.load(renderPdfHtml(report({
     qualidadeAr: { pm25Medio: 12, pm25Classificacao: { nivel: "Moderada" } },
   })));
   const primeiraLinha = $("h4.subsecao").filter((_, item) => $(item).text() === "Qualidade do Ar e Índice UV")
     .closest("section").find("tbody tr").first();
   assert.deepEqual(primeiraLinha.find("td").map((_, td) => $(td).text().trim()).get(), [
-    "Qualidade do Ar", "—", "—", "Classificação indisponível",
+    "Índice brasileiro (IQAr)", "—", "Informação indisponível", "Sem dados suficientes/licença",
   ]);
 });
 
@@ -167,7 +172,7 @@ test("PDFs de 08h e 15h preservam as três tabelas no modelo aprovado", () => {
     assert.deepEqual(chuva.find("col").map((_, col) => $(col).attr("style")).get(), [
       "width:16%", "width:18%", "width:25%", "width:41%",
     ]);
-    assert.equal(vento.closest("section").find(".fonte-tabela").text(), "Fonte de dados: INMET. A intensidade qualitativa oficial não é convertida em velocidade numérica; campos não publicados aparecem como Não disponível.");
+    assert.equal(vento.closest("section").find(".fonte-tabela").text(), "Fonte de dados: informação indisponível.");
   }
 });
 

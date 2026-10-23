@@ -15,8 +15,8 @@ test("Natal e Oiapoque usam cadastro operacional exato", () => {
     fusoHorario: "America/Fortaleza",
     latitude: -5.8115,
     longitude: -35.2415,
+    pontoMar: { latitude: -5.82, longitude: -35.10, referencia: "Atlântico a leste de Natal" },
     codigoIbge: "2408102",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_NATAL", municipio: "Natal" },
     climaSaudeUrl: "https://clima.saude.gov.br/rn/natal?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/2408102",
@@ -31,8 +31,8 @@ test("Natal e Oiapoque usam cadastro operacional exato", () => {
     fusoHorario: "America/Belem",
     latitude: 3.861224,
     longitude: -51.796699,
+    pontoMar: { latitude: 4.10, longitude: -51.20, referencia: "Atlântico na costa do Amapá, referência para Oiapoque" },
     codigoIbge: "1600501",
-    climatempo: { localeIdEnv: "CLIMATEMPO_LOCALE_ID_OIAPOQUE", municipio: "Oiapoque" },
     climaSaudeUrl: "https://clima.saude.gov.br/ap/oiapoque?modo=ehf",
     links: {
       inmet: "https://previsao.inmet.gov.br/1600501",
@@ -57,12 +57,12 @@ test("OCEANOP por área não inventa identificadores e Tetra Tech usa áreas con
   assert.equal(oceanopAreas.oiapoque, undefined);
   assert.deepEqual(rajadaPortais.natal, {
     fonte: "tetratech", habilitado: true, areaName: "Natal", tipo: "Terrestre",
-    pagina: "https://petrobras.ttforecast.com.br/bulletin/forecast-chart/Terrestre/Natal",
+    pagina: "https://petrobras.ttforecast.com.br/bulletin/forecast-table/Terrestre/Natal",
     fusoHorario: "America/Fortaleza",
   });
   assert.deepEqual(rajadaPortais.oiapoque, {
     fonte: "tetratech", habilitado: true, areaName: "Oiapoque", tipo: "Terrestre",
-    pagina: "https://petrobras.ttforecast.com.br/bulletin/forecast-chart/Terrestre/Oiapoque",
+    pagina: "https://petrobras.ttforecast.com.br/bulletin/forecast-table/Terrestre/Oiapoque",
     fusoHorario: "America/Belem",
   });
 });

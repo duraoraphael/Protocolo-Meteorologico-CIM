@@ -1,16 +1,32 @@
-// API oficial Petrobras OCEANOP por área. O endpoint recebe exclusivamente o
-// identificador `local`; coordenadas das bases CIM nunca são enviadas.
+// API oficial Petrobras OCEANOP. O fluxo atual usa o endpoint por coordenadas;
+// o endpoint legado por `local` é mantido apenas para compatibilidade.
 // Unidades e fuso não são inferidos: exigem cadastro homologado.
 
 const { buscarJsonComRetentativa, API_TENTATIVAS } = require("./httpJsonClient");
-const { classificarEstadoMar, direcaoCardinal } = require("./marine");
 const { partesNoFuso, instanteNoFuso, adicionarDias } = require("../logic/informativoValidity");
+const { converterVelocidadeParaKmh, unidadeVelocidadeSuportada } = require("../logic/windUnits");
 
 const ENDPOINT = "https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoAreaAsync";
+const ENDPOINT_PONTOS = "https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync";
 const FONTE = "Petrobras — OCEANOP";
 const OCEANOP_TIMEOUT_MS = 15000;
 const OCEANOP_TENTATIVAS = API_TENTATIVAS;
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+function direcaoCardinal(graus) {
+  if (!Number.isFinite(graus)) return "—";
+  const pontos = ["N", "NNE", "NE", "ENE", "L", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
+  return pontos[Math.round((((graus % 360) + 360) % 360) / 22.5) % 16];
+}
+
+function classificarEstadoMar(alturaM) {
+  if (!Number.isFinite(alturaM)) return "Indisponível";
+  if (alturaM < 0.5) return "Calmo";
+  if (alturaM < 1.25) return "Pouco agitado";
+  if (alturaM < 2.5) return "Agitado";
+  if (alturaM < 4) return "Muito agitado";
+  return "Grosso";
+}
 
 const CAMPOS = Object.freeze([
   ["Temperatura", "Temperatura"], ["Condicao_Clima", "Condição do clima"],
@@ -76,6 +92,30 @@ function validarConsulta(localOuArea) {
   return { local };
 }
 
+function normalizarIdentificadorLocal(valor) {
+  return texto(valor, 200)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function validarLocalidadeRetornada(previsoes, area, consulta) {
+  const aliases = [consulta.local, ...(Array.isArray(area?.locaisRetorno) ? area.locaisRetorno : [])]
+    .map(normalizarIdentificadorLocal)
+    .filter(Boolean);
+  const esperados = new Set(aliases);
+  const recebidos = [...new Set((previsoes || []).map((item) => normalizarIdentificadorLocal(item?.local)))];
+  if (!recebidos.length || recebidos.some((local) => !local || !esperados.has(local))) {
+    throw Object.assign(
+      new Error("OCEANOP retornou uma localidade diferente da área solicitada; os dados foram descartados."),
+      { name: "ParserError", code: "OCEANOP_LOCATION_MISMATCH", tipo: "parser", transitorio: false },
+    );
+  }
+}
+
 function partesDataFonte(valor) {
   const data = texto(valor, 40);
   let m = data.match(/^(\d{2})\/(\d{2})\/(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/);
@@ -126,6 +166,15 @@ function normalizarResposta(json, { fusoHorario = null } = {}) {
 function cabecalhosOceanop(adicionais = {}) {
   return { Accept: "application/json", ...adicionais };
 }
+
+function cabecalhosAutorizacaoOceanop(env = process.env) {
+  const apiKey = String(env.OCEANOP_API_KEY || "").trim();
+  const accessToken = String(env.OCEANOP_ACCESS_TOKEN || "").trim();
+  return {
+    ...(apiKey ? { "X-API-Key": apiKey } : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+}
 function registrarErro(erro, ocorridoEm) {
   diagnostico.localidadesComDadosValidos = 0; diagnostico.origemDados = "indisponivel";
   diagnostico.errosRecentes.unshift({ ocorridoEm, tipo: erro?.tipo || "unknown", codigo: erro?.code || null, httpStatus: erro?.httpStatus ?? null });
@@ -140,7 +189,7 @@ function obterDiagnosticoOceanop() {
 async function buscarOceanop(localOuArea, { fetchImpl = fetch, timeoutMs = OCEANOP_TIMEOUT_MS, tentativas = OCEANOP_TENTATIVAS, esperarFn, logger, headers = {}, agora = () => new Date(), cacheTtlMs = CACHE_TTL_MS, usarCache = true } = {}) {
   const consulta = validarConsulta(localOuArea);
   const area = typeof localOuArea === "object" && localOuArea ? localOuArea : {};
-  const chave = consulta.local.toLocaleLowerCase("pt-BR"), instante = agora(), armazenado = cache.get(chave);
+  const chave = normalizarIdentificadorLocal(consulta.local), instante = agora(), armazenado = cache.get(chave);
   if (usarCache && armazenado && instante.getTime() - Date.parse(armazenado.consultadoEm) < cacheTtlMs) {
     Object.assign(diagnostico, { localidadesConsultadas: 1, localidadesComDadosValidos: 1, origemDados: "cache_valido" });
     return { ...armazenado, cache: true };
@@ -154,7 +203,9 @@ async function buscarOceanop(localOuArea, { fetchImpl = fetch, timeoutMs = OCEAN
       logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger, prefixoLog: "OCEANOP",
       requestInit: { method: "GET", headers: cabecalhosOceanop(headers), redirect: "error" },
     });
-    const resultado = { fonte: FONTE, endpoint: ENDPOINT, consulta, consultadoEm: instante.toISOString(), campos: CAMPOS.map(([chaveCampo, rotulo]) => ({ chave: chaveCampo, rotulo })), previsoes: normalizarResposta(json, { fusoHorario: area.fusoHorario || null }), cache: false };
+    const previsoes = normalizarResposta(json, { fusoHorario: area.fusoHorario || null });
+    validarLocalidadeRetornada(previsoes, area, consulta);
+    const resultado = { fonte: FONTE, endpoint: ENDPOINT, consulta, consultadoEm: instante.toISOString(), campos: CAMPOS.map(([chaveCampo, rotulo]) => ({ chave: chaveCampo, rotulo })), previsoes, cache: false };
     if (!resultado.previsoes.length) throw Object.assign(new Error("OCEANOP retornou success=true, mas sem registros de previsão."), { name: "ParserError", code: "OCEANOP_EMPTY_DATA", transitorio: false });
     if (usarCache) cache.set(chave, resultado);
     Object.assign(diagnostico, { ultimaConsultaBemSucedida: resultado.consultadoEm, localidadesComDadosValidos: 1, origemDados: "consulta_oceanop" });
@@ -165,13 +216,86 @@ async function buscarOceanop(localOuArea, { fetchImpl = fetch, timeoutMs = OCEAN
   finally { if (pendentes.get(chave) === tarefa) pendentes.delete(chave); }
 }
 
-function converterVelocidadeParaKmh(valor, unidade) {
-  if (!Number.isFinite(valor)) return null;
-  return unidade === "km/h" ? valor : unidade === "m/s" ? valor * 3.6 : null;
+function validarPonto(ponto) {
+  const id = texto(ponto?.id, 100);
+  const latitude = numero(ponto?.latitude);
+  const longitude = numero(ponto?.longitude);
+  if (!id || latitude === null || latitude < -90 || latitude > 90 || longitude === null || longitude < -180 || longitude > 180) {
+    throw erroConfiguracao("OCEANOP: ponto por coordenadas inválido.", "OCEANOP_INVALID_POINT");
+  }
+  return { id, latitude, longitude };
 }
+
+async function buscarOceanopPorCoordenadas(ponto, {
+  fetchImpl = fetch,
+  timeoutMs = OCEANOP_TIMEOUT_MS,
+  tentativas = OCEANOP_TENTATIVAS,
+  esperarFn,
+  logger,
+  headers = {},
+  env = process.env,
+  agora = () => new Date(),
+  cacheTtlMs = CACHE_TTL_MS,
+  usarCache = true,
+} = {}) {
+  const consulta = validarPonto(ponto);
+  const instante = agora();
+  const chave = `ponto:${normalizarIdentificadorLocal(consulta.id)}:${consulta.latitude}:${consulta.longitude}`;
+  const armazenado = cache.get(chave);
+  if (usarCache && armazenado && instante.getTime() - Date.parse(armazenado.consultadoEm) < cacheTtlMs) {
+    Object.assign(diagnostico, { localidadesConsultadas: 1, localidadesComDadosValidos: 1, origemDados: "cache_valido" });
+    return { ...armazenado, cache: true };
+  }
+  if (usarCache && pendentes.has(chave)) return pendentes.get(chave);
+  Object.assign(diagnostico, { ultimaConsulta: instante.toISOString(), localidadesConsultadas: 1, origemDados: "consulta_oceanop_pontos" });
+  const tarefa = (async () => {
+    const json = await buscarJsonComRetentativa(ENDPOINT_PONTOS, {
+      nomeFonte: FONTE,
+      fetchImpl,
+      timeoutMs,
+      tentativas,
+      atrasoBaseMs: 1000,
+      esperarFn,
+      logger: logger === undefined && fetchImpl === globalThis.fetch ? console : logger,
+      prefixoLog: "OCEANOP-PONTOS",
+      requestInit: {
+        method: "POST",
+        headers: cabecalhosOceanop({
+          "Content-Type": "application/json",
+          ...cabecalhosAutorizacaoOceanop(env),
+          ...headers,
+        }),
+        body: JSON.stringify([{ ID: consulta.id, Lat: consulta.latitude, Lon: consulta.longitude }]),
+        redirect: "error",
+      },
+    });
+    const previsoes = normalizarResposta(json, { fusoHorario: ponto.fusoHorario || null });
+    validarLocalidadeRetornada(previsoes, { locaisRetorno: [consulta.id] }, { local: consulta.id });
+    if (!previsoes.length) throw Object.assign(new Error("OCEANOP retornou success=true, mas sem registros para o ponto."), {
+      name: "ParserError", code: "OCEANOP_EMPTY_POINT_DATA", transitorio: false,
+    });
+    const resultado = {
+      fonte: FONTE,
+      endpoint: ENDPOINT_PONTOS,
+      metodo: "POST",
+      consulta: { id: consulta.id, latitude: consulta.latitude, longitude: consulta.longitude },
+      consultadoEm: instante.toISOString(),
+      campos: CAMPOS.map(([chaveCampo, rotulo]) => ({ chave: chaveCampo, rotulo })),
+      previsoes,
+      cache: false,
+    };
+    if (usarCache) cache.set(chave, resultado);
+    Object.assign(diagnostico, { ultimaConsultaBemSucedida: resultado.consultadoEm, localidadesComDadosValidos: 1, origemDados: "consulta_oceanop_pontos" });
+    return resultado;
+  })();
+  if (usarCache) pendentes.set(chave, tarefa);
+  try { return await tarefa; } catch (erro) { registrarErro(erro, agora().toISOString()); throw erro; }
+  finally { if (pendentes.get(chave) === tarefa) pendentes.delete(chave); }
+}
+
 function exigirMetadadosVento(area) {
   const u = area?.unidades || {};
-  if (!area?.fusoHorario || area?.usarVento !== true || !["km/h", "m/s"].includes(u.VelocidadeVento) || !["km/h", "m/s"].includes(u.VelocidadeVento_10M_Rajada) || u.DirecaoVento !== "graus") {
+  if (!area?.fusoHorario || area?.usarVento !== true || !unidadeVelocidadeSuportada(u.VelocidadeVento) || !unidadeVelocidadeSuportada(u.VelocidadeVento_10M_Rajada) || u.DirecaoVento !== "graus") {
     throw erroConfiguracao("OCEANOP: fuso e unidades do vento ainda não foram homologados para esta área.", "OCEANOP_WIND_METADATA_UNCONFIRMED");
   }
 }
@@ -257,8 +381,9 @@ function limparCacheOceanop() {
 }
 
 module.exports = {
-  ENDPOINT, FONTE, CAMPOS, CONDICOES_CLIMA, OCEANOP_TIMEOUT_MS, OCEANOP_TENTATIVAS, CACHE_TTL_MS,
-  buscarOceanop, normalizarResposta, validarConsulta, numero, numeroNoIntervalo, partesDataFonte, instanteDaFonte,
+  ENDPOINT, ENDPOINT_PONTOS, FONTE, CAMPOS, CONDICOES_CLIMA, OCEANOP_TIMEOUT_MS, OCEANOP_TENTATIVAS, CACHE_TTL_MS,
+  buscarOceanop, buscarOceanopPorCoordenadas, normalizarResposta, validarConsulta, validarPonto, numero, numeroNoIntervalo, partesDataFonte, instanteDaFonte,
+  normalizarIdentificadorLocal, validarLocalidadeRetornada,
   mapearOceanopParaMar, mapearOceanopParaVento, mapearOceanopParaProximosDias, converterVelocidadeParaKmh,
-  registrosNaJanela, limparCacheOceanop, obterDiagnosticoOceanop, cabecalhosOceanop,
+  registrosNaJanela, limparCacheOceanop, obterDiagnosticoOceanop, cabecalhosOceanop, cabecalhosAutorizacaoOceanop,
 };

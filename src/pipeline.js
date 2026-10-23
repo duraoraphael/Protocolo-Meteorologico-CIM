@@ -8,11 +8,8 @@ const ged = require("./integrations/sharepointGed");
 const { resumo, compararComManha } = require("./logic/scheduledReport");
 const { obterMonitorSecas } = require("./sources/monitorSecas");
 const {
-  montarPrevisaoProximosDiasInmet,
-  obterPrevisaoProximosDias,
-  mesclarPrevisaoProximosDias,
+  montarPrevisaoProximosDiasOpenMeteo,
   aplicarRajadasOceanop,
-  aplicarChuvaClimatempo,
 } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
 const { validadeInformativo } = require("./logic/informativoValidity");
@@ -194,21 +191,17 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // localidade e a partir do instante de geração do informativo. Nunca lança
   // — falha da fonte vira "Não disponível" na tabela e aviso de coleta.
   const instantePrevisao = new Date(report.geradoEmISO || Date.now());
-  const previsaoInmet3d = montarPrevisaoProximosDiasInmet(cidade, report.inmetPrevisao, { agora: instantePrevisao });
-  const previsaoComplementar3d = await obterPrevisaoProximosDias(cidade, { agora: instantePrevisao });
+  const previsaoOpenMeteo3d = montarPrevisaoProximosDiasOpenMeteo(cidade, report.previsaoOpenMeteoDias, { agora: instantePrevisao });
   report.previsaoProximosDias = aplicarRajadasOceanop(
     aplicarRajadasOceanop(
-      aplicarChuvaClimatempo(
-        mesclarPrevisaoProximosDias(previsaoInmet3d, previsaoComplementar3d),
-        report.climatempoChuva
-      ),
+      previsaoOpenMeteo3d,
       report.previsaoOceanopDias
     ),
     report.previsaoRajadaPortalDias,
     "Tetra Tech/OCEANOP"
   );
   if (report.previsaoProximosDias.status === "indisponivel") {
-    report.avisosColeta.push("INMET (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
+    report.avisosColeta.push("Open-Meteo (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
   }
 
   // COR-Rio (só município do Rio): mesmo serviço/cache do painel, então site,

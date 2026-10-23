@@ -83,16 +83,21 @@ const Dashboard = (() => {
 
   // Indicadores marítimos só para bases em que o monitoramento de mar se aplica.
   function marAplicavel(r) {
-    const marinha = (r.monitoramentoApis || []).find(api => api.id === 'open-meteo-marine');
+    const marinha = (r.monitoramentoApis || []).find(api => api.id === 'condicoes-maritimas');
     return Boolean(r.mar) || (marinha ? marinha.status !== 'nao_aplicavel' : false);
   }
   function metrics(r) {
     const gusts = (r.ventoPorPeriodo || []).map(p => p.rajadaMaxKmh).filter(v => v != null);
     const gustValue = Number.isFinite(r.rajadaMaxKmh) ? r.rajadaMaxKmh : (gusts.length ? Math.max(...gusts) : null);
     const aq = r.qualidadeAr;
-    const ar = Number.isFinite(aq?.aqiPm25) && aq?.pm25Classificacao?.nivel
-      ? aq.pm25Classificacao.nivel
-      : 'Classificação indisponível';
+    const arDisponivel = Number.isFinite(aq?.iqar) && aq?.classificacao?.exibicao;
+    const classeIqAr = { Boa: 'boa', Moderada: 'moderada', Ruim: 'ruim', 'Muito Ruim': 'muito-ruim', 'Péssima': 'pessima' }[aq?.classificacao?.nivel];
+    const ar = arDisponivel
+      ? `<span class="iqar-classe iqar-${classeIqAr}">${escape(aq.classificacao.exibicao)}</span>`
+      : 'Informação indisponível';
+    const arDetalhe = arDisponivel
+      ? `IQAr ${aq.iqar} · estimativa referente a ${String(aq.referenciaEm || '').replace('T', ' às ')}`
+      : aq?.motivoIndisponibilidade || 'Sem dados modelados válidos ou licença comercial configurada';
     const fields = r.fontesPorCampo || {};
     const sources = (...keys) => {
       const valores = [...new Set(keys.map(k=>fields[k]).filter(Boolean))];
@@ -113,15 +118,13 @@ const Dashboard = (() => {
     const uvReportedSource = r.indiceUv?.fonte;
     const uvSource = uvReportedSource && uvReportedSource !== 'Indisponível'
       ? uvReportedSource
-      : sourceOrPolicy('Open-Meteo Air Quality / CAMS', 'ar.uvMax');
-    const gustSource = sourceOrPolicy('INMET prioritário · Open-Meteo complementar', 'rajadaMaxKmh','periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh');
+      : sourceOrPolicy('Informação indisponível', 'ar.uvMax');
+    const gustSource = sourceOrPolicy('Informação indisponível', 'rajadaMaxKmh','periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh');
     const gustDetail = !Number.isFinite(gustValue)
-      ? 'INMET e Open-Meteo não publicaram máxima numérica válida de rajada'
+      ? 'As fontes autorizadas não publicaram máxima numérica válida de rajada'
       : gustSource.includes('OCEANOP')
         ? `Máxima prevista pela OCEANOP${r.rajadaPrevistaReferencia?.periodoReferencia ? ` · ${r.rajadaPrevistaReferencia.periodoReferencia}` : ''}`
-      : gustSource.includes('Open-Meteo')
-        ? 'Máxima prevista; Open-Meteo complementa campo numérico não publicado pelo INMET'
-        : 'Máxima prevista no produto municipal do INMET';
+      : 'Máxima prevista na fonte indicada';
     const comMar = marAplicavel(r);
     const coberturaTemp = r.coberturaTemperaturaObservada || {};
     const coberturaUmidade = r.coberturaUmidadeObservada || {};
@@ -148,8 +151,8 @@ const Dashboard = (() => {
       metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), r.coberturaChuva24h?.parcial ? `Acumulado incompleto · ${r.coberturaChuva24h.amostras || 0}/24 leituras INMET` : 'Acumulado completo das últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
       metric('Índice UV', uv == null ? 'Dado indisponível' : unit(uv, ''), uvDetail, 'sun', '', uvSource),
       metric('Condição geral', escape(r.condicaoGeral), 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
-      metric('Qualidade do ar', escape(ar), '', 'leaf', 'air', sources('ar.pm25Medio')),
-      comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.desatualizado ? `Dado armazenado · última atualização válida: ${dateTimeBrasilia(r.mar?.ultimaAtualizacao) || 'horário indisponível'}` : r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sourceOrPolicy('Open-Meteo Marine', 'mar.alturaMaxDiaM')) : '',
+      metric('Qualidade do ar', arDisponivel ? ar : escape(ar), arDetalhe, 'leaf', 'air', sources('ar.iqar')),
+      comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sourceOrPolicy('Informação indisponível', 'mar.alturaMaxDiaM')) : '',
       heatCard(r),
     ];
     const frase = ce?.frasePrevisao || (r.previsaoAte ? `Previsão até ${r.previsaoAte}` : '');
@@ -336,7 +339,7 @@ const Dashboard = (() => {
     return {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[type] || 'Detalhes';
   }
   function details(r, type) {
-    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: INMET prioritário para chuva, vento, rajada, temperatura, umidade, previsão textual e avisos; Open-Meteo Weather como complemento identificado quando o INMET não publica um valor numérico; Clima e Saúde para EHF e risco térmico; Open-Meteo Air Quality/CAMS para índice UV e qualidade do ar; Petrobras — OCEANOP para condições marítimas de pontos autorizados e homologados, com Open-Meteo Marine como alternativa identificada.</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
+    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: INMET para previsão, observação e avisos; Clima e Saúde para EHF e risco térmico; Petrobras — OCEANOP e Tetra Tech para vento e rajadas somente quando houver acesso e cobertura autorizados. Campos sem fonte autorizada aparecem como informação indisponível.</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
     if (!r) return '<p>Os dados desta base ainda não estão disponíveis.</p>';
     if (String(type).startsWith('ocorrencia:')) return occurrenceDetails(r, type.slice(11));
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;

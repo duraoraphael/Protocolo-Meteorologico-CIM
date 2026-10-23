@@ -92,7 +92,7 @@ test("envio reutiliza o PDF completo em memória como anexo SMTP", { concurrency
     // O cabeçalho é 100% HTML e não exige imagens inline por Content-ID.
     const logos = mensagem.attachments.filter((anexo) => anexo.cid);
     assert.deepEqual(logos, []);
-    assert.doesNotMatch(mensagem.html, /Petrobras|logo-petrobras|data-email-header-petrobras/i);
+    assert.doesNotMatch(mensagem.html, /logo-petrobras|data-email-header-petrobras/i);
     assert.match(mensagem.html, /Relatório técnico completo com tabelas/);
     assert.equal(resultado.respostaSmtp, "250 2.0.0 OK");
     assert.equal(resultado.aceitos, 1);

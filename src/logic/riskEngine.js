@@ -1,4 +1,4 @@
-// Motor de regras: converte os dados brutos consolidados (Open-Meteo + INMET)
+// Motor de regras: converte os dados consolidados das fontes autorizadas
 // em (1) o evento climático mais relevante do dia e (2) as recomendações de
 // segurança adaptadas ao cenário — nunca uma lista genérica fixa.
 //
@@ -33,8 +33,6 @@ const LIMIARES = {
   // transferência de pessoal e uso de heliponto em instalações costeiras.
   marGrossoM: 2.5,
   marModeradoM: 1.5,
-  // European AQI da Open-Meteo/CAMS: acima de 60 começa a faixa "Ruim".
-  aqiEuropeuRuim: 60,
 };
 
 function textoAvisos(avisos, regex) {
@@ -283,22 +281,19 @@ function avaliarRiscos(consolidado) {
     });
   }
 
-  // Qualidade do ar — classificação oficial do European AQI calculada pela
-  // própria fonte. A concentração de PM2,5 continua visível, mas não é
-  // convertida localmente em uma categoria que a OMS não publica.
-  if (Number.isFinite(qualidadeAr?.aqiPm25) && qualidadeAr.aqiPm25 > LIMIARES.aqiEuropeuRuim) {
-    const grau = qualidadeAr.aqiPm25 > 100
+  // Só o IQAr calculado conforme as faixas brasileiras válidas pode gerar
+  // alerta. Índices US/EU ou concentração instantânea não são substitutos.
+  if (Number.isFinite(qualidadeAr?.iqar) && qualidadeAr.iqar > 80) {
+    const grau = qualidadeAr.iqar > 200
       ? "EMERGÊNCIA"
-      : qualidadeAr.aqiPm25 > 80 ? "ALERTA" : "ATENÇÃO";
+      : qualidadeAr.iqar > 120 ? "ALERTA" : "ATENÇÃO";
     candidatos.push({
       tipo: "qualidadeArRuim",
       grau,
       nivel: NIVEL_POR_GRAU[grau],
       janela: "ao longo do dia",
-      // Texto para leitor leigo; a concentração em µg/m³ segue na tabela de
-      // qualidade do ar do informativo.
-      descricao: `Qualidade do ar ${qualidadeAr.pm25Classificacao.nivel.toLowerCase()} prevista: o ar terá mais partículas finas de poluição (como fumaça e poeira), que podem irritar olhos, nariz e garganta e piorar problemas respiratórios. Índice ${qualidadeAr.aqiPm25} — quanto maior, pior; acima de 60 o ar já é considerado ruim.`,
-      naturezaDado: "Classificação interna baseada na previsão",
+      descricao: `Qualidade do ar estimada ${qualidadeAr.classificacao.exibicao.toLowerCase()} (IQAr ${qualidadeAr.iqar}); considere reduzir exposição prolongada ao ar livre.`,
+      naturezaDado: "IQAr brasileiro calculado a partir de estimativa modelada",
       recomendacoes: recomendacoesFenomeno("ar", grau),
     });
   }

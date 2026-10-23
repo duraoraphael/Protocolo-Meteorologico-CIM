@@ -41,10 +41,11 @@ const CAMPOS_DIARIOS = [
   "weather_code",
   "temperature_2m_max",
   "temperature_2m_min",
+  "relative_humidity_2m_max",
+  "relative_humidity_2m_min",
   "precipitation_sum",
   "precipitation_probability_max",
   "wind_speed_10m_max",
-  "wind_gusts_10m_max",
   "uv_index_max",
 ].join(",");
 
@@ -63,10 +64,12 @@ function converterDias(d) {
     temMuitaChuva: CODIGOS_TEMPESTADE.has(d.weather_code?.[i]),
     tempMin: arred(d.temperature_2m_min?.[i]),
     tempMax: arred(d.temperature_2m_max?.[i]),
+    umidadeMin: arred(d.relative_humidity_2m_min?.[i]),
+    umidadeMax: arred(d.relative_humidity_2m_max?.[i]),
     precipitacaoMm: arred(d.precipitation_sum?.[i], 1),
     probabilidadeChuva: arred(d.precipitation_probability_max?.[i]),
     ventoMaxKmh: arred(d.wind_speed_10m_max?.[i]),
-    rajadaMaxKmh: arred(d.wind_gusts_10m_max?.[i]),
+    rajadaMaxKmh: null,
     uvMax: arred(d.uv_index_max?.[i], 1),
   }));
 }
@@ -88,6 +91,7 @@ async function buscarSemanaEmLote(pontos, diasPrevisao = 7) {
       daily: CAMPOS_DIARIOS,
       timezone: "auto",
       forecast_days: String(diasPrevisao),
+      wind_speed_unit: "kmh",
     });
     const url = aplicarConfiguracaoOpenMeteo(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
 

@@ -144,16 +144,22 @@ test("mapeamento operacional de UV é parametrizável", { concurrency: false }, 
   }
 });
 
-test("qualidade do ar usa o European AQI informado pela fonte", () => {
+test("qualidade do ar usa somente o IQAr brasileiro e ignora índices US/EU", () => {
   const atencao = avaliarRiscos(entrada({ qualidadeAr: {
-    aqiPm25: 61, pm25Medio: 18, pm25Classificacao: { nivel: "Ruim" },
+    iqar: 100, classificacao: { nivel: "Ruim", exibicao: "Ruim" }, european_aqi: 61, us_aqi: 30,
   } })).severidade.eventos.find((evento) => evento.tipo === "qualidadeArRuim");
   assert.equal(atencao.grau, "ATENÇÃO");
-  assert.match(atencao.descricao, /Índice 61/);
-  assert.doesNotMatch(atencao.descricao, /European AQI|µg\/m³|PM2,5/);
+  assert.match(atencao.descricao, /IQAr 100/);
+  assert.doesNotMatch(atencao.descricao, /European AQI|US AQI|µg\/m³|PM2,5/);
 
+  const alerta = avaliarRiscos(entrada({ qualidadeAr: {
+    iqar: 150, classificacao: { nivel: "Muito Ruim", exibicao: "Muito Ruim" },
+  } })).severidade.eventos.find((evento) => evento.tipo === "qualidadeArRuim");
+  assert.equal(alerta.grau, "ALERTA");
   const emergencia = avaliarRiscos(entrada({ qualidadeAr: {
-    aqiPm25: 101, pm25Medio: 35, pm25Classificacao: { nivel: "Extremamente ruim" },
+    iqar: 250, classificacao: { nivel: "Péssima", exibicao: "Péssima" },
   } })).severidade.eventos.find((evento) => evento.tipo === "qualidadeArRuim");
   assert.equal(emergencia.grau, "EMERGÊNCIA");
+  const semIndice = avaliarRiscos(entrada({ qualidadeAr: { aqiPm25: 500, european_aqi: 200, us_aqi: 300 } }));
+  assert.equal(semIndice.severidade.eventos.some((evento) => evento.tipo === "qualidadeArRuim"), false);
 });

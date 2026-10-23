@@ -58,24 +58,15 @@ function unidade(valor, sufixo) {
 }
 
 function fonteEventoComPrioridade(evento) {
-  const fonte = evento.fonteDados || "Indisponível";
-  const fenomenoInmetPrioritario = ["vento", "chuva"].includes(evento.assinatura)
-    || /vento|chuva/i.test(String(evento.tipo || ""));
-  if (!fenomenoInmetPrioritario || !/Open-Meteo/i.test(fonte) || /INMET/i.test(fonte)) return fonte;
-  const complemento = /previs[aã]o complementar/i.test(fonte)
-    ? fonte
-    : `${fonte} — previsão complementar`;
-  return `INMET — fonte prioritária consultada | ${complemento}`;
+  return evento.fonteDados || "Indisponível";
 }
 
 function fontePrevisaoComPrincipalInmet(fonte) {
-  const complementos = [...new Set(String(fonte || "")
+  const fontes = [...new Set(String(fonte || "")
     .split(/\s+\/\s+/)
     .map((item) => item.trim())
-    .filter((item) => item && !/^INMET\b/i.test(item) && !/^Dado meteorol[oó]gico integrado$/i.test(item)))];
-  return complementos.length
-    ? `INMET — previsão principal | ${complementos.join(" / ")}`
-    : "INMET — previsão principal";
+    .filter((item) => item && !/^Dado meteorol[oó]gico integrado$/i.test(item)))];
+  return fontes.join(" / ") || "Informação indisponível";
 }
 
 // NORMAL não recebe recomendações — mesma regra que já valia nos dois formatos.

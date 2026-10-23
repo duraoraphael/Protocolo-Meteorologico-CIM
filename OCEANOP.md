@@ -1,65 +1,67 @@
-# Integração OCEANOP / Petrobras — rajadas previstas
+# Integração OCEANOP / Petrobras
 
-## Contrato usado
+## Contrato adotado
 
-- `GET https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoAreaAsync?local=...`;
-- `local` é um identificador de área homologado, nunca latitude/longitude;
+O fluxo ativo utiliza o endpoint documentado no Swagger corporativo:
+
+- `POST https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync`;
+- corpo: `[{ "ID": "chave_da_base", "Lat": -00.0, "Lon": -00.0 }]`;
 - timeout de 15 segundos, retentativas apenas para falhas transitórias, cache de
   5 minutos e deduplicação de chamadas simultâneas;
-- a resposta só é aceita com HTTP 2xx, `success: true`, `data` como array não
-  vazio e registros estruturalmente válidos;
-- a chamada ocorre somente no backend e nunca desativa a validação TLS.
+- credenciais opcionais lidas somente no backend: `OCEANOP_API_KEY`, enviada em
+  `X-API-Key`, e `OCEANOP_ACCESS_TOKEN`, enviado como Bearer;
+- TLS permanece validado. Não há desativação de certificado nem tentativa de
+  contornar autenticação.
 
-A consulta de previsão não usa token nem cabeçalho `Authorization`. O backend
-faz diretamente o `GET` do endpoint com o parâmetro `local`.
+A resposta só é aceita com HTTP 2xx, `success: true`, `data` como array não
+vazio, registros estruturalmente válidos e `Local` correspondente ao `ID`
+solicitado após normalização textual. Resposta de outra base é descartada antes
+do cache e não chega ao painel, PDF ou e-mail.
 
-## Cadastro seguro
+O endpoint legado `GET /api/v1/previsao/JsonPrevisaoAreaAsync?local=...` continua
+no adaptador exclusivamente por compatibilidade. O relatório operacional usa o
+endpoint por coordenadas.
 
-As correspondências ficam em `src/config/oceanopAreas.js`. Cada chave deve
-existir em `src/config/cities.js` e declarar explicitamente:
+## Cobertura das bases
 
-- `habilitado: true` e `local` confirmado pela OCEANOP;
-- referência geográfica validada;
-- fuso IANA confirmado;
-- `usarVento: true`;
-- unidades homologadas de `VelocidadeVento`,
-  `VelocidadeVento_10M_Rajada` e `DirecaoVento`.
+`src/config/oceanopPontos.js` deriva um ponto individual das coordenadas oficiais
+de cada entrada de `src/config/cities.js`. Assim, todas as 11 bases atuais são
+consultáveis sem reutilizar o retorno de outra localidade: Rio de Janeiro,
+Macaé, Brasília, Manaus, Santos, Aracaju, Natal, Oiapoque, Vitória, Araucária e
+Salvador.
 
-Estão habilitadas as bases Santos, Araucária, Manaus, Rio de Janeiro, Macaé,
-Brasília e Vitória, usando como `local` os identificadores informados para cada
-uma. `sururu` continua apenas como exemplo e não foi associado a nenhuma base.
+Brasília é tratada como ponto terrestre: vento pode ser usado, mas produto
+marítimo permanece desabilitado. A mesma proteção vale para todas as bases não
+costeiras.
 
-## Normalização e janela operacional
+## Unidade, fuso e uso operacional
 
-São usados `Local`, `DataInicial`, `DataFinal`, `DataEscrita`, `DirecaoVento`,
-`VelocidadeVento` e `VelocidadeVento_10M_Rajada`. Decimais com vírgula viram
-números; vazio permanece `null`; `"0"` permanece zero. Datas só viram instantes
-quando o fuso está homologado.
+O adaptador aceita velocidade declarada em `km/h`, `m/s` ou `nós` e centraliza
+a conversão para km/h (`m/s × 3,6`; `nós × 1,852`). O cadastro atual declara os
+campos OCEANOP de vento e rajada em km/h, conforme o contrato previamente
+homologado do produto por área; a confirmação final do payload do endpoint por
+coordenadas ainda depende de acesso autorizado.
 
-As unidades de `VelocidadeVento` e `VelocidadeVento_10M_Rajada` foram
-confirmadas como `km/h`; os valores são preservados sem conversão. A direção é
-tratada em graus.
+Datas são interpretadas apenas quando há fuso IANA cadastrado. Para a edição das
+05h, a janela é 05h–15h; para a edição das 15h, 15h–00h. A maior rajada válida
+da janela é usada com fonte, local e horário preservados. Os três dias seguintes
+recebem a máxima diária quando houver registro válido.
 
-Para a edição das 05h, a rajada OCEANOP considera 05h–15h. Para a edição das
-15h, considera 15h–00h. O texto editorial “Previsão até 00h” permanece
-inalterado. A maior rajada válida da janela é usada, com horário, intervalo,
-área e fonte preservados. Os três dias seguintes recebem a máxima OCEANOP por
-dia quando houver registro válido.
+Ondas, período e demais variáveis marítimas permanecem desabilitados até que
+unidades, cobertura geográfica e payload real sejam validados formalmente.
+Campos sem fonte autorizada aparecem como `Informação indisponível`, sem valor
+inventado nem mistura entre bases.
 
-## Prioridade e falha segura
+## Validação real em 22/10/2026
 
-Em área homologada, OCEANOP é prioritária somente para rajada prevista.
-Velocidade média e direção podem completar campos ausentes. Temperatura, chuva,
-umidade, UV e demais políticas não são alteradas. Sem correspondência, unidade,
-fuso ou resposta válida, o fluxo INMET/Open-Meteo existente segue
-sem interrupção e a fonte efetivamente usada continua identificada.
-
-## Situação da validação real em 20/10/2026
-
-- DNS corporativo, TCP/443 e TLS: OK;
+- DNS corporativo, TCP/443 e TLS: disponíveis;
 - Swagger: HTTP 200;
-- endpoint de previsão consultado diretamente: HTTP 401 no ambiente de teste;
-- resposta com `success: true`: **não obtida**.
+- contrato `PontoLatLonDTO` (`ID`, `Lat`, `Lon`): confirmado no Swagger;
+- `POST` real para Brasília, com suas coordenadas exatas: HTTP 401;
+- endpoint legado consultado para sete áreas: HTTP 401;
+- resposta autenticada com `success: true`: não obtida.
 
-O adaptador e os cadastros estão implementados. A confirmação operacional final
-depende de uma resposta real `success: true` na rede/VPN corporativa.
+Conclusão: o adaptador, o isolamento por base, o cache e a normalização estão
+implementados e testados. A ativação produtiva dos dados OCEANOP depende do
+fornecimento das credenciais/permissões oficiais e de homologação com payload
+real. Até lá, o sistema falha de forma segura e mantém a origem indisponível.
