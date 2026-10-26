@@ -13,8 +13,6 @@
 const { CIDADES, getCidade } = require("../config/cities");
 const { buscarAvisosInmet } = require("../sources/inmet");
 const { buscarSemanaEmLote, buscarSemanaMarEmLote } = require("../sources/openMeteoSemanal");
-const { buscarRajadasTetraTech } = require("../sources/tetratechGusts");
-const rajadaPortais = require("../config/rajadaPortais");
 const { LIMIARES } = require("./riskEngine");
 const { registrarDocumentoOperacional } = require("./documentProvenance");
 const { formatarRajadaPrevista } = require("../../public/weather-format");
@@ -42,7 +40,7 @@ function formatarDia(dataIso) {
   return registrarDocumentoOperacional(relatorio, {
     tipo: "semanal",
     localidade: "multiplas-bases",
-    fontes: ["Open-Meteo", "Open-Meteo Marine", "Tetra Tech — portal TTForecast", "INMET — avisos oficiais", "Clima e Saúde — excesso de calor"],
+    fontes: ["Open-Meteo", "Open-Meteo Marine", "INMET — avisos oficiais", "Clima e Saúde — excesso de calor"],
   });
 }
 
@@ -206,20 +204,6 @@ async function montarRelatorioSemanal({ bases, dias: diasPrevisao = 7 } = {}) {
   const cidades = chaves.map((c) => getCidade(c));
 
   const previsoes = await buscarSemanaEmLote(cidades.map(({ latitude, longitude }) => ({ latitude, longitude })), diasPrevisao);
-
-  // Rajada continua separada: somente os picos diários do portal Tetra Tech
-  // podem preencher o campo de rajada da previsão semanal.
-  for (const [i, cidade] of cidades.entries()) {
-    const portal = rajadaPortais[cidade.chave];
-    if (!portal?.habilitado || previsoes[i]?.erro) continue;
-    try {
-      const rajadas = await buscarRajadasTetraTech(cidade.nome, portal);
-      const porData = new Map(rajadas.picosDiarios.map((item) => [item.data, item.rajadaPrevistaKmH]));
-      previsoes[i].dias = previsoes[i].dias.map((dia) => ({ ...dia, rajadaMaxKmh: porData.get(dia.data) ?? null }));
-    } catch (erro) {
-      previsoes[i].avisoRajada = `Rajada prevista indisponível: ${erro.message}`;
-    }
-  }
 
   const maresPorIndice = new Map();
   const costeiras = cidades.map((cidade, indice) => ({ cidade, indice })).filter(({ cidade }) => cidade.costeira && cidade.pontoMar);

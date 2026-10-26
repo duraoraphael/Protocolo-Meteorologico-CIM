@@ -15,15 +15,12 @@ const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../sources/inmet");
 const { buscarObservacaoInmet } = require("../sources/inmetObservations");
 const { buscarOpenMeteo } = require("../sources/openMeteo");
 const { buscarMarComFallback } = require("../sources/marine");
-const { buscarRajadasTetraTech } = require("../sources/tetratechGusts");
-const rajadaPortais = require("../config/rajadaPortais");
+const { buscarQualidadeAr } = require("../sources/airQuality");
 const { criarServicoCorRio } = require("../sources/corRio");
 const climaSaude = require("../sources/climaSaudeService");
 const { competenciaConfigurada, descobrirPublicacao } = require("../sources/monitorSecas");
 const { tipoErro } = require("../sources/httpJsonClient");
 const { credenciaisConfiguradas, destinoConfigurado } = require("../integrations/sharepointGed");
-const oceanopPontos = require("../config/oceanopPontos");
-const { buscarOceanopPorCoordenadas, validarPonto } = require("../sources/oceanop");
 
 const SITUACAO = Object.freeze({
   OK: "ok",
@@ -32,6 +29,7 @@ const SITUACAO = Object.freeze({
   INDISPONIVEL: "indisponivel",
   BLOQUEADA: "bloqueada",
   NAO_CONFIGURADA: "nao_configurada",
+  DEGRADADO: "degradado",
 });
 
 const ROTULOS = Object.freeze({
@@ -41,6 +39,7 @@ const ROTULOS = Object.freeze({
   indisponivel: "Indisponível",
   bloqueada: "Bloqueada",
   nao_configurada: "Não configurada",
+  degradado: "Degradado (cache desatualizado)",
 });
 
 const PROBLEMAS = new Set([
@@ -48,12 +47,16 @@ const PROBLEMAS = new Set([
   SITUACAO.FORMATO_ALTERADO,
   SITUACAO.INDISPONIVEL,
   SITUACAO.BLOQUEADA,
+  SITUACAO.DEGRADADO,
 ]);
 
 const TIPOS_FORMATO = new Set(["parser", "invalid_json", "empty_response"]);
 const OPCOES_HTTP = Object.freeze({ timeoutMs: 15000, tentativas: 2 });
 
 function situacaoDoErro(erro) {
+  if (erro?.code === "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED") {
+    return SITUACAO.NAO_CONFIGURADA;
+  }
   return TIPOS_FORMATO.has(erro?.tipo || tipoErro(erro)) ? SITUACAO.FORMATO_ALTERADO : SITUACAO.INDISPONIVEL;
 }
 
@@ -80,7 +83,7 @@ async function verificar(fonte, escopo, consulta, campos) {
       ? item(fonte, escopo, SITUACAO.CAMPOS_AUSENTES, `Sem ${faltando.join(", ")}.`)
       : item(fonte, escopo, SITUACAO.OK, "Respondeu com os campos esperados.");
   } catch (erro) {
-    return item(fonte, escopo, situacaoDoErro(erro), erro?.message || String(erro));
+    return item(fonte, escopo, erro?.situacao || situacaoDoErro(erro), erro?.message || String(erro));
   }
 }
 
@@ -93,6 +96,8 @@ const CAMPOS_INMET = Object.fromEntries(["manha", "tarde", "noite"].flatMap((per
 const CAMPOS_INMET_OBSERVACAO = {
   "observacao.medidoEm": "horário da medição",
   "observacao.estacao.codigo": "código da estação",
+  "observacao.temperaturaAtualC": "temperatura atual observada",
+  "observacao.umidadeAtualPct": "umidade atual observada",
   "observacao.temperaturaMinC": "temperatura mínima observada",
   "observacao.temperaturaMaxC": "temperatura máxima observada",
   "observacao.chuvaUltimaHoraMm": "chuva horária observada",
@@ -103,7 +108,11 @@ const CAMPOS_INMET_OBSERVACAO = {
 const CAMPOS_OPEN_METEO = {
   tempMin: "temperatura mínima", tempMax: "temperatura máxima",
   umidadeMin: "umidade mínima", umidadeMax: "umidade máxima",
-  precipitacaoTotalMm: "chuva prevista", probabilidadeChuvaMax: "probabilidade de chuva",
+  precipitacaoPrevistaDiaMm: "chuva prevista/dia",
+  probabilidadeChuvaDiariaPct: "probabilidade diária de chuva",
+  rajadaMaxKmh: "rajada prevista no período",
+  precipitacaoTotalMm: "chuva prevista no período",
+  probabilidadeChuvaMax: "probabilidade de chuva no período",
   uvMax: "índice UV máximo", "periodos.manha.velocidadeMediaKmh": "vento médio",
   "periodos.manha.direcao": "direção do vento",
 };
@@ -168,18 +177,6 @@ async function verificarMonitorSecas(fetchFn) {
 
 function verificarConfiguracoes(env) {
   const itens = [];
-  const pontosOceanop = Object.values(oceanopPontos).filter((ponto) => ponto?.habilitado === true);
-  if (!pontosOceanop.length) {
-    itens.push(item("Oceanop", "Configuração", SITUACAO.NAO_CONFIGURADA, "Nenhum ponto cadastrado em src/config/oceanopPontos.js."));
-  } else {
-    try {
-      pontosOceanop.forEach(validarPonto);
-      itens.push(item("Oceanop", "Configuração", SITUACAO.OK, `${pontosOceanop.length} ponto(s) individualizado(s) por coordenadas.`));
-    } catch (erro) {
-      itens.push(item("Oceanop", "Configuração", SITUACAO.BLOQUEADA, erro.message));
-    }
-  }
-
   itens.push(destinoConfigurado()
     ? item("GED SharePoint", "Configuração", SITUACAO.OK, "Credenciais Azure e biblioteca configuradas.")
     : item("GED SharePoint", "Configuração", SITUACAO.NAO_CONFIGURADA,
@@ -202,26 +199,21 @@ async function executarVerificacao({
     previsaoInmet: buscarPrevisaoInmet,
     observacaoInmet: buscarObservacaoInmet,
     openMeteo: buscarOpenMeteo,
+    airQuality: buscarQualidadeAr,
     marine: buscarMarComFallback,
-    rajadasTetraTech: buscarRajadasTetraTech,
     avisosInmet: buscarAvisosInmet,
     climaSaude: climaSaude.consultar,
     corRio: criarServicoCorRio,
-    oceanop: buscarOceanopPorCoordenadas,
     fetch: globalThis.fetch,
     ...fontes,
   };
   const rio = getCidade("rio_de_janeiro");
   const fuso = rio.fusoHorario || "America/Sao_Paulo";
   const opcoes = { fuso, timeoutMs: OPCOES_HTTP.timeoutMs, logger: { log() {}, warn() {}, error() {} } };
-  const pontosOceanop = Object.values(oceanopPontos).filter((ponto) => ponto?.habilitado === true);
-
   const gerais = await Promise.all([
     verificar("INMET Avisos", "Nacional", () => f.avisosInmet(rio.codigoIbge, opcoes), { avisos: "lista de avisos" }),
     verificarCorRio(f.corRio).catch((erro) => [item("COR-Rio", "Rio de Janeiro", situacaoDoErro(erro), erro.message)]),
     verificarMonitorSecas(f.fetch),
-    ...pontosOceanop.map((area) => verificar("Oceanop", area.referencia || "área homologada",
-      () => f.oceanop(area, { ...opcoes, tentativas: 2, env }), { "previsoes.0.local": "ponto retornado" })),
   ]);
 
   // Por base em sequência: evita disparar dezenas de requisições simultâneas
@@ -229,24 +221,32 @@ async function executarVerificacao({
   const porBase = [];
   for (const cidade of cidades) {
     const opcoesCidade = { ...opcoes, fuso: cidade.fusoHorario || "America/Sao_Paulo" };
-    const portalRajada = rajadaPortais[cidade.chave];
-    const [inmet, observacao, previsao, mar, rajada, clima] = await Promise.all([
+    const [inmet, observacao, previsao, qualidadeAr, mar, clima] = await Promise.all([
       verificar("INMET Previsão", cidade.nome, () => f.previsaoInmet(cidade.codigoIbge, opcoes), CAMPOS_INMET),
-      verificar("INMET Observação", cidade.nome, () => f.observacaoInmet(cidade, opcoes), CAMPOS_INMET_OBSERVACAO),
+      verificar("INMET Observação", cidade.nome, async () => {
+        const r = await f.observacaoInmet(cidade, opcoes);
+        if (r.status === "degradado" || r.observacao?.desatualizado) {
+          throw Object.assign(new Error(r.mensagem || "Consulta INMET indisponivel; usando observacao armazenada."), { situacao: SITUACAO.DEGRADADO });
+        }
+        return r;
+      }, CAMPOS_INMET_OBSERVACAO),
       verificar("Open-Meteo", cidade.nome, () => f.openMeteo(cidade.latitude, cidade.longitude, { ...opcoesCidade, diasPrevisao: 4 }), CAMPOS_OPEN_METEO),
+      verificar("Open-Meteo Air Quality / CAMS", cidade.nome,
+        () => f.airQuality(cidade, { env }), { usAqi: "US AQI", "classificacao.nivel": "classificacao", referenciaEm: "horario de referencia" }),
       cidade.costeira
         ? verificar("Open-Meteo Marine", cidade.nome, async () => {
           const resultado = await f.marine(cidade);
           if (!resultado.dados) throw resultado.erro || new Error("Condições marítimas indisponíveis.");
+          if (resultado.dados.desatualizado || resultado.health?.status === "degradado") {
+            const erro = resultado.erro?.message || resultado.health?.message || "Falha ao atualizar; exibindo ultimo cache.";
+            throw Object.assign(new Error(erro), { code: "MARINE_STALE_CACHE", situacao: SITUACAO.DEGRADADO });
+          }
           return resultado.dados;
         }, { alturaMaxDiaM: "altura de onda", "periodos.0.periodoOndaS": "período de onda" })
         : Promise.resolve(item("Open-Meteo Marine", cidade.nome, SITUACAO.NAO_CONFIGURADA, "Não se aplica: base interior.")),
-      portalRajada?.habilitado
-        ? verificar("Tetra Tech — rajada", cidade.nome, () => f.rajadasTetraTech(cidade.nome, portalRajada, { env }), { "picosDiarios.0.rajadaPrevistaKmH": "máxima diária em km/h" })
-        : Promise.resolve(item("Tetra Tech — rajada", cidade.nome, SITUACAO.NAO_CONFIGURADA, portalRajada?.motivo || "Base sem tabela cadastrada.")),
       verificarClimaSaude(cidade, f.climaSaude).catch((erro) => item("Clima e Saúde", cidade.nome, situacaoDoErro(erro), erro.message)),
     ]);
-    porBase.push(inmet, observacao, previsao, mar, rajada, clima);
+    porBase.push(inmet, observacao, previsao, qualidadeAr, mar, clima);
   }
 
   const itens = [...gerais.flat(), ...porBase, ...verificarConfiguracoes(env)];

@@ -2,8 +2,6 @@ require("../src/security/certificados");
 const { CIDADES } = require("../src/config/cities");
 const { buscarOpenMeteo } = require("../src/sources/openMeteo");
 const { buscarMar } = require("../src/sources/marine");
-const { buscarRajadasTetraTech } = require("../src/sources/tetratechGusts");
-const rajadaPortais = require("../src/config/rajadaPortais");
 
 function fetchComEvidencia(estado) {
   return async (input, init) => {
@@ -45,7 +43,6 @@ async function validarBase(cidade) {
     fuso: cidade.fusoHorario || "America/Sao_Paulo",
     meteorologia: null,
     mar: "não se aplica",
-    rajada: null,
   };
   try {
     const evidencia = [];
@@ -55,10 +52,15 @@ async function validarBase(cidade) {
     });
     resultado.meteorologia = {
       status: "ok", uvMax: dados.uvMax, probabilidadeChuvaMax: dados.probabilidadeChuvaMax,
+      probabilidadeChuvaDiariaPct: dados.probabilidadeChuvaDiariaPct,
+      precipitacaoJanelaMm: dados.precipitacaoTotalMm,
+      precipitacaoPrevistaDiaMm: dados.precipitacaoPrevistaDiaMm,
       tempMin: dados.tempMin, tempMax: dados.tempMax, umidadeMin: dados.umidadeMin,
       umidadeMax: dados.umidadeMax, ventoMedioManha: dados.periodos.manha.velocidadeMediaKmh,
       rajadaOpenMeteo: dados.rajadaMaxKmh, dataReferencia: dados.dataReferencia,
       datasPrevisao: dados.previsaoDias.map((dia) => dia.data), horaAtualModelo: dados.atual?.horario || null,
+      modelosIndicadores: dados.modelosIndicadores,
+      diagnosticosIndicadores: dados.diagnosticosIndicadores,
       respostaApi: evidencia[0] || null,
     };
   } catch (erro) {
@@ -74,17 +76,6 @@ async function validarBase(cidade) {
       resultado.mar = { status: "ok", ponto: cidade.pontoMar, alturaMaxDiaM: dados.alturaMaxDiaM, periodosValidos: dados.periodos.filter((p) => Number.isFinite(p.alturaMaxM)).length, respostaApi: evidencia[0] || null };
     } catch (erro) {
       resultado.mar = { status: "falha", ponto: cidade.pontoMar, codigo: erro.code || erro.name, mensagem: erro.message };
-    }
-  }
-  const portal = rajadaPortais[cidade.chave];
-  if (!portal?.habilitado) {
-    resultado.rajada = { status: "não configurada", motivo: portal?.motivo || "sem tabela" };
-  } else {
-    try {
-      const dados = await buscarRajadasTetraTech(cidade.nome, portal, { usarCache: false, usarCachePersistente: false, logger: null });
-      resultado.rajada = { status: "ok", area: dados.area, dias: dados.picosDiarios.length };
-    } catch (erro) {
-      resultado.rajada = { status: "falha", codigo: erro.code || erro.name, mensagem: erro.message };
     }
   }
   return resultado;
@@ -107,7 +98,15 @@ async function validarBase(cidade) {
       datas: r.meteorologia?.datasPrevisao,
       horaModelo: r.meteorologia?.horaAtualModelo,
       temperaturaMinMax: [r.meteorologia?.tempMin, r.meteorologia?.tempMax],
-      chuvaProbMax: [r.meteorologia?.probabilidadeChuvaMax],
+      chuvaPrevista: {
+        janelaMm: r.meteorologia?.precipitacaoJanelaMm,
+        diariaMm: r.meteorologia?.precipitacaoPrevistaDiaMm,
+        probabilidadeJanelaPct: r.meteorologia?.probabilidadeChuvaMax,
+        probabilidadeDiariaPct: r.meteorologia?.probabilidadeChuvaDiariaPct,
+      },
+      rajadaKmh: r.meteorologia?.rajadaOpenMeteo,
+      modelosIndicadores: r.meteorologia?.modelosIndicadores,
+      cache: r.meteorologia?.cache || null,
       uvMax: r.meteorologia?.uvMax,
     },
     mar: r.mar === "não se aplica" ? r.mar : {
@@ -118,7 +117,6 @@ async function validarBase(cidade) {
       camposHourly: r.mar?.respostaApi?.hourly?.campos,
       qtdHoras: r.mar?.respostaApi?.hourly?.quantidadeHorarios,
     },
-    rajada: r.rajada?.status,
   })) : resultados;
   process.stdout.write(JSON.stringify({ validadoEm: new Date().toISOString(), resultados: saida }, null, 2) + "\n");
   if (resultados.some((r) => r.meteorologia.status !== "ok" || (r.mar !== "não se aplica" && r.mar.status !== "ok"))) process.exitCode = 1;

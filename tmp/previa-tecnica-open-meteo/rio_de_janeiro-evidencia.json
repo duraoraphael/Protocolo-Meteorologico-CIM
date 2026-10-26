@@ -1,0 +1,497 @@
+{
+  "finalidade": "prévia técnica local, sem licença comercial e sem envio",
+  "ciclo": "rio_de_janeiro:2026-10-26T11:00:43.217Z",
+  "localidade": "Rio de Janeiro",
+  "consultadoEm": "2026-10-26T11:00:43.217Z",
+  "consultas": {
+    "tempo": {
+      "endpoint": "https://api.open-meteo.com/v1/forecast",
+      "http": 200,
+      "referenciaModelo": "2026-10-26T11:00:00.000Z",
+      "fuso": "America/Sao_Paulo"
+    },
+    "ar": {
+      "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+      "http": 200,
+      "referenciaModelo": "2026-10-26T11:00:00.000Z"
+    }
+  },
+  "snapshotIdPainel": "rio_de_janeiro:2026-10-26T11:00:43.217Z",
+  "pdfBytes": 261267,
+  "emailBytes": 23726,
+  "indicadores": {
+    "temperaturaObservada": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "temperaturaObservada",
+      "valor": 21.1,
+      "unidade": "°C",
+      "fonte": "INMET — estação automática (A636)",
+      "referenciaEm": "2026-10-26T10:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "umidadeObservada": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "umidadeObservada",
+      "valor": 96,
+      "unidade": "%",
+      "fonte": "INMET — estação automática (A636)",
+      "referenciaEm": "2026-10-26T10:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "temperaturaAtual": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "temperaturaAtual",
+      "valor": 21.1,
+      "unidade": "°C",
+      "fonte": "INMET — estação automática (A636)",
+      "referenciaEm": "2026-10-26T10:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "umidadeAtual": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "umidadeAtual",
+      "valor": 96,
+      "unidade": "%",
+      "fonte": "INMET — estação automática (A636)",
+      "referenciaEm": "2026-10-26T10:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "temperaturaMinPrevista": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "temperaturaMinPrevista",
+      "valor": 17,
+      "unidade": "°C",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "26/10/2026",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "temperaturaMaxPrevista": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "temperaturaMaxPrevista",
+      "valor": 22,
+      "unidade": "°C",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "26/10/2026",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "umidadeMinPrevista": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "umidadeMinPrevista",
+      "valor": 70,
+      "unidade": "%",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "26/10/2026",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "umidadeMaxPrevista": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "umidadeMaxPrevista",
+      "valor": 100,
+      "unidade": "%",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "26/10/2026",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "rajadaPrevista": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "rajadaPrevista",
+      "valor": 66.6,
+      "unidade": "km/h",
+      "fonte": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": "2026-10-26T18:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "teste_tecnico",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "probabilidadeChuva": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "probabilidadeChuva",
+      "valor": 100,
+      "unidade": "%",
+      "fonte": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": "2026-10-26",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "teste_tecnico",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "chuvaPrevistaJanela": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "chuvaPrevistaJanela",
+      "valor": 5.2,
+      "unidade": "mm",
+      "fonte": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": "2026-10-26",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "teste_tecnico",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "chuvaAcumuladaEstimada": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "chuvaAcumuladaEstimada",
+      "valor": 2.6,
+      "unidade": "mm",
+      "fonte": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": "2026-10-26",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "teste_tecnico",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "qualidadeAr": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "qualidadeAr",
+      "valor": 67,
+      "unidade": "US AQI",
+      "fonte": "Open-Meteo — estimativa modelada de qualidade do ar",
+      "referenciaEm": "2026-10-26T11:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "teste_tecnico",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "qualidadeArClassificacao": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "qualidadeArClassificacao",
+      "valor": "MODERADO",
+      "unidade": null,
+      "fonte": "Open-Meteo — estimativa modelada de qualidade do ar",
+      "referenciaEm": "2026-10-26T11:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "teste_tecnico",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "condicaoGeral": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "condicaoGeral",
+      "valor": "Muitas nuvens com pancadas de chuva e trovoadas",
+      "unidade": null,
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "26/10/2026",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "indiceUv": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "indiceUv",
+      "valor": 0.9,
+      "unidade": "índice UV",
+      "fonte": "Open-Meteo Air Quality — UV atual modelado",
+      "referenciaEm": "2026-10-26T11:00:00.000Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "teste_tecnico",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "avisosOficiais": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "avisosOficiais",
+      "valor": [
+        {
+          "id": "urn:oid:2.49.0.0.76.0.2026.28557.1",
+          "idAviso": "28557",
+          "sequencia": 1,
+          "encerrado": false,
+          "estados": "Goiás,Minas Gerais,Bahia,Paraná,Tocantins,Mato Grosso,São Paulo,Espírito Santo,Pará,Mato Grosso do Sul,Maranhão,Amazonas,Rio de Janeiro,Piauí,Distrito Federal,Roraima,Rondônia",
+          "totalMunicipios": 2818,
+          "atualizadoEm": "2026-10-24T00:00:00.000Z",
+          "descricao": "Tempestade",
+          "severidade": "Perigo Potencial",
+          "cor": "#FFFE00",
+          "inicio": "2026-10-26 00:00",
+          "fim": "2026-10-26 23:59",
+          "riscos": [
+            "Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h), e queda de granizo. Baixo risco de corte de energia elétrica, estragos em plantações, queda de galhos de árvores e de alagamentos."
+          ],
+          "instrucoes": [
+            "Em caso de rajadas de vento: (não se abrigue debaixo de árvores, pois há leve risco de queda e descargas elétricas e não estacione veículos próximos a torres de transmissão e placas de propaganda).",
+            "Evite usar aparelhos eletrônicos ligados à tomada.",
+            "Obtenha mais informações junto à Defesa Civil (telefone 199) e ao Corpo de Bombeiros (telefone 193)."
+          ]
+        }
+      ],
+      "unidade": null,
+      "fonte": "INMET — avisos oficiais",
+      "referenciaEm": "2026-10-26T11:00:43.217Z",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    },
+    "excessoCalor": {
+      "localidade": "rio_de_janeiro",
+      "indicador": "excessoCalor",
+      "valor": "Sem excesso",
+      "unidade": null,
+      "fonte": "Clima e Saúde — Ministério da Saúde",
+      "referenciaEm": "2026-10-26",
+      "consultadoEm": "2026-10-26T11:00:43.217Z",
+      "statusValidacao": "operacional",
+      "cicloId": "rio_de_janeiro:2026-10-26T11:00:43.217Z"
+    }
+  },
+  "ventoPorPeriodo": [
+    {
+      "periodo": "Manhã",
+      "janela": "05h–12h",
+      "direcao": "SW-W",
+      "intensidade": "Moderado (até 23 km/h)",
+      "velocidadeMediaKmh": 21,
+      "fonteVento": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": "2026-10-26T11:00:43.217Z",
+      "rajadaMaxKmh": 61.2,
+      "rajadaPrevistaEm": "2026-10-26T15:00:00.000Z",
+      "fonteRajada": "Open-Meteo — previsão meteorológica",
+      "tipoDado": "previsao",
+      "referenciaInmet": "Vento: Open-Meteo — previsão meteorológica (previsão modelada 08h–12h) · consulta 2026-10-26T11:00:43.217Z; rajada: Open-Meteo — previsão meteorológica · 08h–12h · pico 2026-10-26T15:00:00.000Z"
+    },
+    {
+      "periodo": "Tarde",
+      "janela": "12h–18h",
+      "direcao": "SW-W",
+      "intensidade": "Moderado (até 25 km/h)",
+      "velocidadeMediaKmh": 24,
+      "fonteVento": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": "2026-10-26T11:00:43.217Z",
+      "rajadaMaxKmh": 66.6,
+      "rajadaPrevistaEm": "2026-10-26T18:00:00.000Z",
+      "fonteRajada": "Open-Meteo — previsão meteorológica",
+      "tipoDado": "previsao",
+      "referenciaInmet": "Vento: Open-Meteo — previsão meteorológica (previsão modelada) · consulta 2026-10-26T11:00:43.217Z; rajada: Open-Meteo — previsão meteorológica · 12h–18h · pico 2026-10-26T18:00:00.000Z"
+    },
+    {
+      "periodo": "Noite",
+      "janela": "18h–00h",
+      "direcao": "SW-W",
+      "intensidade": "Moderado (até 20 km/h)",
+      "velocidadeMediaKmh": 16,
+      "fonteVento": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": "2026-10-26T11:00:43.217Z",
+      "rajadaMaxKmh": 46.1,
+      "rajadaPrevistaEm": "2026-10-26T22:00:00.000Z",
+      "fonteRajada": "Open-Meteo — previsão meteorológica",
+      "tipoDado": "previsao",
+      "referenciaInmet": "Vento: Open-Meteo — previsão meteorológica (previsão modelada) · consulta 2026-10-26T11:00:43.217Z; rajada: Open-Meteo — previsão meteorológica · 18h–00h · pico 2026-10-26T22:00:00.000Z"
+    }
+  ],
+  "chuvaPorPeriodo": [
+    {
+      "periodo": "Manhã",
+      "janela": "05h–12h",
+      "probabilidade": 100,
+      "precipitacaoMm": 2,
+      "precipitacaoHorariaMaxMm": 0.8,
+      "fontePrecipitacao": "Open-Meteo — previsão meteorológica",
+      "fonteProbabilidade": "Open-Meteo — previsão meteorológica",
+      "janelaModelo": "08h–12h",
+      "referenciaEm": "2026-10-26T11:00:43.217Z",
+      "referenciaPrecipitacaoEm": "2026-10-26T11:00:43.217Z",
+      "referenciaProbabilidadeEm": "2026-10-26T11:00:43.217Z",
+      "resumoInmet": "Muitas nuvens com pancadas de chuva e trovoadas",
+      "tipoDado": "previsao",
+      "medidoEm": null
+    },
+    {
+      "periodo": "Tarde",
+      "janela": "12h–18h",
+      "probabilidade": 98,
+      "precipitacaoMm": 1.5,
+      "precipitacaoHorariaMaxMm": 0.6,
+      "fontePrecipitacao": "Open-Meteo — previsão meteorológica",
+      "fonteProbabilidade": "Open-Meteo — previsão meteorológica",
+      "janelaModelo": null,
+      "referenciaEm": "2026-10-26T11:00:43.217Z",
+      "referenciaPrecipitacaoEm": "2026-10-26T11:00:43.217Z",
+      "referenciaProbabilidadeEm": "2026-10-26T11:00:43.217Z",
+      "resumoInmet": "Nublado com pancadas de chuva e trovoadas",
+      "tipoDado": "previsao",
+      "medidoEm": null
+    },
+    {
+      "periodo": "Noite",
+      "janela": "18h–00h",
+      "probabilidade": 18,
+      "precipitacaoMm": 1.7,
+      "precipitacaoHorariaMaxMm": 0.6,
+      "fontePrecipitacao": "Open-Meteo — previsão meteorológica",
+      "fonteProbabilidade": "Open-Meteo — previsão meteorológica",
+      "janelaModelo": null,
+      "referenciaEm": "2026-10-26T11:00:43.217Z",
+      "referenciaPrecipitacaoEm": "2026-10-26T11:00:43.217Z",
+      "referenciaProbabilidadeEm": "2026-10-26T11:00:43.217Z",
+      "resumoInmet": "Muitas nuvens",
+      "tipoDado": "previsao",
+      "medidoEm": null
+    }
+  ],
+  "conferenciaSaidas": [
+    {
+      "saida": "painel",
+      "indicador": "vento",
+      "periodo": "Manhã",
+      "janelaLocal": "05h–12h",
+      "valido": true
+    },
+    {
+      "saida": "painel",
+      "indicador": "vento",
+      "periodo": "Tarde",
+      "janelaLocal": "12h–18h",
+      "valido": true
+    },
+    {
+      "saida": "painel",
+      "indicador": "vento",
+      "periodo": "Noite",
+      "janelaLocal": "18h–00h",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "vento",
+      "periodo": "Manhã",
+      "janelaLocal": "05h–12h",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "vento",
+      "periodo": "Tarde",
+      "janelaLocal": "12h–18h",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "vento",
+      "periodo": "Noite",
+      "janelaLocal": "18h–00h",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "vento",
+      "periodo": "Manhã",
+      "janelaLocal": "05h–12h",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "vento",
+      "periodo": "Tarde",
+      "janelaLocal": "12h–18h",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "vento",
+      "periodo": "Noite",
+      "janelaLocal": "18h–00h",
+      "valido": true
+    },
+    {
+      "saida": "painel",
+      "indicador": "chuva",
+      "periodo": "Manhã",
+      "janelaLocal": "05h–12h",
+      "valido": true
+    },
+    {
+      "saida": "painel",
+      "indicador": "chuva",
+      "periodo": "Tarde",
+      "janelaLocal": "12h–18h",
+      "valido": true
+    },
+    {
+      "saida": "painel",
+      "indicador": "chuva",
+      "periodo": "Noite",
+      "janelaLocal": "18h–00h",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "chuva",
+      "periodo": "Manhã",
+      "janelaLocal": "05h–12h",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "chuva",
+      "periodo": "Tarde",
+      "janelaLocal": "12h–18h",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "chuva",
+      "periodo": "Noite",
+      "janelaLocal": "18h–00h",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "chuva",
+      "periodo": "Manhã",
+      "janelaLocal": "05h–12h",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "chuva",
+      "periodo": "Tarde",
+      "janelaLocal": "12h–18h",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "chuva",
+      "periodo": "Noite",
+      "janelaLocal": "18h–00h",
+      "valido": true
+    },
+    {
+      "saida": "painel",
+      "indicador": "qualidadeAr",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "qualidadeAr",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "qualidadeAr",
+      "valido": true
+    },
+    {
+      "saida": "painel",
+      "indicador": "indiceUv",
+      "valido": true
+    },
+    {
+      "saida": "pdf",
+      "indicador": "indiceUv",
+      "valido": true
+    },
+    {
+      "saida": "email",
+      "indicador": "indiceUv",
+      "valido": true
+    }
+  ]
+}

@@ -20,9 +20,61 @@ const INMET_TIMEOUT_MS = API_TIMEOUT_MS;
 const INMET_AVISOS_TIMEOUT_MS = 15000;
 const INMET_TENTATIVAS = API_TENTATIVAS;
 
-function hojeDDMMAAAA(instante = new Date()) {
+// Campos numéricos opcionais da previsão municipal. A unidade é conferida
+// antes da conversão; texto descritivo (por exemplo, "ventos fracos") não é medida.
+function medidaOficial(valor, unidade, minimo, maximo) {
+  if (valor == null || valor === "") return null;
+  const bruto = typeof valor === "object" ? valor.valor ?? valor.value : valor;
+  const unidadeRecebida = typeof valor === "object"
+    ? valor.unidade ?? valor.unit ?? (unidade === "km/h" ? null : unidade)
+    : unidade === "km/h" ? null : unidade;
+  const partes = typeof bruto === "string"
+    ? /^\s*(\d+(?:[.,]\d+)?)\s*(km\/h|kmh|m\/s|kt|nós|mm|%)?\s*$/i.exec(bruto)
+    : null;
+  const numero = typeof bruto === "number" ? bruto : partes ? Number(partes[1].replace(",", ".")) : NaN;
+  const unidadeValor = (partes?.[2] || unidadeRecebida || "").toLowerCase();
+  const unidadesVento = { "km/h": 1, kmh: 1, "m/s": 3.6, kt: 1.852, "nós": 1.852 };
+  const fator = unidade === "km/h" ? unidadesVento[unidadeValor] : unidadeValor === unidade ? 1 : null;
+  const convertido = fator == null ? NaN : numero * fator;
+  return Number.isFinite(convertido) && convertido >= minimo && convertido <= maximo
+    ? Math.round(convertido * 10) / 10 : null;
+}
+
+function primeiraMedida(p, campos, unidade, minimo, maximo) {
+  for (const campo of campos) {
+    if (!Object.hasOwn(p, campo)) continue;
+    const bruto = p[campo];
+    const declarado = unidade === "km/h" && !(bruto && typeof bruto === "object")
+      ? { valor: bruto, unidade: campo.endsWith("_kmh") ? "km/h" : p.unidade_vento ?? p.vento_unidade ?? null }
+      : bruto;
+    const valor = medidaOficial(declarado, unidade, minimo, maximo);
+    if (valor !== null) return valor;
+  }
+  return null;
+}
+
+function numeroPrevisto(valor, unidade, minimo, maximo) {
+  if (valor == null || valor === "") return null;
+  const bruto = typeof valor === "object" ? valor.valor ?? valor.value : valor;
+  const declarada = typeof valor === "object" ? valor.unidade ?? valor.unit : null;
+  if (declarada != null && declarada !== unidade) return null;
+  let numero = bruto;
+  if (typeof bruto === "string") {
+    const padrao = unidade === "°C"
+      ? /^\s*(-?\d+(?:[.,]\d+)?)\s*(?:°\s*c)?\s*$/i
+      : /^\s*(\d+(?:[.,]\d+)?)\s*%?\s*$/;
+    const partes = padrao.exec(bruto);
+    if (!partes) return null;
+    if (unidade === "°C" && /%/.test(bruto)) return null;
+    if (unidade === "%" && /°/.test(bruto)) return null;
+    numero = Number(partes[1].replace(",", "."));
+  }
+  return Number.isFinite(numero) && numero >= minimo && numero <= maximo ? numero : null;
+}
+
+function hojeDDMMAAAA(instante = new Date(), fuso = "America/Sao_Paulo") {
   const agora = new Date(
-    instante.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })
+    instante.toLocaleString("en-US", { timeZone: fuso })
   );
   const dd = String(agora.getDate()).padStart(2, "0");
   const mm = String(agora.getMonth() + 1).padStart(2, "0");
@@ -63,6 +115,9 @@ function consolidarCondicaoDiaria(valores) {
 
 async function buscarPrevisaoInmet(codigoIbge, {
   agora = new Date(),
+  fuso = "America/Sao_Paulo",
+  municipio = null,
+  uf = null,
   fetchImpl = fetch,
   timeoutMs = INMET_TIMEOUT_MS,
   esperarFn,
@@ -84,52 +139,41 @@ async function buscarPrevisaoInmet(codigoIbge, {
     throw new Error(`INMET não retornou previsão para o código ${codigoIbge}`);
   }
 
-  const dataAlvo = hojeDDMMAAAA(agora);
+  const dataAlvo = hojeDDMMAAAA(agora, fuso);
   const diaEscolhido = porData[dataAlvo];
   if (!diaEscolhido) {
     const erro = new Error(`INMET não retornou previsão para a data solicitada (${dataAlvo}).`);
     erro.name = "ParserError";
     throw erro;
   }
-
-  const numeroOficial = (...valores) => {
-    for (const valor of valores) {
-      if (Number.isFinite(valor)) return valor;
-      if (typeof valor === "string" && /^\s*-?\d+(?:[.,]\d+)?\s*(?:[°º]?\s*c|%|km\/h|mm)?\s*$/i.test(valor)) {
-        const numero = Number(valor.replace(/\s*(?:[°º]?\s*c|%|km\/h|mm)\s*$/i, "").replace(",", "."));
-        if (Number.isFinite(numero)) return numero;
-      }
+  for (const periodo of [diaEscolhido.manha, diaEscolhido.tarde, diaEscolhido.noite].filter(Boolean)) {
+    const municipioDivergente = municipio && periodo.entidade
+      && normalizarComparacao(periodo.entidade) !== normalizarComparacao(municipio);
+    const ufDivergente = uf && periodo.uf && String(periodo.uf).toUpperCase() !== String(uf).toUpperCase();
+    if (municipioDivergente || ufDivergente) {
+      const erro = new Error(`INMET retornou localidade divergente para o código ${codigoIbge}: ${periodo.entidade || "?"}/${periodo.uf || "?"}.`);
+      erro.name = "ParserError";
+      erro.code = "INMET_LOCATION_MISMATCH";
+      throw erro;
     }
-    return null;
-  };
+  }
+
   const limpar = (p) =>
     p && {
       resumo: p.resumo || null,
-      tempMax: numeroOficial(p.temp_max),
-      tempMin: numeroOficial(p.temp_min),
-      umidadeMax: numeroOficial(p.umidade_max),
-      umidadeMin: numeroOficial(p.umidade_min),
+      tempMax: numeroPrevisto(p.temp_max, "°C", -90, 60),
+      tempMin: numeroPrevisto(p.temp_min, "°C", -90, 60),
+      umidadeMax: numeroPrevisto(p.umidade_max, "%", 0, 100),
+      umidadeMin: numeroPrevisto(p.umidade_min, "%", 0, 100),
       direcaoVento: p.dir_vento || null,
       intensidadeVento: p.int_vento || null,
       // O endpoint municipal não publica estes campos atualmente, mas a
       // leitura aceita nomes oficiais explícitos caso passem a ser incluídos.
-      velocidadeMediaKmh: numeroOficial(
-        p.vento_velocidade_media,
-        p.velocidade_media_vento,
-        p.vento_medio,
-        p.vel_vento
-      ),
-      rajadaMaxKmh: numeroOficial(p.rajada_max, p.rajada_vento, p.vento_rajada, p.rajada),
-      precipitacaoMm: numeroOficial(p.precipitacao_mm, p.chuva_mm, p.acumulado_chuva_mm),
-      precipitacaoHorariaMaxMm: numeroOficial(
-        p.precipitacao_horaria_max_mm,
-        p.chuva_horaria_max_mm
-      ),
-      probabilidadeChuva: numeroOficial(
-        p.probabilidade_chuva,
-        p.prob_chuva,
-        p.probabilidade_precipitacao
-      ),
+      velocidadeMediaKmh: primeiraMedida(p, ["vento_velocidade_media_kmh", "vento_velocidade_media", "velocidade_media_vento", "vento_medio", "vel_vento"], "km/h", 0, 300),
+      rajadaMaxKmh: primeiraMedida(p, ["rajada_max", "rajada_vento", "vento_rajada", "rajada"], "km/h", 0, 400),
+      precipitacaoMm: primeiraMedida(p, ["precipitacao_mm", "chuva_mm", "acumulado_chuva_mm"], "mm", 0, 10000),
+      precipitacaoHorariaMaxMm: primeiraMedida(p, ["precipitacao_horaria_max_mm", "chuva_horaria_max_mm"], "mm", 0, 1000),
+      probabilidadeChuva: primeiraMedida(p, ["probabilidade_chuva", "prob_chuva", "probabilidade_precipitacao"], "%", 0, 100),
     };
 
   const consolidarDia = (data, valor) => {
@@ -137,17 +181,18 @@ async function buscarPrevisaoInmet(codigoIbge, {
       ? [["Manhã", valor.manha], ["Tarde", valor.tarde], ["Noite", valor.noite]].filter(([, periodo]) => periodo)
       : [["Dia", valor]].filter(([, periodo]) => periodo);
     const periodos = periodosNomeados.map(([, periodo]) => periodo);
-    const valores = (campo) => periodos.map((periodo) => periodo?.[campo]).map((item) => numeroOficial(item)).filter(Number.isFinite);
+    const valores = (campo, unidade, minimo, maximo) => periodos
+      .map((periodo) => numeroPrevisto(periodo?.[campo], unidade, minimo, maximo)).filter(Number.isFinite);
     const textos = (campo) => [...new Set(periodos.map((periodo) => textoOficial(periodo?.[campo])).filter(Boolean))];
-    const maximos = valores("temp_max");
-    const minimos = valores("temp_min");
-    const umidadesMax = valores("umidade_max");
-    const umidadesMin = valores("umidade_min");
+    const maximos = valores("temp_max", "°C", -90, 60);
+    const minimos = valores("temp_min", "°C", -90, 60);
+    const umidadesMax = valores("umidade_max", "%", 0, 100);
+    const umidadesMin = valores("umidade_min", "%", 0, 100);
     const rajadas = periodos
-      .map((periodo) => numeroOficial(periodo?.rajada_max, periodo?.rajada_vento, periodo?.vento_rajada, periodo?.rajada))
+      .map((periodo) => primeiraMedida(periodo, ["rajada_max", "rajada_vento", "vento_rajada", "rajada"], "km/h", 0, 400))
       .filter(Number.isFinite);
     const precipitacoesPorPeriodo = periodos.map((periodo) =>
-      numeroOficial(periodo?.precipitacao_mm, periodo?.chuva_mm, periodo?.acumulado_chuva_mm));
+      primeiraMedida(periodo, ["precipitacao_mm", "chuva_mm", "acumulado_chuva_mm"], "mm", 0, 10000));
     return {
       data: dataIsoDeBr(data),
       dataBr: data,
@@ -169,6 +214,7 @@ async function buscarPrevisaoInmet(codigoIbge, {
     fonte: "INMET (previsão oficial)",
     url: `https://previsao.inmet.gov.br/${codigoIbge}`,
     data: dataAlvo,
+    consultadoEm: new Date().toISOString(),
     dias: Object.entries(porData)
       .map(([data, valor]) => consolidarDia(data, valor))
       .filter((dia) => dia.data)

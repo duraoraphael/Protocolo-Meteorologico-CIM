@@ -4,6 +4,7 @@
 // rajada numérica; esses gatilhos recebem apenas observações de estação INMET.
 const { formatarTitulo } = require("../../public/alert-title");
 const { fenomenoAvisoInmet, grauAvisoInmet, normalizarComparacao } = require("../sources/inmet");
+const { acumularRecomendacoes, acumularRecomendacoesPorNivel } = require("./recomendacoesCumulativas");
 const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 const GRAUS = Object.freeze({
@@ -15,7 +16,9 @@ const GRAUS = Object.freeze({
 
 const LIMITES_ALERTA_INMET = Object.freeze({
   chuvaHorariaMmH: Object.freeze({ atencao: 20, alerta: 30, emergenciaAcimaDe: 60 }),
-  // O mínimo de 20 mm/dia preserva o limiar já utilizado pelo monitor.
+  // PENDÊNCIA DE CONFIGURAÇÃO: a tabela operacional não define mínimo diário
+  // para ATENÇÃO. O limiar de 20 mm/dia é anterior a este motor e foi
+  // preservado; precisa de aprovação formal do CIM (ver README, gatilhos).
   chuvaDiariaMm: Object.freeze({ atencao: 20, alerta: 50, emergenciaAcimaDe: 100 }),
   rajadaKmh: Object.freeze({ atencao: 30, alerta: 40, emergenciaAcimaDe: 60 }),
 });
@@ -31,11 +34,12 @@ const RECOMENDACOES = Object.freeze({
     ALERTA: Object.freeze([
       "Suspender trabalho em altura e em telhados.",
       "Suspender atividades externas não essenciais.",
+      "Controlar acesso a áreas alagáveis.",
       "Manter prontidão de saúde e equipes de contingência.",
     ]),
     "EMERGÊNCIA": Object.freeze([
-      "Evacuar áreas vulneráveis.",
-      "Isolar áreas com risco elétrico conforme procedimento local.",
+      "Evacuar áreas vulneráveis conforme o plano de resposta local.",
+      "Isolar áreas com risco elétrico conforme procedimento operacional local.",
     ]),
   }),
   vento: Object.freeze({
@@ -44,19 +48,16 @@ const RECOMENDACOES = Object.freeze({
     ]),
     ALERTA: Object.freeze([
       "Paralisar atividades externas gerais, incluindo roçagem, capina, jardinagem, manutenção civil externa e obras civis.",
-      "Suspender trabalho em altura e em telhados.",
-      "Suspender içamentos.",
-      "Suspender serviços a céu aberto.",
-      "Interditar áreas sob risco de queda de objetos ou árvores.",
-      "Intensificar o controle de quedas de objetos.",
+      "Suspender trabalho em altura, serviços em telhados, içamentos e serviços a céu aberto.",
+      "Interditar áreas sob risco de queda de objetos e árvores.",
+      "Intensificar o controle de queda de objetos.",
       "Direcionar pessoas para áreas internas seguras.",
     ]),
     "EMERGÊNCIA": Object.freeze([
-      "Evacuar áreas externas.",
+      "Evacuar áreas externas conforme os procedimentos locais.",
       "Operar em modo de abrigo interno.",
-      "Realizar controle de acessos.",
-      "Realizar resposta a feridos, se houver.",
-      "Considerar também as recomendações presentes no aviso do INMET, conforme a severidade.",
+      "Controlar acessos e coordenar a resposta a feridos, quando houver.",
+      "Incorporar as recomendações aplicáveis de avisos oficiais INMET, conforme a severidade do fenômeno.",
     ]),
   }),
 });
@@ -99,10 +100,12 @@ function classificarChuva(intensidadeHorariaMmH, acumuladoDiarioMm) {
 }
 
 function recomendacoes(fenomeno, grau) {
-  const niveis = ["ATENÇÃO", "ALERTA", "EMERGÊNCIA"];
-  const indice = niveis.indexOf(grau);
-  if (indice < 0) return [];
-  return niveis.slice(0, indice + 1).flatMap((nivel) => RECOMENDACOES[fenomeno]?.[nivel] || []);
+  return acumularRecomendacoes(fenomeno, grau, RECOMENDACOES);
+}
+
+/** Mesma regra cumulativa, agrupada por nível de origem (cards, PDF e e-mail). */
+function recomendacoesPorNivel(fenomeno, grau) {
+  return acumularRecomendacoesPorNivel(fenomeno, grau, RECOMENDACOES);
 }
 
 /**
@@ -132,15 +135,30 @@ function recomendacoesChuvaAvisoInmet(aviso) {
  */
 function classificarCondicoesMeteorologicas({
   rajadaKmh = null,
+  rajadaObservadaKmh = null,
   chuvaHorariaMmH = null,
   chuvaDiariaMm = null,
 } = {}) {
-  const grauVento = classificarRajada(rajadaKmh);
+  // `rajadaKmh` é a rajada de referência do relatório (previsão ou legado);
+  // `rajadaObservadaKmh` é a medição local. Os dois são classificados
+  // separadamente: a medição manda quando atinge o maior grau, e a previsão
+  // gera alerta preventivo, sem nunca ser apresentada como medição.
+  const grauPrevisto = classificarRajada(rajadaKmh);
+  const grauObservado = classificarRajada(rajadaObservadaKmh);
+  const grauVento = maiorGrau(grauPrevisto, grauObservado);
   const classificacaoChuva = classificarChuva(chuvaHorariaMmH, chuvaDiariaMm);
   const eventos = [];
 
   if (grauVento !== "NORMAL") {
-    const detalhe = `Rajada medida pela estação INMET: ${formatarRajadaPrevista(rajadaKmh)}`;
+    const observado = grauObservado === grauVento;
+    const valorGatilho = observado ? rajadaObservadaKmh : rajadaKmh;
+    const outro = observado ? rajadaKmh : rajadaObservadaKmh;
+    const rotuloOutro = observado ? "Rajada de referência da previsão" : "Rajada observada na estação INMET";
+    const principal = `Rajada medida pela estação INMET: ${formatarRajadaPrevista(valorGatilho)}`;
+    const detalhe = [
+      principal,
+      Number.isFinite(outro) ? `${rotuloOutro}: ${formatarRajadaPrevista(outro)}` : null,
+    ].filter(Boolean).join(" · ");
     eventos.push({
       assinatura: "vento",
       fenomeno: "vento",
@@ -149,9 +167,11 @@ function classificarCondicoesMeteorologicas({
       grau: grauVento,
       detalhe,
       descricao: detalhe,
-      valores: { rajadaKmh },
+      valores: { rajadaKmh: valorGatilho, rajadaObservadaKmh, rajadaPrevistaKmh: rajadaKmh },
+      baseDado: observado ? "observada" : "referencia",
       unidade: "km/h",
       recomendacoes: recomendacoes("vento", grauVento),
+      recomendacoesPorNivel: recomendacoesPorNivel("vento", grauVento),
     });
   }
 
@@ -178,13 +198,14 @@ function classificarCondicoesMeteorologicas({
       },
       unidade: "mm/h e mm/dia",
       recomendacoes: recomendacoes("chuva", classificacaoChuva.grau),
+      recomendacoesPorNivel: recomendacoesPorNivel("chuva", classificacaoChuva.grau),
     });
   }
 
   eventos.sort((a, b) => GRAUS[b.grau] - GRAUS[a.grau]);
   return {
     grau: maiorGrau(grauVento, classificacaoChuva.grau),
-    vento: { grau: grauVento, rajadaKmh },
+    vento: { grau: grauVento, rajadaKmh, rajadaObservadaKmh, grauObservado, grauPrevisto },
     chuva: {
       ...classificacaoChuva,
       intensidadeHorariaMmH: chuvaHorariaMmH,
@@ -195,6 +216,7 @@ function classificarCondicoesMeteorologicas({
 }
 
 module.exports = {
+  RECOMENDACOES,
   GRAUS,
   LIMITES_ALERTA_INMET,
   classificarChuvaHoraria,
@@ -203,6 +225,7 @@ module.exports = {
   classificarRajada,
   maiorGrau,
   recomendacoes,
+  recomendacoesPorNivel,
   recomendacoesChuvaAvisoInmet,
   classificarCondicoesMeteorologicas,
 };

@@ -15,17 +15,17 @@ function arquivosAtivos(diretorio) {
   });
 }
 
-test("Climatempo removido não permanece no código ativo nem na configuração", () => {
+test("integrações desativadas não permanecem em código ou configuração operacional", () => {
   const arquivos = [
     ...ALVOS.flatMap((alvo) => arquivosAtivos(path.join(RAIZ, alvo))),
     path.join(RAIZ, ".env.example"),
     path.join(RAIZ, "render.yaml"),
-    path.join(RAIZ, "RAJADAS_PORTAIS.md"),
-    path.join(RAIZ, "RESPOSTAS_SI.md"),
-  ].filter((arquivo) => arquivo !== __filename);
+  ].filter((arquivo) => arquivo !== __filename && fs.existsSync(arquivo));
   const proibidos = [
     /climatempo/i,
     /apiadvisor/i,
+    /TETRATECH_(?:API_KEY|ACCESS_TOKEN|USERNAME|PASSWORD)/i,
+    /ttforecast/i,
   ];
   const ocorrencias = [];
   for (const arquivo of arquivos) {
@@ -37,9 +37,13 @@ test("Climatempo removido não permanece no código ativo nem na configuração"
   assert.deepEqual(ocorrencias, []);
 });
 
-test("Open-Meteo está ativo sem ser usado como fonte de rajada prevista", () => {
+test("Open-Meteo usa endpoint público e pede indicadores de previsão", () => {
   const conteudo = fs.readFileSync(path.join(RAIZ, "src", "sources", "openMeteo.js"), "utf8");
   assert.match(conteudo, /uv_index/);
   assert.match(conteudo, /precipitation_probability/);
-  assert.doesNotMatch(conteudo, /wind_gusts_10m/);
+  assert.match(conteudo, /wind_gusts_10m/);
+  assert.match(conteudo, /api\.open-meteo\.com\/v1\/forecast/);
+  assert.match(conteudo, /MODELO_PRINCIPAL = "best_match"/);
+  assert.match(conteudo, /MODELO_FALLBACK = "ncep_gfs_seamless"/);
+  assert.doesNotMatch(conteudo, /customer-api|OPEN_METEO_API_KEY/);
 });

@@ -1,12 +1,11 @@
 const { esc } = require("./pdfTemplate");
 const { renderEmailHeader, renderEmailHeaderStyles } = require("./emailComponents");
 const { montarCardsAlerta, visualNivel } = require("./alertCards");
-const { formatarDataBrasilia } = require("../sources/sourceHealth");
 const { cartaoCorRioEmail } = require("./corRioEmail");
 const AlertTitle = require("../../public/alert-title");
 const { calorPorData, dataLocal, ROTULOS_CALOR } = require("../logic/calorPorData");
 const { TIPOS_DOCUMENTO, alertaExibivel } = require("../logic/alertPresentation");
-const { edicaoInformativo } = require("../logic/informativoValidity");
+const { edicaoInformativo, referenciaEdicaoVisual } = require("../logic/informativoValidity");
 const { formatarRajadaPrevista } = require("../../public/weather-format");
 
 // Corpo do e-mail em fundo branco explícito (body, tabelas e células recebem
@@ -23,19 +22,12 @@ const COR = {
   amarelo: "#FFCC00",
 };
 
-const ESTILO_REFERENCIA_EMAIL = `background:${COR.painel};padding:0 5px;color:${COR.texto};font-family:Arial,sans-serif;font-size:16px;font-weight:400;line-height:1.4;`;
-
 function presente(valor) {
   return valor !== null && valor !== undefined && valor !== "";
 }
 
 function texto(valor) {
   return presente(valor) ? esc(valor) : "—";
-}
-
-function horaConsultaEmail(valor) {
-  const horaCheia = /^(\d{2}):00$/.exec(String(valor || "").trim());
-  return texto(horaCheia ? `${horaCheia[1]}h` : valor);
 }
 
 function numeroUnidade(valor, unidade, casas = null) {
@@ -81,29 +73,24 @@ function periodosDaEdicao(r, periodos) {
 }
 
 function chuvaPrevistaAcumulada(r) {
-  const diaria = r.previsaoDias?.[0]?.chuvaMm;
-  if (Number.isFinite(diaria)) return diaria;
-
-  const periodos = Array.isArray(r.chuvaPorPeriodo) ? r.chuvaPorPeriodo : [];
-  const relevantes = periodosDaEdicao(r, periodos);
-  if (!relevantes.length || relevantes.some((p) => !Number.isFinite(p?.precipitacaoMm))) return null;
-  return Math.round(relevantes.reduce((total, p) => total + p.precipitacaoMm, 0) * 10) / 10;
+  const diaria = r.precipitacaoPrevistaDiaMm ?? r.previsaoDias?.[0]?.chuvaMm;
+  return Number.isFinite(diaria) && diaria >= 0 ? diaria : null;
 }
 
 function probabilidadeChuvaPrevista(r) {
   if (Number.isFinite(r.probabilidadeChuvaPrevista)) return r.probabilidadeChuvaPrevista;
   const periodos = Array.isArray(r.chuvaPorPeriodo) ? r.chuvaPorPeriodo : [];
-  // Todas as edições consideram a previsão do seu horário até 00h.
+  // Este indicador é a maior probabilidade horária no intervalo da edição.
   const relevantes = periodosDaEdicao(r, periodos);
-  const valores = relevantes.map((p) => p?.probabilidade).filter(Number.isFinite);
-  return valores.length ? Math.max(...valores) : null;
+  if (!relevantes.length || relevantes.some((p) => !Number.isFinite(p?.probabilidade))) return null;
+  return Math.max(...relevantes.map((p) => p.probabilidade));
 }
 
 
-function celulaMetrica(rotulo, valor, ultimaColuna = false, detalhe = "") {
+function celulaMetrica(rotulo, valor, ultimaColuna = false) {
   return `<td colspan="2" width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:${ultimaColuna ? "0" : `1px solid ${COR.borda}`};border-bottom:1px solid ${COR.borda};padding:13px 8px 12px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;">
     <div style="color:${COR.secundario};font:13px/1.3 Arial,sans-serif;text-transform:uppercase;">${rotulo}</div>
-    <div class="email-metric-value" style="color:${COR.texto};font:bold 25px/1.2 Arial,sans-serif;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;">${valor}</div>${detalhe ? `<div style="color:${COR.secundario};font:12px/1.3 Arial,sans-serif;margin-top:4px;">${detalhe}</div>` : ""}
+    <div class="email-metric-value" style="color:${COR.texto};font:bold 25px/1.2 Arial,sans-serif;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;">${valor}</div>
   </td>`;
 }
 
@@ -114,29 +101,28 @@ function celulaChuva(chuvaPrevista, probabilidade) {
   </td></tr>`;
   return `<td data-email-rain-card="true" colspan="2" width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:1px solid ${COR.borda};border-bottom:1px solid ${COR.borda};padding:0;text-align:center;vertical-align:middle;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border-collapse:collapse;table-layout:fixed;">
-      ${bloco("acumulado", "CHUVA ACUMULADA/DIA", chuvaPrevista, true)}
+      ${bloco("prevista", "CHUVA PREVISTA/DIA", chuvaPrevista, true)}
       ${bloco("probabilidade", "PROBABILIDADE DE CHUVA", probabilidade, false)}
     </table>
   </td>`;
 }
 
-// A janela da previsão depende da edição (horário agendado), não da hora em
-// que o e-mail é aberto.
 function frasePrevisao(r) {
   if (!r.horarioAgendado || !r.previsaoAte) return "";
   return `Previsão até ${r.previsaoAte}`;
 }
 
-// Linha acima dos cards: "Hora da consulta" à esquerda e a janela da previsão
-// fora do card, centralizada sobre a 3ª coluna. As colunas
-// 66,67% + 33,33% espelham a tabela de cards, inclusive no Outlook.
-function linhaReferencia(r) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.painel}" style="width:100%;background:${COR.painel};border-collapse:collapse;">
-    <tr>
-      <td width="66.67%" valign="bottom" align="left" bgcolor="${COR.painel}" style="width:66.67%;${ESTILO_REFERENCIA_EMAIL}text-align:left;"><strong style="font-weight:bold;">Hora da consulta:</strong> ${horaConsultaEmail(r.horaConsulta)} (Horário de Brasília)</td>
-      <td width="33.33%" valign="bottom" align="right" bgcolor="${COR.painel}" style="width:33.33%;${ESTILO_REFERENCIA_EMAIL}text-align:right;">${esc(frasePrevisao(r))}</td>
-    </tr>
-  </table>`;
+function faixaReferenciaEdicaoEmail(r) {
+  const referencia = referenciaEdicaoVisual(r.horarioAgendado);
+  if (!referencia) return "";
+  return `<tr data-email-edition-reference="true"><td class="email-pad" bgcolor="#F3F6F4" style="padding:0 20px 8px;background:#FFFFFF;">
+    <table class="email-edition-reference" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#F3F6F4" style="width:100%;background:#F3F6F4;border-left:4px solid ${COR.verde};border-collapse:collapse;table-layout:fixed;">
+      <tr>
+        <td width="50%" align="left" style="width:50%;padding:9px 12px;color:${COR.texto};font:13px/1.35 Arial,sans-serif;text-align:left;overflow-wrap:anywhere;">Hora da consulta: ${esc(referencia.hora)} (Horário de Brasília)</td>
+        <td width="50%" align="right" style="width:50%;padding:9px 12px;color:${COR.texto};font:13px/1.35 Arial,sans-serif;text-align:right;overflow-wrap:anywhere;">Previsão até ${esc(referencia.previsaoAte)}</td>
+      </tr>
+    </table>
+  </td></tr>`;
 }
 
 // Card "CALOR": fonte única EHF/Clima e Saúde. Temperatura elevada e avisos
@@ -158,13 +144,10 @@ function resumoMeteorologico(r) {
   const chuvaPrevista = chuvaPrevistaAcumulada(r);
   const probabilidade = probabilidadeChuvaPrevista(r);
   const qa = r.qualidadeAr;
-  const arOk = Number.isFinite(qa?.iqar) && presente(qa?.classificacao?.exibicao);
+  const arOk = Number.isFinite(qa?.usAqi) && presente(qa?.classificacao?.exibicao);
   const ar = arOk
     ? `<span style="color:${esc(qa.classificacao.cor)};">${esc(qa.classificacao.exibicao)}</span>`
     : "Dado indisponível";
-  const arDetalhe = arOk
-    ? `IQAr ${qa.iqar} · ${esc(qa.fonte || "Estimativa CAMS")} · ${esc(qa.referenciaEm || "horário indisponível")}`
-    : esc(qa?.motivoIndisponibilidade || "Sem janela válida ou licença comercial configurada");
   return `<table data-email-metrics="true" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-collapse:collapse;table-layout:fixed;">
     <colgroup>
       <col width="16.67%"><col width="16.67%"><col width="16.66%">
@@ -176,10 +159,10 @@ function resumoMeteorologico(r) {
       ${celulaMetrica("RAJADA PREVISTA", rajadaValor, true)}
     </tr>
     <tr data-email-metric-row="2">
-      ${celulaMetrica("QUALIDADE DO AR", ar, false, arDetalhe)}
+      ${celulaMetrica("QUALIDADE DO AR", ar)}
       ${celulaChuva(
         Number.isFinite(chuvaPrevista) ? numeroUnidade(chuvaPrevista, "mm") : "Dado indisponível",
-        Number.isFinite(probabilidade) ? `${esc(probabilidade)}%` : "Indisponível"
+        Number.isFinite(probabilidade) ? `${esc(probabilidade)}%` : "Indisponível",
       )}
       ${celulaMetrica("CALOR", valorCalor(r), true)}
     </tr>
@@ -187,22 +170,18 @@ function resumoMeteorologico(r) {
   </table>`;
 }
 
-function celulaComplementar(rotulo, valor, detalhe, ultimaColuna = false) {
+function celulaComplementar(rotulo, valor, ultimaColuna = false) {
   return `<td class="email-stack" colspan="3" width="50%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:50%;background:${COR.celula};border-right:${ultimaColuna ? "0" : `1px solid ${COR.borda}`};border-bottom:1px solid ${COR.borda};padding:13px 10px 12px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;">
     <div style="color:${COR.secundario};font:13px/1.3 Arial,sans-serif;text-transform:uppercase;">${rotulo}</div>
     <div class="email-metric-value" style="color:${COR.texto};font:bold 22px/1.25 Arial,sans-serif;margin-top:3px;overflow-wrap:anywhere;word-break:break-word;">${valor}</div>
-    <div style="color:${COR.texto};font:15px/1.3 Arial,sans-serif;margin-top:2px;overflow-wrap:anywhere;word-break:break-word;">${detalhe}</div>
   </td>`;
 }
 
 function marECondicao(r) {
   const mar = numeroUnidade(r.mar?.alturaMaxDiaM, "m");
-  const detalheMar = r.mar?.desatualizado
-    ? `Dado armazenado — última atualização válida: ${formatarDataBrasilia(r.mar.ultimaAtualizacao) || "horário indisponível"}`
-    : mar === "Dado indisponível" || !presente(r.mar?.estadoMarDia) ? "Dado indisponível" : texto(r.mar.estadoMarDia);
   return `<tr data-email-metric-row="3">
-    ${celulaComplementar("MAR — ALTURA MÁX. DE ONDA", mar, detalheMar)}
-    ${celulaComplementar("CONDIÇÃO GERAL", presente(r.condicaoGeral) ? texto(r.condicaoGeral) : "Dado indisponível", "Previsão para o dia", true)}
+    ${celulaComplementar("MAR — ALTURA MÁX. DE ONDA", mar)}
+    ${celulaComplementar("CONDIÇÃO GERAL", presente(r.condicaoGeral) ? texto(r.condicaoGeral) : "Dado indisponível", true)}
   </tr>`;
 }
 
@@ -232,7 +211,7 @@ function cartaoAlerta(card) {
       <div style="border-top:1px solid ${COR.borda};padding-top:11px;">
         <div style="color:${v.texto};font:bold 15px/1.3 Arial,sans-serif;letter-spacing:0.4px;">RECOMENDAÇÕES</div>
         <div style="color:${COR.secundario};font:12px/1.35 Arial,sans-serif;margin-top:1px;">${esc(rec.titulo)}</div>
-        <ul style="margin:7px 0 0;padding-left:20px;color:${COR.texto};font:14px/1.45 Arial,sans-serif;">${rec.itens.map((item) => `<li data-alert-recommendation="true" style="margin-bottom:4px;">${esc(item)}</li>`).join("")}</ul>
+        ${(rec.grupos || [{ itens: rec.itens }]).map((g) => `${g.nivel ? `<div data-alert-recommendation-level="${esc(g.nivel)}" style="color:${v.texto};font:bold 12px/1.3 Arial,sans-serif;margin-top:9px;">${esc(g.nivel)}:</div>` : ""}<ul style="margin:5px 0 0;padding-left:20px;color:${COR.texto};font:14px/1.45 Arial,sans-serif;">${g.itens.map((item) => `<li data-alert-recommendation="true" style="margin-bottom:4px;">${esc(item)}</li>`).join("")}</ul>`).join("")}
       </div>
     </td></tr>` : "";
   return `<table data-alert-card="true" data-nivel="${esc(card.nivel)}" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${v.fundo}" style="width:100%;background:${v.fundo};border:1.5px solid ${v.cor};border-collapse:separate;margin-top:10px;">
@@ -253,19 +232,7 @@ function cartaoAlerta(card) {
   </table>`;
 }
 
-const FONTES_DADOS_EMAIL = "INMET | Clima e Saúde — Ministério da Saúde | Petrobras — OCEANOP | Tetra Tech (quando autorizado)";
-
-function fontesDeDados() {
-  const relatorio = arguments[0];
-  const valores = [relatorio?.mar?.fonte, ...Object.values(relatorio?.fontesPorCampo || {})].map(String);
-  const adicionais = [];
-  if (valores.some((fonte) => fonte === "Petrobras — OCEANOP")) adicionais.push("Petrobras — OCEANOP");
-  if (valores.some((fonte) => fonte === "Tetra Tech/OCEANOP")) {
-    const referencia = relatorio?.rajadaPrevistaReferencia?.periodoReferencia;
-    adicionais.push(`Tetra Tech/OCEANOP${referencia ? ` (${referencia})` : ""}`);
-  }
-  return esc([FONTES_DADOS_EMAIL, ...adicionais].join(" | "));
-}
+const FONTES_DADOS_EMAIL = "INMET | Open-Meteo Forecast | Open-Meteo Air Quality | Open-Meteo Marine | Clima e Saúde — Ministério da Saúde";
 
 const { faixaSimulacaoEmail } = require("./simulationBanner");
 
@@ -277,7 +244,7 @@ function renderEmailHtml(r, { incluirCorRio = true } = {}) {
 
   return `<!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only">${renderEmailHeaderStyles()}</head>
+<head><meta charset="utf-8"><meta name="cim-snapshot-id" content="${esc(r.snapshotId || "")}"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only">${renderEmailHeaderStyles()}</head>
 <body bgcolor="${COR.fundo}" style="margin:0;padding:0;background:${COR.fundo};background-color:${COR.fundo};color:${COR.texto};font-family:Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.fundo}" style="width:100%;background:${COR.fundo};background-color:${COR.fundo};">
     <tr><td align="center" bgcolor="${COR.fundo}" style="padding:8px 6px;background:${COR.fundo};">
@@ -288,13 +255,11 @@ function renderEmailHtml(r, { incluirCorRio = true } = {}) {
           titulo: "INFORMATIVO METEOROLÓGICO",
           cidade: r.cidade?.nome,
           uf: r.cidade?.uf,
-          data: r.dataFormatadaLonga,
         })}
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:11px 20px 0;">${linhaReferencia(r)}</td></tr>
+        ${faixaReferenciaEdicaoEmail(r)}
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:4px 20px 5px;">${resumoMeteorologico(r)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:2px 20px 0;">${cartoesAlerta}</td></tr>
         ${incluirCorRio ? `<tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px;">${cartaoCorRioEmail(r)}</td></tr>` : ""}
-        <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:10px 25px 6px;color:${COR.texto};font:14px/1.4 Arial,sans-serif;"><strong>Fontes de dados:</strong><br>${fontesDeDados(r, eventos)}</td></tr>
         <tr><td class="email-pad" bgcolor="${COR.painel}" style="background:${COR.painel};padding:0 20px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${COR.celula}" style="width:100%;background:${COR.celula};border:1px solid ${COR.borda};border-left:4px solid ${COR.verde};"><tr><td bgcolor="${COR.celula}" style="padding:11px 17px;background:${COR.celula};color:#333333;font:14px/1.4 Arial,sans-serif;">Relatório técnico completo com tabelas, avisos oficiais e fontes consultadas em anexo (PDF).</td></tr></table></td></tr>
         <tr><td bgcolor="${COR.amarelo}" style="height:3px;background:${COR.amarelo};font-size:0;line-height:3px;">&nbsp;</td></tr>
         <tr><td align="center" bgcolor="${COR.painel}" style="padding:8px 20px 10px;background:${COR.painel};color:${COR.texto};text-align:center;font:12px/1.25 Arial,sans-serif;"><strong style="font-size:16px;color:${COR.verde};">CIM</strong><br>Centro Integrado de Monitoramento<br>COMPARTILHADO<br><span style="color:${COR.secundario};">Informativo gerado automaticamente pelo Protocolo Meteorológico do COMPARTILHADO.</span></td></tr>

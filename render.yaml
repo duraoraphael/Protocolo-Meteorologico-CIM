@@ -33,6 +33,10 @@ services:
         sync: false
       - key: OPEN_METEO_API_KEY
         sync: false
+      - key: OCEANOP_API_KEY
+        sync: false
+      - key: OCEANOP_UNIDADE_VENTO
+        value: nós
       - key: CIDADE
         value: rio_de_janeiro
       - key: ENVIO_AUTOMATICO_DIARIO
@@ -47,7 +51,3 @@ services:
         value: "5"
       - key: JANELA_MONITOR
         value: "00:00-24:00"
-      - key: OCEANOP_API_KEY
-        sync: false
-      - key: OCEANOP_ACCESS_TOKEN
-        sync: false

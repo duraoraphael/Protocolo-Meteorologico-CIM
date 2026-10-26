@@ -32,6 +32,7 @@ function avisoBruto(sobrescrever = {}) {
 function report(sobrescrever = {}) {
   return {
     cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
+    geradoEmISO: agoraIso(),
     horaConsulta: "17:00",
     severidade: { grau: "NORMAL", eventos: [] },
     avisosInmet: [],
@@ -178,7 +179,8 @@ test("falha na coleta de avisos INMET é informada, não tratada como ausência"
 
 function clima(grau, { consultadoEm = agoraIso(), status = "operacional", classificacao = "Sem excesso" } = {}) {
   const protocolo = { "ATENÇÃO": "P1", ALERTA: "P2", "EMERGÊNCIA": "P3" }[grau] || null;
-  return { status, dados: { source: "Clima e Saúde — Ministério da Saúde", ehf: { valor: 1, classificacao }, nivel: { grau, protocolo }, temperatura: { maxima: 34 }, riscoCombinado: "Sem Risco", recomendacoes: protocolo ? ["Reforçar hidratação."] : [], consultadoEm, previsaoDias: [{ data: "2026-10-02", classificacao: "Sem excesso", tempMax: 33 }] } };
+  const dataConsulta = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(consultadoEm));
+  return { status, dados: { source: "Clima e Saúde — Ministério da Saúde", ehf: { valor: 1, classificacao }, nivel: { grau, protocolo }, temperatura: { maxima: 34 }, riscoCombinado: "Sem Risco", recomendacoes: protocolo ? ["Reforçar hidratação."] : [], consultadoEm, dataConsulta, previsaoDias: [{ data: "2026-10-02", classificacao: "Sem excesso", tempMax: 33 }] } };
 }
 const cardCalor = (tela) => tela.slice(tela.indexOf('<article class="card heat'), tela.indexOf("</article>", tela.indexOf('<article class="card heat')));
 
@@ -188,8 +190,8 @@ test("Calor e Saúde normal: card neutro com selo Normal, sem destaque e sem lis
   const card = cardCalor(tela);
   assert.match(card, /selo-normal">Normal/);
   assert.match(card, /Sem excesso de calor/);
-  assert.match(card, /Máxima prevista 34 °C/);
-  assert.match(card, /Clima e Saúde — Ministério da Saúde/);
+  assert.doesNotMatch(card, /Máxima prevista 34 °C|Previsão para o dia|Classificação do indicador/);
+  assert.doesNotMatch(card, /Clima e Saúde — Ministério da Saúde/);
   assert.doesNotMatch(tela, /2026-10-02|Previsão Clima e Saúde/);
   assert.equal(r.ocorrencias.length, 0);
 });
@@ -210,7 +212,7 @@ test("Calor e Saúde ausente ou desatualizado nunca aparece como Normal", () => 
 
   const antigo = cardCalor(renderizar(report({ climaSaude: clima("NORMAL", { status: "armazenado", consultadoEm: ontemIso() }) })).tela);
   assert.match(antigo, /Desatualizado/);
-  assert.match(antigo, /última coleta válida/);
+  assert.doesNotMatch(antigo, /última coleta válida|2026-\d{2}-\d{2}|\d{2}:\d{2}/);
   assert.doesNotMatch(antigo, /selo-normal/);
 
   const doDia = cardCalor(renderizar(report({ climaSaude: clima("NORMAL", { status: "armazenado" }) })).tela);

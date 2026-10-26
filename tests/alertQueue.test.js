@@ -1,3 +1,8 @@
+// Estes testes cobrem transições e deduplicação sem a janela de estabilização;
+// a histerese de redução é testada em gatilhosMeteorologicos.test.js.
+process.env.GATILHOS_CONFIRMACOES_REDUCAO = "1";
+process.env.GATILHOS_MINUTOS_ESTABILIZACAO = "0";
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

@@ -2,9 +2,8 @@
 require("../src/security/certificados");
 const { CIDADES } = require("../src/config/cities");
 const { buscarPrevisaoInmet, buscarAvisosInmet } = require("../src/sources/inmet");
+const { buscarOpenMeteo } = require("../src/sources/openMeteo");
 const climaSaude = require("../src/sources/climaSaudeService");
-const pontosOceanop = require("../src/config/oceanopPontos");
-const { buscarOceanopPorCoordenadas } = require("../src/sources/oceanop");
 
 const seguro = (erro) => ({ status: "FALHA", httpStatus: erro?.httpStatus || erro?.status || null, codigo: erro?.code || erro?.name || null, mensagem: erro?.message || String(erro) });
 async function executar(tarefa, resumir = (valor) => valor) {
@@ -21,21 +20,26 @@ async function main() {
       codigoIbge: cidade.codigoIbge,
       inmet: await executar(() => buscarPrevisaoInmet(cidade.codigoIbge), (r) => ({ data: r.data, periodos: Object.keys(r.periodos || {}), dias: r.dias?.length || 0 })),
       climaSaude: await executar(() => climaSaude.consultar(cidade, { carregar: () => ({}), salvar: () => {}, tentativas: 1, timeoutMs: 15000 }), (r) => ({ statusFonte: r.status, data: r.dados?.dataConsulta || null })),
-      oceanop: await executar(() => buscarOceanopPorCoordenadas(pontosOceanop[chave], { tentativas: 1, timeoutMs: 15000 }), (r) => ({ endpoint: r.endpoint, registros: r.previsoes.length, locais: [...new Set(r.previsoes.map((p) => p.local))] })),
+      openMeteoForecast: await executar(() => buscarOpenMeteo(cidade.latitude, cidade.longitude, {
+        fuso: cidade.fusoHorario || "America/Sao_Paulo",
+        diasPrevisao: 4,
+        logger: null,
+      }), (r) => ({
+        modelo: r.modelo,
+        dataReferencia: r.dataReferencia,
+        previsaoDias: r.previsaoDias.map((dia) => dia.data),
+        rajadaMaxKmh: r.rajadaMaxKmh,
+        chuvaPrevistaDiaMm: r.precipitacaoPrevistaDiaMm,
+        chuvaPrevistaJanelaMm: r.precipitacaoTotalMm,
+        probabilidadeJanelaPct: r.probabilidadeChuvaMax,
+        probabilidadeDiariaPct: r.probabilidadeChuvaDiariaPct,
+        modelosIndicadores: r.modelosIndicadores,
+        cache: r.cache,
+      })),
     };
   }
   const rio = CIDADES.rio_de_janeiro;
   resultados.inmetAvisos = await executar(() => buscarAvisosInmet(rio.codigoIbge), (r) => ({ quantidade: r.avisos?.length || 0 }));
-  for (const [nome, url] of Object.entries({
-    swaggerOceanop: "https://oceanop-api-disp.petrobras.com.br/swagger/v1/swagger.json",
-    portalTtForecast: "https://petrobras.ttforecast.com.br/map",
-    apiAreasTtForecast: "https://petrobras.ttforecast.com.br/api/v1/areas/json",
-  })) {
-    resultados[nome] = await executar(async () => {
-      const resposta = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(15000) });
-      return { statusHttp: resposta.status, contentType: resposta.headers.get("content-type") };
-    });
-  }
   console.log(JSON.stringify({ auditoria: "fontes-autorizadas-cim", concluidoEm: new Date().toISOString(), envioEmailExecutado: false, resultados }, null, 2));
 }
 

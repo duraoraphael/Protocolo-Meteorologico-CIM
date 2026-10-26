@@ -10,6 +10,7 @@ const {
   classificarCondicoesMeteorologicas,
   maiorGrau,
   recomendacoes,
+  recomendacoesPorNivel,
 } = require("./inmetAlertRules");
 const { formatarTitulo } = require("../../public/alert-title");
 const { grauAvisoInmet, fenomenoAvisoInmet, normalizarComparacao } = require("../sources/inmet");
@@ -97,6 +98,7 @@ function avaliarRiscos(consolidado) {
     tempMax,
     umidadeMin,
     rajadaMaxKmh,
+    rajadaObservadaMaxKmh,
     precipitacaoHorariaMaxMm,
     precipitacaoTotalMm,
     temTempestadeHoje,
@@ -157,6 +159,7 @@ function avaliarRiscos(consolidado) {
       janela: `${aviso.inicio} até ${aviso.fim}`,
       descricao: aviso.riscos?.join(" ") || `${aviso.descricao} — ${aviso.severidade}.`,
       recomendacoes: recomendacoes("chuva", grau),
+      recomendacoesPorNivel: recomendacoesPorNivel("chuva", grau),
       fonteDados: "INMET — aviso oficial",
       avisoInmet: aviso,
       naturezaDado: "Aviso oficial",
@@ -169,6 +172,7 @@ function avaliarRiscos(consolidado) {
       janela: `${aviso.inicio} até ${aviso.fim}`,
       descricao: aviso.riscos?.join(" ") || `${aviso.descricao} — ${aviso.severidade}.`,
       recomendacoes: recomendacoes("vento", grau),
+      recomendacoesPorNivel: recomendacoesPorNivel("vento", grau),
       fonteDados: "INMET — aviso oficial",
       avisoInmet: aviso,
       naturezaDado: "Aviso oficial",
@@ -178,6 +182,7 @@ function avaliarRiscos(consolidado) {
 
   const internos = classificarCondicoesMeteorologicas({
     rajadaKmh: rajadaMaxKmh,
+    rajadaObservadaKmh: rajadaObservadaMaxKmh,
     chuvaHorariaMmH: precipitacaoHorariaMaxMm,
     chuvaDiariaMm: precipitacaoTotalMm,
   }).eventos;
@@ -188,12 +193,18 @@ function avaliarRiscos(consolidado) {
     const tipo = evento.assinatura === "vento"
       ? (atencao ? "ventoModerado" : "ventoForte")
       : (atencao ? "chuvaModerada" : "chuvaIntensa");
+    const ventoObservado = evento.assinatura === "vento" && evento.baseDado === "observada";
     const fontes = evento.assinatura === "vento"
-      ? [fontesPorCampo.rajadaMaxKmh]
+      ? [ventoObservado ? fontesPorCampo.rajadaObservadaMaxKmh : fontesPorCampo.rajadaMaxKmh]
       : [fontesPorCampo.precipitacaoHorariaMaxMm, fontesPorCampo.precipitacaoTotalMm];
-    const observadoInmet = fontes.some((fonte) => /INMET.+esta[cç][aã]o autom[aá]tica/i.test(fonte || ""));
+    const observadoInmet = ventoObservado || fontes.some((fonte) => /INMET.+esta[cç][aã]o autom[aá]tica/i.test(fonte || ""));
     const detalhe = evento.assinatura === "vento" && !observadoInmet && Number.isFinite(evento.valores?.rajadaKmh)
-      ? `Rajada prevista: ${formatarRajadaPrevista(evento.valores.rajadaKmh)}`
+      ? [
+        `Rajada prevista (alerta preventivo): ${formatarRajadaPrevista(evento.valores.rajadaKmh)}`,
+        Number.isFinite(evento.valores.rajadaObservadaKmh)
+          ? `Rajada observada na estação INMET: ${formatarRajadaPrevista(evento.valores.rajadaObservadaKmh)}`
+          : null,
+      ].filter(Boolean).join(" · ")
       : evento.detalhe;
     candidatos.push({
       ...evento,
@@ -275,25 +286,23 @@ function avaliarRiscos(consolidado) {
       grau: grauUv,
       nivel: NIVEL_POR_GRAU[grauUv],
       janela: qualidadeAr.horaPicoUv ? `pico por volta das ${qualidadeAr.horaPicoUv}` : "meio do dia",
-      descricao: `Índice UV ${qualidadeAr.uvClassificacao.nivel.toLowerCase()} previsto (máx. ${qualidadeAr.uvMax}), com risco de queimadura solar em exposição curta sem proteção.`,
+      descricao: `Índice UV ${qualidadeAr.uvMaxClassificacao?.nivel?.toLowerCase() || (extremo ? "extremo" : "muito alto")} previsto (máx. ${qualidadeAr.uvMax}), com risco de queimadura solar em exposição curta sem proteção.`,
       naturezaDado: "Classificação interna baseada na previsão",
       recomendacoes: recomendacoesFenomeno("uv", grauUv),
     });
   }
 
-  // Só o IQAr calculado conforme as faixas brasileiras válidas pode gerar
-  // alerta. Índices US/EU ou concentração instantânea não são substitutos.
-  if (Number.isFinite(qualidadeAr?.iqar) && qualidadeAr.iqar > 80) {
-    const grau = qualidadeAr.iqar > 200
-      ? "EMERGÊNCIA"
-      : qualidadeAr.iqar > 120 ? "ALERTA" : "ATENÇÃO";
+  // A classificação configurada para o painel é uma simplificação interna
+  // explicitamente baseada no US AQI; ela não é publicada como IQAr brasileiro.
+  if (Number.isFinite(qualidadeAr?.usAqi) && qualidadeAr.usAqi >= 101) {
+    const grau = qualidadeAr.usAqi >= 151 ? "ALERTA" : "ATENÇÃO";
     candidatos.push({
       tipo: "qualidadeArRuim",
       grau,
       nivel: NIVEL_POR_GRAU[grau],
       janela: "ao longo do dia",
-      descricao: `Qualidade do ar estimada ${qualidadeAr.classificacao.exibicao.toLowerCase()} (IQAr ${qualidadeAr.iqar}); considere reduzir exposição prolongada ao ar livre.`,
-      naturezaDado: "IQAr brasileiro calculado a partir de estimativa modelada",
+      descricao: `Qualidade do ar estimada RUIM (US AQI simplificado: ${qualidadeAr.usAqi}); considere reduzir exposição prolongada ao ar livre.`,
+      naturezaDado: "Classificação simplificada baseada em estimativa modelada US AQI",
       recomendacoes: recomendacoesFenomeno("ar", grau),
     });
   }

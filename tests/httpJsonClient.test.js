@@ -48,6 +48,25 @@ test("cliente comum repete limites, erros do servidor e JSON interrompido", asyn
   assert.deepEqual(resultado, { valor: 42 });
 });
 
+test("cliente comum respeita Retry-After de resposta transitória", async () => {
+  const esperas = [];
+  let chamadas = 0;
+  const resultado = await buscarJsonComRetentativa("https://exemplo.test/dados", {
+    nomeFonte: "Fonte de teste",
+    tentativas: 2,
+    fetchImpl: async () => {
+      chamadas += 1;
+      return chamadas === 1
+        ? { ok: false, status: 503, headers: new Headers({ "retry-after": "3" }) }
+        : { ok: true, status: 200, json: async () => ({ ok: true }) };
+    },
+    esperarFn: async (ms) => esperas.push(ms),
+  });
+  assert.deepEqual(resultado, { ok: true });
+  assert.equal(chamadas, 2);
+  assert.deepEqual(esperas, [3000]);
+});
+
 test("cliente comum não repete erro HTTP permanente", async () => {
   let chamadas = 0;
   await assert.rejects(

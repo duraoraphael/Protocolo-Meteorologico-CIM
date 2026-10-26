@@ -1,4 +1,5 @@
 const { formatarRajadaPrevista } = require("../../public/weather-format");
+const { GRAUS, classificarRajada } = require("./inmetAlertRules");
 
 function valorFinito(valor) {
   return Number.isFinite(valor) ? valor : null;
@@ -38,7 +39,10 @@ function fontesUnicas(...fontes) {
 function contextoVento(report) {
   const prevista = valorFinito(report?.rajadaMaxKmh);
   const medida = valorFinito(report?.rajadaObservadaMaxKmh);
-  const observado = prevista === null && medida !== null;
+  // A medição local é a base do protocolo; a previsão só prevalece quando
+  // atinge severidade maior (alerta preventivo).
+  const observado = medida !== null && (prevista === null
+    || GRAUS[classificarRajada(medida)] >= GRAUS[classificarRajada(prevista)]);
   const rajada = observado ? medida : prevista;
   if (rajada === null) return null;
   const fontes = fontesUnicas(
@@ -50,7 +54,12 @@ function contextoVento(report) {
       .map(([, fonte]) => fonte)
   );
   return {
-    detalhe: observado ? `Rajada medida pela estação INMET: ${formatarRajadaPrevista(rajada)}` : `Rajada prevista: ${formatarRajadaPrevista(rajada)}`,
+    detalhe: observado
+      ? `Rajada medida pela estação INMET: ${formatarRajadaPrevista(rajada)}`
+      : [
+        `Rajada prevista (alerta preventivo): ${formatarRajadaPrevista(rajada)}`,
+        medida !== null ? `Rajada observada na estação INMET: ${formatarRajadaPrevista(medida)}` : null,
+      ].filter(Boolean).join(" · "),
     janela: observado ? null : periodoDoMaiorValor(report, "vento"),
     fonteDados: fontes.join(" / ") || "Dado meteorológico integrado",
     naturezaDado: observado ? "Classificação interna baseada em observação oficial" : "Classificação interna baseada na previsão",

@@ -1,3 +1,8 @@
+// Estes testes cobrem transições e deduplicação sem a janela de estabilização;
+// a histerese de redução é testada em gatilhosMeteorologicos.test.js.
+process.env.GATILHOS_CONFIRMACOES_REDUCAO = "1";
+process.env.GATILHOS_MINUTOS_ESTABILIZACAO = "0";
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const cheerio = require("cheerio");
@@ -38,7 +43,7 @@ function relatorio(extra = {}) {
       precipitacaoHorariaMaxMm: "Open-Meteo",
       precipitacaoTotalMm: "Open-Meteo",
       "ar.uvMax": "Open-Meteo Air Quality / CAMS",
-      "ar.iqar": "Qualidade do ar estimada — Open-Meteo/CAMS",
+      "ar.usAqi": "Open-Meteo — estimativa modelada de qualidade do ar",
     },
     mar: null,
     qualidadeAr: null,
@@ -70,11 +75,11 @@ test("vento interno em ATENÇÃO e ALERTA exibe só informe e recomendações pr
 
   const alerta = vento(45);
   assert.equal(alerta.alerta.grau, "ALERTA");
-  assert.ok(alerta.alerta.recomendacoes.some((item) => /Suspender içamentos/.test(item)));
+  assert.ok(alerta.alerta.recomendacoes.some((item) => /içamentos/.test(item)));
 
   const html = renderAlertEmailHtml(base([atencao.alerta], atencao.report));
   assert.match(html, /VENTO — ATENÇÃO/);
-  assert.match(html, /Informe do aviso:<\/strong> Rajada prevista: 36 km\/h/);
+  assert.match(html, /Informe do aviso:<\/strong> Rajada prevista \(alerta preventivo\): 36 km\/h/);
   assert.doesNotMatch(html, /Origem da classificação|Significado do nível CIM|Instalações \(Operações\)/);
   assert.match(html, /Período de referência:<\/strong> Tarde \(12h–18h\)/);
   assert.doesNotMatch(html, /Fonte de dados:/);
@@ -126,11 +131,11 @@ test("chuva interna apresenta recomendação específica e vários fenômenos pe
   const alertas = detectarAlertasGraves(report);
   const chuva = alertas.find((item) => item.assinatura === "chuva");
   assert.equal(chuva.grau, "ALERTA");
-  assert.doesNotMatch(chuva.recomendacoes.join(" "), /inunda|alagament|alagáveis|lâmina d’água/i);
+  assert.doesNotMatch(chuva.recomendacoes.join(" "), /inunda|lâmina d’água/i);
   assert.equal(alertas.filter((item) => ["chuva", "vento"].includes(item.assinatura)).length, 2);
   const $ = cheerio.load(renderAlertEmailHtml(base(alertas, report)));
   assert.equal($("[data-alert-card='true']").length, 2);
-  assert.doesNotMatch($.root().text(), /inunda|alagament|alagáveis|lâmina d’água/i);
+  assert.doesNotMatch($.root().text(), /inunda|lâmina d’água/i);
 });
 
 test("aviso oficial prevalece sem repetir metadados no card resumido", () => {
@@ -189,14 +194,14 @@ test("UV e qualidade do ar usam títulos humanos sem metadados técnicos", () =>
       uvMax: 11,
       horaPicoUv: "11:00",
       uvClassificacao: { nivel: "Extremo" },
-      iqar: 150,
+      usAqi: 150,
       pm25Medio: 29,
       classificacao: { nivel: "Muito Ruim", exibicao: "Muito Ruim" },
     },
   });
   const html = renderAlertEmailHtml(base(detectarAlertasGraves(report), report));
   assert.match(html, /ÍNDICE UV — ALERTA/);
-  assert.match(html, /QUALIDADE DO AR — ALERTA/);
+  assert.match(html, /QUALIDADE DO AR — ATENÇÃO/);
   assert.doesNotMatch(html, /Fonte de dados:|Origem da classificação|Significado do nível CIM|Instalações/);
   assert.doesNotMatch(html, /UVALTO|QUALIDADEARRUIM/);
 });

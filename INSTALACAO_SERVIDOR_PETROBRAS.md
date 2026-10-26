@@ -15,9 +15,8 @@ Servidor de referência usado no dimensionamento abaixo: Windows Server 2022,
   tarefa agendada (precisa rodar um passo como **Administrador**).
 - Saída de rede liberada para: `smtp.petrobras.com.br:25` (SMTP interno),
   `login.microsoftonline.com` e `graph.microsoft.com` (GED SharePoint),
-  e — para a coleta meteorológica — `apiprevmet3.inmet.gov.br`,
-  `oceanop-api-disp.petrobras.com.br`, `petrobras.ttforecast.com.br` e
-  `apiprevmet3.inmet.gov.br`.
+  e — para a coleta meteorológica — `apiprevmet3.inmet.gov.br` e
+  `api.open-meteo.com`.
 - Se a rede usa proxy corporativo para saída à internet, seja necessário
   configurar isso separadamente — avise o desenvolvedor se os testes do
   passo 6 falharem por timeout (não por HTTP 403/401).
@@ -96,7 +95,6 @@ comitados no repositório**):
 | `ENVIO_AUTOMATICO_DIARIO` | `true` |
 | `HORARIOS_INFORMATIVO` | `08:00,15:00` |
 | `HORARIOS_COR_RIO` | `08:00,15:00` |
-| `OCEANOP_API_KEY` | *(somente se emitida oficialmente para o serviço)* |
 | `MONITOR_ALERTAS` | `true` |
 
 Demais variáveis (bases monitoradas e integrações opcionais) já vêm com

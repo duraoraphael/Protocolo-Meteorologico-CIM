@@ -5,6 +5,7 @@
 const AlertTitle = require("../../public/alert-title");
 const { ordenarEventosParaExibicao } = require("./eventOrdering");
 const { consolidarAvisosInmet, fenomenoAvisoInmet, grauAvisoInmet } = require("../sources/inmet");
+const { recomendacoesPorProtocoloEmNiveis } = require("../logic/healthProtection");
 const { contextoPrevisao } = require("../logic/forecastAlertContext");
 const { FENOMENO_POR_TIPO } = require("../logic/ocorrenciasPainel");
 const {
@@ -70,13 +71,19 @@ function fontePrevisaoComPrincipalInmet(fonte) {
 }
 
 // NORMAL não recebe recomendações — mesma regra que já valia nos dois formatos.
-function recomendacoesDoCard(grau, resolver) {
+function recomendacoesDoCard(grau, resolver, grupos = null) {
   if (!alertaExibivel(grau)) return null;
   const resolucao = resolver();
+  // Agrupamento por nível (ATENÇÃO / ALERTA / EMERGÊNCIA) só quando descreve
+  // exatamente as mesmas orientações resolvidas — nunca um texto paralelo.
+  const planas = Array.isArray(grupos) ? grupos.flatMap((g) => g.itens) : [];
+  const agrupavel = resolucao.origem === "local" && planas.length === resolucao.itens.length
+    && planas.every((item, i) => item === resolucao.itens[i]);
   return {
     titulo: ORIGEM_RECOMENDACOES[resolucao.origem] || ORIGEM_RECOMENDACOES.local,
     origem: resolucao.origem,
     itens: resolucao.itens,
+    ...(agrupavel ? { grupos } : {}),
   };
 }
 
@@ -103,7 +110,7 @@ function cardEvento(evento, r) {
       linha(observado ? "Janela observada" : "Janela prevista", evento.janela),
       linha("Fonte de dados", fonteEventoComPrioridade(evento)),
     ].filter(Boolean),
-    recomendacoes: recomendacoesDoCard(nivel, () => resolverRecomendacoesAlerta({ evento, avisosInmet: r.avisosInmet })),
+    recomendacoes: recomendacoesDoCard(nivel, () => resolverRecomendacoesAlerta({ evento, avisosInmet: r.avisosInmet }), evento.recomendacoesPorNivel),
   };
 }
 
@@ -149,7 +156,7 @@ function cardCalor(r, detalhado) {
     recomendacoes: recomendacoesDoCard(nivel, () => resolverRecomendacoesAlerta({
       evento: { fenomeno: "calor", grau: nivel, recomendacoes: dados.recomendacoes },
       avisosInmet: r.avisosInmet,
-    })),
+    }), recomendacoesPorProtocoloEmNiveis(dados.nivel?.protocolo)),
   };
 }
 
@@ -177,9 +184,9 @@ function cardAvisoInmet(aviso, eventosLocais, r) {
       linha("Motivo do aviso", listaOficial(aviso.description || aviso.riscos).join("\n") || null, { multilinha: true }),
       instrucoes.length ? linha("Instruções oficiais", instrucoes.join("\n"), { multilinha: true }) : null,
       linha("Fonte de dados", "INMET"),
-      previsao ? linha("Previsão complementar", previsao.detalhe) : null,
-      previsao?.janela ? linha("Período da previsão", previsao.janela) : null,
-      previsao?.fonteDados ? linha("Fonte da previsão", fontePrevisaoComPrincipalInmet(previsao.fonteDados)) : null,
+      previsao ? linha("Informação complementar", previsao.detalhe) : null,
+      previsao?.janela ? linha("Período de referência", previsao.janela) : null,
+      previsao?.fonteDados ? linha("Fonte complementar", fontePrevisaoComPrincipalInmet(previsao.fonteDados)) : null,
     ].filter(Boolean),
     recomendacoes,
   };

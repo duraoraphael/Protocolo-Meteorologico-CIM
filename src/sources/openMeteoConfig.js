@@ -4,18 +4,26 @@ const HOSTS_PUBLICOS = new Set([
   "marine-api.open-meteo.com",
 ]);
 
+// Uso dos endpoints públicos (gratuitos) da Open-Meteo, sem chave. Desligado por
+// padrão: os termos da Open-Meteo limitam a API gratuita a uso não comercial, então
+// a liberação é uma decisão explícita (OPEN_METEO_USAR_API_PUBLICA=true).
+function apiPublicaPermitida(env = process.env) {
+  return String(env.OPEN_METEO_USAR_API_PUBLICA || "").trim().toLowerCase() === "true";
+}
+
 function aplicarConfiguracaoOpenMeteo(urlOriginal, env = process.env) {
   const url = new URL(urlOriginal);
   const apiKey = String(env.OPEN_METEO_API_KEY || "").trim();
-  const producao = String(env.NODE_ENV || "").toLowerCase() === "production";
 
   if (!HOSTS_PUBLICOS.has(url.hostname)) {
     throw new Error(`Host Open-Meteo não reconhecido: ${url.hostname}`);
   }
 
-  if (producao && !apiKey) {
+  if (!apiKey && apiPublicaPermitida(env)) return url.toString();
+
+  if (!apiKey) {
     const erro = new Error(
-      "OPEN_METEO_API_KEY é obrigatória em produção: a API gratuita da Open-Meteo não autoriza uso comercial.",
+      "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo (ou defina OPEN_METEO_USAR_API_PUBLICA=true).",
     );
     erro.code = "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED";
     throw erro;
@@ -37,4 +45,4 @@ function removerCredenciaisOpenMeteo(urlOriginal) {
   return url.toString();
 }
 
-module.exports = { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo };
+module.exports = { apiPublicaPermitida, aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo };

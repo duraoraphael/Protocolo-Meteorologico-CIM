@@ -48,7 +48,9 @@ function mapearFontesDoRelatorio(base, mar, qualidadeAr, fonteMeteorologica) {
   fontesPorCampo["ar.pm25Medio"] = fonteDo(qualidadeAr?.pm25Medio, fonteAr);
   fontesPorCampo["ar.pm10Medio"] = fonteDo(qualidadeAr?.pm10Medio, fonteAr);
   fontesPorCampo["ar.iqar"] = fonteDo(qualidadeAr?.iqar, fonteAr);
-  fontesPorCampo["ar.uvMax"] = fonteDo(qualidadeAr?.uvMax, qualidadeAr?.fonteUv || fonteAr);
+  fontesPorCampo["ar.usAqi"] = fonteDo(qualidadeAr?.usAqi, fonteAr);
+  fontesPorCampo["ar.uvAtual"] = fonteDo(qualidadeAr?.uvAtual, qualidadeAr?.fonteUv || fonteAr);
+  fontesPorCampo["ar.uvMax"] = fonteDo(qualidadeAr?.uvMax, "Open-Meteo — previsão meteorológica");
   fontesPorCampo.atual = fonteDo(base?.atual, base?.atual?.fonte || fonteMeteorologica);
 
   return {

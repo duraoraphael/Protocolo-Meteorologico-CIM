@@ -87,13 +87,15 @@ function montarPrevisaoProximosDiasOpenMeteo(cidade, previsaoDias, { agora = new
       umidadeMaxPct: Number.isFinite(previsto?.umidadeMax) ? previsto.umidadeMax : null,
       umidadeMinPct: Number.isFinite(previsto?.umidadeMin) ? previsto.umidadeMin : null,
       condicao: previsto?.condicao || null,
-      rajadaMaxKmh: null,
+      rajadaMaxKmh: Number.isFinite(previsto?.rajadaKmh) ? previsto.rajadaKmh : null,
+      fonteRajada: Number.isFinite(previsto?.rajadaKmh) ? "Open-Meteo — previsão meteorológica" : null,
       chuvaMm: Number.isFinite(previsto?.chuvaMm) ? previsto.chuvaMm : null,
       probabilidadeChuvaPct: Number.isFinite(previsto?.probabilidadeChuvaPct) ? previsto.probabilidadeChuvaPct : null,
       uvMax: Number.isFinite(previsto?.uvMax) ? previsto.uvMax : null,
     };
   });
-  const temDados = dias.some((dia) => Number.isFinite(dia.tempMaxC) || dia.condicao);
+  const temDados = dias.some((dia) => Number.isFinite(dia.tempMaxC) || dia.condicao
+    || Number.isFinite(dia.chuvaMm) || Number.isFinite(dia.uvMax) || Number.isFinite(dia.rajadaMaxKmh));
   const fonteCampo = (campo) => dias.some((dia) => Number.isFinite(dia[campo])) ? "Open-Meteo — previsão meteorológica" : INDISPONIVEL;
   return {
     fonte: "Open-Meteo — previsão meteorológica",
@@ -106,9 +108,55 @@ function montarPrevisaoProximosDiasOpenMeteo(cidade, previsaoDias, { agora = new
     dias,
     fontesCampo: {
       temperatura: fonteCampo("tempMaxC"), umidade: fonteCampo("umidadeMaxPct"),
-      rajada: INDISPONIVEL, chuva: fonteCampo("chuvaMm"),
+      rajada: fonteCampo("rajadaMaxKmh"), chuva: fonteCampo("chuvaMm"),
       probabilidadeChuva: fonteCampo("probabilidadeChuvaPct"), uv: fonteCampo("uvMax"),
       condicao: dias.some((dia) => dia.condicao) ? "Open-Meteo — previsão meteorológica" : INDISPONIVEL,
+    },
+  };
+}
+
+function complementarPrevisaoProximosDias(inmet, openMeteo) {
+  const fonteAberta = "Open-Meteo — previsão meteorológica";
+  const diasAbertos = new Map((openMeteo?.dias || []).map((dia) => [dia.data, dia]));
+  const dias = (inmet?.dias || []).map((dia) => {
+    const complementar = diasAbertos.get(dia.data);
+    const faixa = (menor, maior, limiteMin, limiteMax) => Number.isFinite(menor) && Number.isFinite(maior)
+      && menor >= limiteMin && maior <= limiteMax && menor <= maior;
+    const temperaturaOficial = faixa(dia.tempMinC, dia.tempMaxC, -90, 60);
+    const temperaturaModelada = faixa(complementar?.tempMinC, complementar?.tempMaxC, -90, 60);
+    const umidadeOficial = faixa(dia.umidadeMinPct, dia.umidadeMaxPct, 0, 100);
+    const umidadeModelada = faixa(complementar?.umidadeMinPct, complementar?.umidadeMaxPct, 0, 100);
+    const fonteTemperatura = temperaturaOficial ? "INMET — previsão oficial" : temperaturaModelada ? fonteAberta : INDISPONIVEL;
+    const fonteUmidade = umidadeOficial ? "INMET — previsão oficial" : umidadeModelada ? fonteAberta : INDISPONIVEL;
+    return {
+      ...dia,
+      tempMinC: temperaturaOficial ? dia.tempMinC : temperaturaModelada ? complementar.tempMinC : null,
+      tempMaxC: temperaturaOficial ? dia.tempMaxC : temperaturaModelada ? complementar.tempMaxC : null,
+      umidadeMinPct: umidadeOficial ? dia.umidadeMinPct : umidadeModelada ? complementar.umidadeMinPct : null,
+      umidadeMaxPct: umidadeOficial ? dia.umidadeMaxPct : umidadeModelada ? complementar.umidadeMaxPct : null,
+      condicao: dia.condicao || complementar?.condicao || null,
+      rajadaMaxKmh: Number.isFinite(complementar?.rajadaMaxKmh) ? complementar.rajadaMaxKmh : null,
+      fonteRajada: Number.isFinite(complementar?.rajadaMaxKmh) ? fonteAberta : null,
+      chuvaMm: Number.isFinite(complementar?.chuvaMm) ? complementar.chuvaMm : null,
+      probabilidadeChuvaPct: Number.isFinite(complementar?.probabilidadeChuvaPct) ? complementar.probabilidadeChuvaPct : null,
+      uvMax: Number.isFinite(complementar?.uvMax) ? complementar.uvMax : null,
+      fontesCampo: { temperatura: fonteTemperatura, umidade: fonteUmidade,
+        condicao: dia.condicao ? "INMET — previsão oficial" : complementar?.condicao ? fonteAberta : INDISPONIVEL },
+    };
+  });
+  const fonte = (campo) => dias.some((dia) => Number.isFinite(dia[campo])) ? fonteAberta : INDISPONIVEL;
+  const fontesDia = (campo) => [...new Set(dias.map((dia) => dia.fontesCampo?.[campo]).filter((valor) => valor && valor !== INDISPONIVEL))].join(" / ") || INDISPONIVEL;
+  const temComplemento = dias.some((dia) => [dia.tempMaxC, dia.umidadeMaxPct, dia.chuvaMm,
+    dia.probabilidadeChuvaPct, dia.uvMax, dia.rajadaMaxKmh].some(Number.isFinite) || dia.condicao);
+  return {
+    ...inmet,
+    status: inmet?.status === "indisponivel" && temComplemento ? "parcial" : inmet?.status,
+    dias,
+    fontesCampo: {
+      ...inmet?.fontesCampo,
+      temperatura: fontesDia("temperatura"), umidade: fontesDia("umidade"),
+      condicao: fontesDia("condicao"), rajada: fonte("rajadaMaxKmh"),
+      chuva: fonte("chuvaMm"), probabilidadeChuva: fonte("probabilidadeChuvaPct"), uv: fonte("uvMax"),
     },
   };
 }
@@ -124,14 +172,15 @@ function aplicarRajadasOceanop(previsao, diasOceanop = [], fontePadrao = "Petrob
     utilizou = true;
     return { ...dia, rajadaMaxKmh: fonte.rajadaMaxKmh, fonteRajada: fonte.fonte || fontePadrao, rajadaPrevistaEm: fonte.rajadaPrevistaEm || null, rajadaLocal: fonte.local || null };
   });
-  const fontes = [...new Set(diasOceanop.map((dia) => dia?.fonte || fontePadrao).filter(Boolean))];
-  return utilizou ? { ...previsao, dias, fontesCampo: { ...previsao.fontesCampo, rajada: fontes.join(" / ") } } : previsao;
+  const fonteResumo = [...new Set(dias.map((dia) => dia.fonteRajada).filter(Boolean))].join(" / ");
+  return utilizou ? { ...previsao, dias, fontesCampo: { ...previsao.fontesCampo, rajada: fonteResumo } } : previsao;
 }
 
 module.exports = {
   montarPrevisaoProximosDiasInmet,
   montarPrevisaoProximosDiasOpenMeteo,
   aplicarRajadasOceanop,
+  complementarPrevisaoProximosDias,
   proximasDatas,
   dataLocalIso,
   formatarDataBr,

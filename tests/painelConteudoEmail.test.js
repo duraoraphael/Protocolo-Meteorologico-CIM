@@ -61,7 +61,7 @@ test("conteúdo do painel usa exatamente os valores e cards do e-mail", () => {
   const ce = conteudoEmailPainel(r);
   const htmlEmail = renderEmailHtml(r);
   assert.equal(ce.chuvaPrevistaMm, 1.1);
-  assert.match(htmlEmail, /CHUVA ACUMULADA\/DIA<\/div>\s*<div[^>]*>1\.1 mm/);
+  assert.match(htmlEmail, /CHUVA PREVISTA\/DIA<\/div>\s*<div[^>]*>1\.1 mm/);
   assert.equal(ce.probabilidadeChuva, 88);
   assert.match(htmlEmail, /PROBABILIDADE DE CHUVA<\/div>\s*<div[^>]*>88%/);
   assert.equal(ce.frasePrevisao, "Previsão até 00h", "fora das edições agendadas o painel cobre até 00h");
@@ -88,12 +88,13 @@ test("site mostra no card da ocorrência todas as linhas e recomendações do ca
   assert.match(tela, /Ver detalhes/, "o botão de detalhes continua disponível");
 });
 
-test("indicadores do site incluem chuva prevista, probabilidade, hora da consulta e fontes do e-mail", () => {
+test("indicadores do site incluem os valores principais sem textos auxiliares", () => {
   const tela = decodificar(telaDoPainel(relatorio()));
   assert.match(tela, /<h2 class="rotulo">Chuva prevista\/dia<\/h2><\/div><div class="valor">1\.1 <small>mm<\/small>/);
   assert.match(tela, /<h2 class="rotulo">Probabilidade de chuva<\/h2><\/div><div class="valor">88%/);
-  assert.match(tela, /Hora da consulta:<\/strong> 12:00 \(Horário de Brasília\) <span>\| Previsão até 00h<\/span>/);
-  assert.match(tela, /Fontes de dados:<\/strong> INMET \| Clima e Saúde — Ministério da Saúde \| Petrobras — OCEANOP/);
+  assert.doesNotMatch(tela, /Previsão até 00h|Previsão acumulada|Acumulado observado no dia/);
+  assert.doesNotMatch(tela, /Hora da consulta|Fontes de dados|12:00 \(Horário de Brasília\)/);
+  assert.doesNotMatch(tela, /Fonte e referência|Referência da previsão|Previsão municipal INMET/);
 });
 
 test("card do e-mail sem ocorrência correspondente vira card próprio; mudanças do dia aparecem", () => {

@@ -1,0 +1,219 @@
+{
+  "ciclo": "santos:2026-10-26T00:43:28.049Z",
+  "localidade": "Santos",
+  "geradoEm": "2026-10-26T00:43:28.049Z",
+  "painel": {
+    "http": 200,
+    "snapshotId": "santos:2026-10-26T00:43:28.049Z",
+    "captura": "C:\\Users\\GC6I\\OneDrive - PETROBRAS\\Documentos\\Protocolo-Meteorologico-CIM\\tmp\\validacao-ciclo-real\\santos-painel.png"
+  },
+  "pdf": {
+    "bytes": 261550,
+    "arquivo": "C:\\Users\\GC6I\\OneDrive - PETROBRAS\\Documentos\\Protocolo-Meteorologico-CIM\\tmp\\validacao-ciclo-real\\santos-informativo.pdf"
+  },
+  "email": {
+    "bytes": 17605,
+    "arquivo": "C:\\Users\\GC6I\\OneDrive - PETROBRAS\\Documentos\\Protocolo-Meteorologico-CIM\\tmp\\validacao-ciclo-real\\santos-email.html"
+  },
+  "indicadores": {
+    "temperaturaObservada": {
+      "localidade": "santos",
+      "indicador": "temperaturaObservada",
+      "valor": 20,
+      "unidade": "°C",
+      "fonte": "INMET — estação automática (A765)",
+      "referenciaEm": "2026-10-26T00:00:00.000Z",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "umidadeObservada": {
+      "localidade": "santos",
+      "indicador": "umidadeObservada",
+      "valor": 100,
+      "unidade": "%",
+      "fonte": "INMET — estação automática (A765)",
+      "referenciaEm": "2026-10-26T00:00:00.000Z",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "temperaturaMinPrevista": {
+      "localidade": "santos",
+      "indicador": "temperaturaMinPrevista",
+      "valor": 16,
+      "unidade": "°C",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "25/10/2026",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "temperaturaMaxPrevista": {
+      "localidade": "santos",
+      "indicador": "temperaturaMaxPrevista",
+      "valor": 23,
+      "unidade": "°C",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "25/10/2026",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "umidadeMinPrevista": {
+      "localidade": "santos",
+      "indicador": "umidadeMinPrevista",
+      "valor": 90,
+      "unidade": "%",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "25/10/2026",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "umidadeMaxPrevista": {
+      "localidade": "santos",
+      "indicador": "umidadeMaxPrevista",
+      "valor": 100,
+      "unidade": "%",
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "25/10/2026",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "rajadaPrevista": {
+      "localidade": "santos",
+      "indicador": "rajadaPrevista",
+      "valor": null,
+      "unidade": "km/h",
+      "fonte": "Petrobras — OCEANOP",
+      "referenciaEm": null,
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "indisponivel",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "probabilidadeChuva": {
+      "localidade": "santos",
+      "indicador": "probabilidadeChuva",
+      "valor": null,
+      "unidade": "%",
+      "fonte": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": null,
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "indisponivel",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "chuvaPrevistaJanela": {
+      "localidade": "santos",
+      "indicador": "chuvaPrevistaJanela",
+      "valor": null,
+      "unidade": "mm",
+      "fonte": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": null,
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "indisponivel",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "chuvaAcumuladaEstimada": {
+      "localidade": "santos",
+      "indicador": "chuvaAcumuladaEstimada",
+      "valor": null,
+      "unidade": "mm",
+      "fonte": "Open-Meteo — previsão meteorológica",
+      "referenciaEm": null,
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "indisponivel",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "qualidadeAr": {
+      "localidade": "santos",
+      "indicador": "qualidadeAr",
+      "valor": null,
+      "unidade": "US AQI",
+      "fonte": "Open-Meteo Air Quality / CAMS",
+      "referenciaEm": null,
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "indisponivel",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "qualidadeArClassificacao": {
+      "localidade": "santos",
+      "indicador": "qualidadeArClassificacao",
+      "valor": null,
+      "unidade": null,
+      "fonte": "Open-Meteo Air Quality / CAMS",
+      "referenciaEm": null,
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "indisponivel",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "condicaoGeral": {
+      "localidade": "santos",
+      "indicador": "condicaoGeral",
+      "valor": "Muitas nuvens com pancadas de chuva e trovoadas",
+      "unidade": null,
+      "fonte": "INMET — previsão oficial",
+      "referenciaEm": "25/10/2026",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "indiceUv": {
+      "localidade": "santos",
+      "indicador": "indiceUv",
+      "valor": null,
+      "unidade": "índice UV",
+      "fonte": "Open-Meteo Air Quality / CAMS",
+      "referenciaEm": null,
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "indisponivel",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "avisosOficiais": {
+      "localidade": "santos",
+      "indicador": "avisosOficiais",
+      "valor": [
+        {
+          "id": "urn:oid:2.49.0.0.76.0.2026.28564.1",
+          "idAviso": "28564",
+          "sequencia": 1,
+          "encerrado": false,
+          "estados": "Goiás,Minas Gerais,Paraná,São Paulo,Espírito Santo,Mato Grosso do Sul,Bahia,Mato Grosso,Rio de Janeiro,Distrito Federal",
+          "totalMunicipios": 2264,
+          "atualizadoEm": "2026-10-26T00:00:00.000Z",
+          "descricao": "Tempestade",
+          "severidade": "Perigo Potencial",
+          "cor": "#FFFE00",
+          "inicio": "2026-10-25 21:40",
+          "fim": "2026-10-25 23:59",
+          "riscos": [
+            "Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h), e queda de granizo. Baixo risco de corte de energia elétrica, estragos em plantações, queda de galhos de árvores e de alagamentos."
+          ],
+          "instrucoes": [
+            "Em caso de rajadas de vento: (não se abrigue debaixo de árvores, pois há leve risco de queda e descargas elétricas e não estacione veículos próximos a torres de transmissão e placas de propaganda).",
+            "Evite usar aparelhos eletrônicos ligados à tomada.",
+            "Obtenha mais informações junto à Defesa Civil (telefone 199) e ao Corpo de Bombeiros (telefone 193)."
+          ]
+        }
+      ],
+      "unidade": null,
+      "fonte": "INMET — avisos oficiais",
+      "referenciaEm": "2026-10-26T00:43:28.049Z",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    },
+    "excessoCalor": {
+      "localidade": "santos",
+      "indicador": "excessoCalor",
+      "valor": "Sem excesso",
+      "unidade": null,
+      "fonte": "Clima e Saúde — Ministério da Saúde",
+      "referenciaEm": "2026-10-25",
+      "consultadoEm": "2026-10-26T00:43:28.049Z",
+      "statusValidacao": "operacional",
+      "cicloId": "santos:2026-10-26T00:43:28.049Z"
+    }
+  }
+}

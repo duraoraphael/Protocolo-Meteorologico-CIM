@@ -8,14 +8,14 @@ const PASTA = path.join(__dirname, "..", "artifacts", "auditoria-alertas-0815");
 
 function previsaoD3() {
   return {
-    fonte: "INMET / OCEANOP — evidência sem consulta externa",
+    fonte: "INMET / Open-Meteo Forecast — evidência sem consulta externa",
     status: "ok",
     consultadoEm: "2026-10-21T11:00:00.000Z",
     fuso: "America/Sao_Paulo",
     localidade: { nome: "Macaé", uf: "RJ" },
     fontesCampo: {
-      temperatura: "INMET", umidade: "INMET", rajada: "OCEANOP",
-      chuva: "INMET", probabilidadeChuva: "Informação indisponível", uv: "Informação indisponível",
+      temperatura: "INMET", umidade: "INMET", rajada: "Open-Meteo Forecast",
+      chuva: "Open-Meteo Forecast", probabilidadeChuva: "Open-Meteo Forecast", uv: "Informação indisponível",
       condicao: "INMET",
     },
     dias: [
@@ -34,10 +34,10 @@ function relatorio(horarioAgendado) {
     dataFormatadaCurta: "21/10/2026",
     horaConsulta: horarioAgendado,
     horarioAgendado,
-    previsaoAte: "00h",
-    periodoCoberto: inicial ? "hoje, das 08h até 00h" : "hoje, das 15h até 00h",
+    previsaoAte: inicial ? "15h" : "00h",
+    periodoCoberto: inicial ? "hoje, das 08h até 15h" : "hoje, das 15h até 00h",
     mudancasDia: ["Grau geral: ATENÇÃO → ALERTA.", "Rajada prevista (previsão das 08:00 → previsão das 15:00): 35 km/h → 45 km/h."],
-    previsaoDias: [{ periodo: inicial ? "Hoje (08h–00h)" : "Hoje (15h–00h)", data: "2026-10-21", condicao: "Nublado", tempMin: 21, tempMax: 30, umidadeMin: 55, umidadeMax: 90, chuvaMm: 4, rajadaKmh: inicial ? 35 : 45 }],
+    previsaoDias: [{ periodo: inicial ? "Hoje (08h–15h)" : "Hoje (15h–00h)", data: "2026-10-21", condicao: "Nublado", tempMin: 21, tempMax: 30, umidadeMin: 55, umidadeMax: 90, chuvaMm: 4, rajadaKmh: inicial ? 35 : 45 }],
     condicaoGeral: "Nublado",
     probabilidadeChuvaPrevista: 60,
     tabelaTemperaturaUmidade: [{ fonte: "INMET — previsão oficial", tempMin: 21, tempMax: 30, umidadeMin: 55, umidadeMax: 90 }],
@@ -49,7 +49,7 @@ function relatorio(horarioAgendado) {
     severidade: { grau: inicial ? "ATENÇÃO" : "ALERTA", eventos: [] },
     avisosInmet: [], avisosInmetStatus: "operacional",
     divergencias: [], avisosColeta: [], fontesAutomatizadas: [], fontesManuais: [],
-    fontesPorCampo: { tempMin: "INMET", tempMax: "INMET", umidadeMin: "INMET", umidadeMax: "INMET", rajadaMaxKmh: "OCEANOP", precipitacaoTotalMm: "INMET", probabilidadeChuvaPrevista: "Informação indisponível" },
+    fontesPorCampo: { tempMin: "INMET", tempMax: "INMET", umidadeMin: "INMET", umidadeMax: "INMET", rajadaMaxKmh: "Open-Meteo Forecast", precipitacaoTotalMm: "Open-Meteo Forecast", probabilidadeChuvaPrevista: "Open-Meteo Forecast" },
     deslocamento: { pedestres: [], transporte: [], condutores: [] },
     edificacao: [],
     previsaoProximosDias: previsaoD3(),

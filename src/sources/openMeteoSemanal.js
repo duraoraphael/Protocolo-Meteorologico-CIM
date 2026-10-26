@@ -7,7 +7,6 @@
 
 const { descreverCodigoSemanal, CODIGOS_TEMPESTADE } = require("./wmoCodes");
 const { buscarJsonComRetentativa } = require("./httpJsonClient");
-const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
 
 // A consulta semanal pede 12 parâmetros diários por 7 dias — bem mais pesada
 // que a diária, e a Open-Meteo às vezes estoura o tempo de resposta.
@@ -46,6 +45,7 @@ const CAMPOS_DIARIOS = [
   "precipitation_sum",
   "precipitation_probability_max",
   "wind_speed_10m_max",
+  "wind_gusts_10m_max",
   "uv_index_max",
 ].join(",");
 
@@ -69,7 +69,7 @@ function converterDias(d) {
     precipitacaoMm: arred(d.precipitation_sum?.[i], 1),
     probabilidadeChuva: arred(d.precipitation_probability_max?.[i]),
     ventoMaxKmh: arred(d.wind_speed_10m_max?.[i]),
-    rajadaMaxKmh: null,
+    rajadaMaxKmh: arred(d.wind_gusts_10m_max?.[i], 1),
     uvMax: arred(d.uv_index_max?.[i], 1),
   }));
 }
@@ -92,8 +92,10 @@ async function buscarSemanaEmLote(pontos, diasPrevisao = 7) {
       timezone: "auto",
       forecast_days: String(diasPrevisao),
       wind_speed_unit: "kmh",
+      precipitation_unit: "mm",
+      models: "best_match",
     });
-    const url = aplicarConfiguracaoOpenMeteo(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+    const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
 
     try {
       const json = await buscarComRetentativa(url, "Open-Meteo (semanal)");
@@ -102,7 +104,7 @@ async function buscarSemanaEmLote(pontos, diasPrevisao = 7) {
       lote.forEach((_, i) => {
         const local = locais[i];
         resultados[inicio + i] = local?.daily
-          ? { fonte: "Open-Meteo", url: removerCredenciaisOpenMeteo(url), dias: converterDias(local.daily) }
+          ? { fonte: "Open-Meteo", url, dias: converterDias(local.daily) }
           : { erro: "Open-Meteo não retornou dados para este ponto." };
       });
     } catch (erro) {

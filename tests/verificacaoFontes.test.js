@@ -46,12 +46,14 @@ function fontesOk(extra = {}) {
   return {
     avisosInmet: async () => ({ avisos: [] }),
     previsaoInmet: async () => ({ data: "13/10/2026", periodos: { manha: PERIODO, tarde: PERIODO, noite: PERIODO } }),
-    observacaoInmet: async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: 22, temperaturaMaxC: 37, chuvaUltimaHoraMm: 0.8, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: 31 } }),
-    openMeteo: async () => ({ tempMin: 20, tempMax: 31, umidadeMin: 45, umidadeMax: 90, precipitacaoTotalMm: 2, probabilidadeChuvaMax: 60, uvMax: 8, periodos: { manha: { velocidadeMediaKmh: 12, direcao: "E" } } }),
+    observacaoInmet: async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaAtualC: 28, umidadeAtualPct: 65, temperaturaMinC: 22, temperaturaMaxC: 37, chuvaUltimaHoraMm: 0.8, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: 31 } }),
+    airQuality: async () => ({ usAqi: 22, classificacao: { nivel: "NORMAL" }, referenciaEm: "2026-10-13T12:00:00.000Z" }),
+    openMeteo: async () => ({ tempMin: 20, tempMax: 31, umidadeMin: 45, umidadeMax: 90,
+      precipitacaoPrevistaDiaMm: 2, precipitacaoTotalMm: 1.2, probabilidadeChuvaDiariaPct: 60,
+      probabilidadeChuvaMax: 55, rajadaMaxKmh: 42, uvMax: 8,
+      periodos: { manha: { velocidadeMediaKmh: 12, direcao: "E" } } }),
     marine: async () => ({ dados: { alturaMaxDiaM: 1.2, periodos: [{ periodoOndaS: 8 }] }, erro: null }),
-    rajadasTetraTech: async () => ({ picosDiarios: [{ rajadaPrevistaKmH: 42 }] }),
     climaSaude: async () => ({ status: "operacional", dados: { dataConsulta: "2026-10-13", municipio: "Rio de Janeiro", uf: "RJ", ehf: { classificacao: "Sem excesso" }, riscoCombinado: "Normal" } }),
-    oceanop: async (ponto) => ({ previsoes: [{ local: ponto.id }] }),
     corRio: (opcoes) => criarServicoCorRio({ ...opcoes, fetchImpl: fetchCorRio, esperarFn: semEspera }),
     fetch: fetchAna(competenciaDeChave("2026-08")),
     ...extra,
@@ -65,10 +67,26 @@ function itemDe(resultado, fonte) {
 test("todas as fontes saudáveis: nenhum problema; integrações sem configuração não contam como problema", async () => {
   const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk() });
   assert.deepEqual(r.problemas, []);
-  assert.equal(itemDe(r, "Oceanop").situacao, SITUACAO.OK);
   assert.equal(itemDe(r, "Open-Meteo").situacao, SITUACAO.OK);
   assert.equal(itemDe(r, "Open-Meteo Marine").situacao, SITUACAO.OK);
-  assert.equal(itemDe(r, "Tetra Tech — rajada").situacao, SITUACAO.OK);
+  assert.equal(itemDe(r, "Open-Meteo Air Quality / CAMS").situacao, SITUACAO.OK);
+});
+
+test("INMET com cache vencido nao e apresentado como observacao atual", async () => {
+  const observacaoInmet = async () => ({ status: "degradado", mensagem: "Consulta falhou; usando observacao anterior.", observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: 22, temperaturaMaxC: 37, chuvaUltimaHoraMm: 0.8, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: 31 } });
+  const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ observacaoInmet }) });
+  const item = r.itens.find((i) => i.escopo === "Rio de Janeiro" && i.fonte.includes("Observ"));
+  assert.equal(item.situacao, SITUACAO.DEGRADADO);
+  assert.match(item.detalhe, /Consulta falhou/);
+});
+
+test("cache maritimo vencido aparece como degradado e conta como problema", async () => {
+  const marine = async () => ({ dados: { alturaMaxDiaM: 1.2, periodos: [{ periodoOndaS: 8 }], desatualizado: true }, erro: new Error("Falha de consulta; cache usado."), health: { status: "degradado" } });
+  const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ marine }) });
+  const item = itemDe(r, "Open-Meteo Marine");
+  assert.equal(item.situacao, SITUACAO.DEGRADADO);
+  assert.match(item.detalhe, /cache usado/);
+  assert.ok(r.problemas.includes(item));
 });
 
 test("Clima e Saúde com layout alterado é classificado como formato alterado, não como fora do ar", async () => {
@@ -102,21 +120,16 @@ test("COR-Rio com resposta fora do formato aponta a parte afetada", async () => 
   assert.equal(itemDe(r, "COR-Rio (estágio operacional)").situacao, SITUACAO.OK);
 });
 
-test("INMET Observação sem temperatura, chuva ou rajada gera campos ausentes", async () => {
-  const observacaoInmet = async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaMinC: null, temperaturaMaxC: null, chuvaUltimaHoraMm: null, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: null } });
+test("INMET Observação sem temperatura e umidade atuais, chuva ou rajada gera campos ausentes", async () => {
+  const observacaoInmet = async () => ({ observacao: { medidoEm: "2026-10-13T12:00:00.000Z", estacao: { codigo: "A636" }, temperaturaAtualC: null, umidadeAtualPct: null, temperaturaMinC: null, temperaturaMaxC: null, chuvaUltimaHoraMm: null, ventoVelocidadeKmh: 12, ventoDirecaoGraus: 180, rajadaKmh: null } });
   const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ observacaoInmet }) });
   const item = itemDe(r, "INMET Observação");
   assert.equal(item.situacao, SITUACAO.CAMPOS_AUSENTES);
+  assert.match(item.detalhe, /temperatura atual observada/);
+  assert.match(item.detalhe, /umidade atual observada/);
   assert.match(item.detalhe, /temperatura mínima observada/);
   assert.match(item.detalhe, /chuva horária observada/);
   assert.match(item.detalhe, /rajada medida pela estação/);
-});
-
-test("falha de DNS no OCEANOP vira indisponível sem acionar Climatempo", async () => {
-  const dns = Object.assign(new Error("OCEANOP: falha de resolução DNS"), { tipo: "dns" });
-  const r = await executarVerificacao({ cidades: [RIO], env: {}, fontes: fontesOk({ oceanop: async () => { throw dns; } }) });
-  assert.equal(itemDe(r, "Oceanop").situacao, SITUACAO.INDISPONIVEL);
-  assert.equal(r.itens.some((item) => /Climatempo/i.test(item.fonte)), false);
 });
 
 test("ANA informa a publicação mais recente e avisa quando a competência fixada é outra", async () => {
@@ -144,6 +157,7 @@ test("utilitários: campos faltando e classificação de erro", () => {
   assert.deepEqual(camposFaltando({ a: { b: 0 }, c: "" }, { "a.b": "B", c: "C", "d.e": "E" }), ["C", "E"]);
   assert.equal(situacaoDoErro(Object.assign(new Error("x"), { name: "ParserError" })), SITUACAO.FORMATO_ALTERADO);
   assert.equal(situacaoDoErro(Object.assign(new Error("x"), { tipo: "timeout" })), SITUACAO.INDISPONIVEL);
+  assert.equal(situacaoDoErro(Object.assign(new Error("licenca"), { code: "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED" })), SITUACAO.NAO_CONFIGURADA);
 });
 
 test("e-mail técnico: escapa conteúdo, só aceita endereços válidos e não envia sem destinatário", async () => {

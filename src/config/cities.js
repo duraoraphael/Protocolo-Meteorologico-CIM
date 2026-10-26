@@ -99,6 +99,7 @@ const CIDADES = {
     costeira: true,
     nome: "Aracaju",
     uf: "SE",
+    fusoHorario: "America/Maceio",
     latitude: -10.9162061,
     longitude: -37.0774655,
     pontoMar: { latitude: -11.05, longitude: -36.98, referencia: "Atlântico ao largo de Aracaju" },
@@ -162,14 +163,16 @@ const CIDADES = {
 
   araucaria: {
     chave: "araucaria",
-    nome: "Araucária",
+    nome: "Wenceslau Bráz",
     uf: "PR",
-    latitude: -25.5861107,
-    longitude: -49.4051209,
-    codigoIbge: "4101804",
-    climaSaudeUrl: "https://clima.saude.gov.br/pr/araucaria?modo=ehf",
+    // 23°52'05.5"S, 49°48'16.2"W. A chave "araucaria" é mantida por
+    // compatibilidade com destinatários, .env e histórico.
+    latitude: -23.868194,
+    longitude: -49.8045,
+    codigoIbge: "4128500",
+    climaSaudeUrl: "https://clima.saude.gov.br/pr/wenceslau-braz?modo=ehf",
     links: {
-      inmet: "https://previsao.inmet.gov.br/4101804",
+      inmet: "https://previsao.inmet.gov.br/4128500",
       defesaCivilTelefone: "199",
     },
   },
@@ -179,6 +182,7 @@ const CIDADES = {
     costeira: true,
     nome: "Salvador",
     uf: "BA",
+    fusoHorario: "America/Bahia",
     latitude: -12.9777,
     longitude: -38.5016,
     pontoMar: { latitude: -13.05, longitude: -38.30, referencia: "Atlântico a leste de Salvador" },

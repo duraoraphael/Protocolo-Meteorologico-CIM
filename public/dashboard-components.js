@@ -41,8 +41,8 @@ const Dashboard = (() => {
     'ATENÇÃO': { classe:'atencao', icone:'info' },
   };
   const nivel = (grau) => NIVEIS[grau] || { classe:'indefinido', icone:'info' };
-  function metric(label, value, detail, name, extra = '', source = '', badge = '') {
-    return `<article class="card ${extra}"><div class="metric-heading">${icon(name)}<h2 class="rotulo">${label}</h2>${badge}</div><div class="valor">${value}</div><p class="detalhe">${escape(detail)}</p>${source ? `<p class="metric-source">${escape(source)}</p>` : ''}</article>`;
+  function metric(label, value, detail, name, extra = '', _source = '', badge = '') {
+    return `<article class="card ${extra}"><div class="metric-heading">${icon(name)}<h2 class="rotulo">${label}</h2>${badge}</div><div class="valor">${value}</div></article>`;
   }
   function dateTimeBrasilia(value) {
     if (!value || !Number.isFinite(Date.parse(value))) return null;
@@ -56,29 +56,29 @@ const Dashboard = (() => {
     const dados = integracao?.dados;
     const fonte = dados?.source || 'Clima e Saúde — Ministério da Saúde';
     if (!integracao || integracao.status === 'nao_configurada') {
-      return metric('Calor e Saúde', 'Não configurado', 'Fonte não configurada para esta base', 'thermometer', 'heat span-2', fonte, '<span class="selo selo-neutro">Sem dado</span>');
+      return metric('Calor e Saúde', 'Não configurado', 'Dado indisponível', 'thermometer', 'heat span-2', fonte, '<span class="selo selo-neutro">Sem dado</span>');
     }
     if (!dados) {
-      return metric('Calor e Saúde', 'Indisponível', integracao.mensagem || 'Dados indisponíveis nesta atualização', 'thermometer', 'heat span-2 heat-indisponivel', fonte, '<span class="selo selo-indisponivel">Indisponível</span>');
+      return metric('Calor e Saúde', 'Indisponível', 'Dados indisponíveis', 'thermometer', 'heat span-2 heat-indisponivel', fonte, '<span class="selo selo-indisponivel">Indisponível</span>');
     }
-    const grau = dados.nivel?.grau || 'NORMAL';
-    const tituloCalor = TitulosAlerta.formatarTitulo('CALOR / RISCO À SAÚDE', grau);
+    const grau = dados.nivel?.grau;
+    const tituloCalor = grau ? TitulosAlerta.formatarTitulo('CALOR / RISCO À SAÚDE', grau) : 'Calor / risco à saúde';
     const classificacao = dados.ehf?.classificacao;
     const valor = /^sem excesso$/i.test(classificacao || '') ? 'Sem excesso de calor' : classificacao ? `EHF ${escape(classificacao)}` : 'Classificação indisponível';
     const maxima = dados.temperatura?.maxima == null ? 'Máxima prevista indisponível' : `Máxima prevista ${dados.temperatura.maxima} °C`;
     // EHF é diário: coleta válida do mesmo dia (Brasília) segue atual, ainda
     // que lida do armazenamento; de outro dia (ou sem data) é desatualizada.
     const diaBrasilia = (v) => Number.isFinite(Date.parse(v || '')) ? new Intl.DateTimeFormat('en-CA', { timeZone:'America/Sao_Paulo' }).format(new Date(v)) : null;
-    const atual = Boolean(diaBrasilia(dados.consultadoEm)) && diaBrasilia(dados.consultadoEm) === diaBrasilia(new Date().toISOString());
+    const dataCiclo = diaBrasilia(r.geradoEmISO || new Date().toISOString());
+    const atual = ['operacional', 'armazenado', 'degradado'].includes(integracao.status) && Boolean(grau)
+      && dados.dataConsulta === dataCiclo && diaBrasilia(dados.consultadoEm) === dataCiclo;
     if (!atual) {
-      const coleta = dateTimeBrasilia(dados.consultadoEm) || 'horário indisponível';
-      return metric(tituloCalor, valor, `${maxima} · última coleta válida: ${coleta}`, 'thermometer', 'heat span-2 heat-desatualizado', fonte, '<span class="selo selo-indisponivel">Desatualizado</span>');
+      return metric('Calor / risco à saúde', 'Dado desatualizado', maxima, 'thermometer', 'heat span-2 heat-desatualizado', fonte, '<span class="selo selo-indisponivel">Desatualizado</span>');
     }
     const selo = grau === 'NORMAL'
       ? '<span class="selo selo-normal">Normal</span>'
       : `<span class="selo selo-${nivel(grau).classe}">${escape(grau)}${dados.nivel?.protocolo ? ` · ${escape(dados.nivel.protocolo)}` : ''}</span>`;
-    const coleta = integracao.status === 'operacional' ? '' : ` · coleta de ${dateTimeBrasilia(dados.consultadoEm)}`;
-    return metric(tituloCalor, valor, `${maxima}${coleta}`, 'thermometer', `heat span-2${grau === 'NORMAL' ? '' : ` heat-${nivel(grau).classe}`}`, fonte, selo);
+    return metric(tituloCalor, valor, maxima, 'thermometer', `heat span-2${grau === 'NORMAL' ? '' : ` heat-${nivel(grau).classe}`}`, fonte, selo);
   }
 
   // Indicadores marítimos só para bases em que o monitoramento de mar se aplica.
@@ -90,14 +90,11 @@ const Dashboard = (() => {
     const gusts = (r.ventoPorPeriodo || []).map(p => p.rajadaMaxKmh).filter(v => v != null);
     const gustValue = Number.isFinite(r.rajadaMaxKmh) ? r.rajadaMaxKmh : (gusts.length ? Math.max(...gusts) : null);
     const aq = r.qualidadeAr;
-    const arDisponivel = Number.isFinite(aq?.iqar) && aq?.classificacao?.exibicao;
-    const classeIqAr = { Boa: 'boa', Moderada: 'moderada', Ruim: 'ruim', 'Muito Ruim': 'muito-ruim', 'Péssima': 'pessima' }[aq?.classificacao?.nivel];
+    const arDisponivel = Number.isFinite(aq?.usAqi) && aq?.classificacao?.nivel;
+    const classeIqAr = { NORMAL: 'normal', MODERADO: 'moderada', RUIM: 'ruim-us' }[aq?.classificacao?.nivel];
     const ar = arDisponivel
       ? `<span class="iqar-classe iqar-${classeIqAr}">${escape(aq.classificacao.exibicao)}</span>`
       : 'Informação indisponível';
-    const arDetalhe = arDisponivel
-      ? `IQAr ${aq.iqar} · estimativa referente a ${String(aq.referenciaEm || '').replace('T', ' às ')}`
-      : aq?.motivoIndisponibilidade || 'Sem dados modelados válidos ou licença comercial configurada';
     const fields = r.fontesPorCampo || {};
     const sources = (...keys) => {
       const valores = [...new Set(keys.map(k=>fields[k]).filter(Boolean))];
@@ -108,34 +105,20 @@ const Dashboard = (() => {
       const source = sources(...keys);
       return source && source !== 'Indisponível' ? source : fallback;
     };
-    const uv = Number.isFinite(r.indiceUv?.maximoPrevisto)
-      ? r.indiceUv.maximoPrevisto
-      : Number.isFinite(aq?.uvMax) ? aq.uvMax : null;
+    const uv = Number.isFinite(r.indiceUv?.valorAtual)
+      ? r.indiceUv.valorAtual
+      : Number.isFinite(aq?.uvAtual) ? aq.uvAtual : null;
     const uvClassificacao = r.indiceUv?.classificacao || aq?.uvClassificacao?.nivel;
-    const uvDetail = uv == null
-      ? 'Previsão de índice UV indisponível nesta atualização'
-      : [uvClassificacao, aq?.horaPicoUv ? `Pico previsto às ${aq.horaPicoUv}` : null].filter(Boolean).join(' · ') || 'Máximo previsto para o dia';
+    const uvDetail = uv == null ? 'Dado indisponível' : uvClassificacao || '';
     const uvReportedSource = r.indiceUv?.fonte;
     const uvSource = uvReportedSource && uvReportedSource !== 'Indisponível'
       ? uvReportedSource
-      : sourceOrPolicy('Informação indisponível', 'ar.uvMax');
+      : sourceOrPolicy('Informação indisponível', 'ar.uvAtual');
     const gustSource = sourceOrPolicy('Informação indisponível', 'rajadaMaxKmh','periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh');
-    const gustDetail = !Number.isFinite(gustValue)
-      ? 'As fontes autorizadas não publicaram máxima numérica válida de rajada'
-      : gustSource.includes('OCEANOP')
-        ? `Máxima prevista pela OCEANOP${r.rajadaPrevistaReferencia?.periodoReferencia ? ` · ${r.rajadaPrevistaReferencia.periodoReferencia}` : ''}`
-      : 'Máxima prevista na fonte indicada';
+    const gustDetail = Number.isFinite(gustValue) ? 'Máxima prevista no período' : 'Dado indisponível';
     const comMar = marAplicavel(r);
-    const coberturaTemp = r.coberturaTemperaturaObservada || {};
-    const coberturaUmidade = r.coberturaUmidadeObservada || {};
-    const tempObservada = pair(r.temperaturaObservadaMinC, r.temperaturaObservadaMaxC, '°');
-    const umidadeObservada = pair(r.umidadeObservadaMinPct, r.umidadeObservadaMaxPct, '%');
-    const detalheTemp = tempObservada === '—'
-      ? 'Mínima / máxima previstas para o dia · INMET'
-      : `Prevista para o dia · observada parcial ${tempObservada} (${coberturaTemp.amostras || 0}/${coberturaTemp.horasEsperadas || 0} leituras)`;
-    const detalheUmidade = umidadeObservada === '—'
-      ? 'Mínima / máxima previstas para o dia · INMET'
-      : `Prevista para o dia · observada parcial ${umidadeObservada} (${coberturaUmidade.amostras || 0}/${coberturaUmidade.horasEsperadas || 0} leituras)`;
+    const detalheTemp = 'Mínima e máxima previstas';
+    const detalheUmidade = 'Mínima e máxima previstas';
     const ce = r.conteudoEmail;
     const cardsEmail = ce ? [
       metric('Chuva prevista/dia', ce.chuvaPrevistaMm == null ? 'Dado indisponível' : unit(ce.chuvaPrevistaMm, ' <small>mm</small>'), 'Previsão acumulada para o dia · mesmo valor do e-mail', 'rain', '', ce.fonteChuvaPrevista || ''),
@@ -146,19 +129,17 @@ const Dashboard = (() => {
       metric('Umidade relativa prevista', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
       metric('Rajada prevista', Number.isFinite(gustValue) ? formatarRajadaPrevista(gustValue) : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
       ...cardsEmail,
-      metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), r.coberturaObservacoesInmet?.parcial ? `Dia civil local · parcial (${r.coberturaObservacoesInmet.amostras || 0}/${r.coberturaObservacoesInmet.horasEsperadas || 0} leituras)` : 'Dia civil local · cobertura completa', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
-      metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), r.precipitacaoHoraReferencia ? `Hora de referência: ${escape(r.precipitacaoHoraReferencia)} · INMET` : 'Hora de referência indisponível', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
-      metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), r.coberturaChuva24h?.parcial ? `Acumulado incompleto · ${r.coberturaChuva24h.amostras || 0}/24 leituras INMET` : 'Acumulado completo das últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
+      metric('Chuva acumulada observada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), 'Acumulado observado no dia', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
+      metric('Chuva acumulada estimada', unit(r.precipitacaoAcumuladaEstimadaMm, ' <small>mm</small>'), r.precipitacaoAcumuladaEstimadaStatus === 'operacional' ? 'Estimativa acumulada no período' : 'Dado indisponível', 'rain', '', sourceOrPolicy('Open-Meteo — estimativa modelada', 'precipitacaoAcumuladaEstimadaMm')),
+      metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), 'Acumulado na última hora', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
+      metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), 'Acumulado nas últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
       metric('Índice UV', uv == null ? 'Dado indisponível' : unit(uv, ''), uvDetail, 'sun', '', uvSource),
-      metric('Condição geral', escape(r.condicaoGeral), 'Previsão para o dia', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
-      metric('Qualidade do ar', arDisponivel ? ar : escape(ar), arDetalhe, 'leaf', 'air', sources('ar.iqar')),
+      metric('Condição geral', escape(r.condicaoGeral), '', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
+      metric('Qualidade do ar', arDisponivel ? ar : escape(ar), '', 'leaf', 'air', sources('ar.usAqi')),
       comMar ? metric('Mar — altura máx. de onda', r.mar?.alturaMaxDiaM == null ? 'Indisponível' : unit(r.mar.alturaMaxDiaM, ' <small>m</small>'), r.mar?.estadoMarDia || 'Dados marítimos indisponíveis', 'waves', '', sourceOrPolicy('Informação indisponível', 'mar.alturaMaxDiaM')) : '',
       heatCard(r),
     ];
-    const frase = ce?.frasePrevisao || (r.previsaoAte ? `Previsão até ${r.previsaoAte}` : '');
-    const referencia = r.horaConsulta && (ce || r.previsaoAte) ? `<p class="previsao-referencia"><strong>Hora da consulta:</strong> ${escape(r.horaConsulta)} (Horário de Brasília)${frase ? ` <span>| ${escape(frase)}</span>` : ''}</p>` : '';
-    const fontesEmail = ce?.fontes ? `<p class="fontes-email"><strong>Fontes de dados:</strong> ${escape(ce.fontes)}</p>` : '';
-    return `<section class="indicadores" aria-labelledby="titulo-indicadores"><h2 id="titulo-indicadores" class="bloco-titulo">Indicadores meteorológicos</h2>${referencia}<div class="grid-cards">${cards.join('')}</div>${fontesEmail}</section>`;
+    return `<section class="indicadores" aria-labelledby="titulo-indicadores"><h2 id="titulo-indicadores" class="bloco-titulo">Indicadores meteorológicos</h2><div class="grid-cards">${cards.join('')}</div></section>`;
   }
 
   function table(title, name, headers, rows, detail) {
@@ -170,18 +151,16 @@ const Dashboard = (() => {
     return table('Condições de mar por período', 'waves', ['Período', 'Estado do mar', 'Altura máx.', 'Período de onda', 'Direção', 'Marulho'], (r.mar?.periodos || []).map(p => [escape(p.periodo), escape(p.estadoMar), altura(p), periodo(p), escape(p.direcaoOnda), unit(p.marulhoMaxM,' m')]), 'mar');
   }
   function windRain(r) {
-    const vento = table('Vento por período', 'wind', ['Período', 'Direção', 'Vento (velocidade média)', 'Rajada prevista (máx.)', 'Referência da previsão'], (r.ventoPorPeriodo || []).map(v => [
+    const vento = table('Vento por período', 'wind', ['Período', 'Direção', 'Vento (velocidade média)', 'Rajada prevista (máx.)'], (r.ventoPorPeriodo || []).map(v => [
       `${escape(v.periodo)}${v.janela ? ` <small>${escape(v.janela)}</small>` : ''}`,
       escape(v.direcao),
       v.velocidadeMediaKmh == null ? 'Não disponível' : unit(v.velocidadeMediaKmh, ' km/h'),
       v.rajadaMaxKmh == null ? 'Não disponível' : formatarRajadaPrevista(v.rajadaMaxKmh),
-      escape(v.referenciaInmet || 'Previsão municipal INMET'),
     ]), 'vento');
-    const chuva = table('Chuva por período', 'rain', ['Período', 'Probabilidade', 'Acumulado no período (mm)', 'Resumo INMET'], (r.chuvaPorPeriodo || []).map(item => [
+    const chuva = table('Chuva por período', 'rain', ['Período', 'Probabilidade máxima', 'Acumulado previsto (mm)'], (r.chuvaPorPeriodo || []).map(item => [
       `${escape(item.periodo)}${item.janela ? ` <small>${escape(item.janela)}</small>` : ''}`,
       item.probabilidade == null ? 'Não disponível' : unit(item.probabilidade, '%'),
       item.precipitacaoMm == null ? 'Não disponível' : unit(item.precipitacaoMm, ' mm'),
-      escape(item.resumoInmet || 'Não disponível'),
     ]), 'vento');
     return `${vento}${chuva}`;
   }
@@ -326,10 +305,9 @@ const Dashboard = (() => {
   }
 
   function currentWeather(r) {
-    const a = r.atual;
-    const time = Number.isFinite(Date.parse(a?.horario)) ? new Date(a.horario).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
+    const a = r.atual || {};
     const umidade = Number.isFinite(a?.umidadePct) ? ` · Umidade ${escape(a.umidadePct)}%` : '';
-    return `<div class="current-location">${escape(r.cidade.nome)} — ${escape(r.cidade.uf)}</div><div class="current-reading">${icon(weatherIcon(a?.codigo, a?.dia))}<div><strong>${unit(a?.temperaturaC, '<small>°C</small>')}</strong><p>${escape(a?.condicao || 'Condição atual indisponível')}${umidade}</p></div></div><div class="current-source">${a ? escape(`Observação INMET${time ? ' · '+time+' (Brasília)' : ''} · ${a.fonte || 'INMET'}`) : 'Aguardando dados da fonte'}</div>`;
+    return `<div class="current-location">${escape(r.cidade.nome)} — ${escape(r.cidade.uf)}</div><div class="current-reading">${icon(weatherIcon(a?.codigo, a?.dia))}<div><strong>${unit(a?.temperaturaC, '<small>°C</small>')}</strong><p>${escape(a?.condicao || 'Condição atual indisponível')}${umidade}</p></div></div>`;
   }
   function detailsTitle(r, type) {
     if (String(type).startsWith('ocorrencia:')) {
@@ -339,18 +317,18 @@ const Dashboard = (() => {
     return {monitoramento:'Monitoramento e fontes', mar:'Condições marítimas', vento:'Vento e chuva', sobre:'Sobre o CIM'}[type] || 'Detalhes';
   }
   function details(r, type) {
-    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: INMET para previsão, observação e avisos; Clima e Saúde para EHF e risco térmico; Petrobras — OCEANOP e Tetra Tech para vento e rajadas somente quando houver acesso e cobertura autorizados. Campos sem fonte autorizada aparecem como informação indisponível.</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
+    if (type === 'sobre') return '<p>O painel CIM integra informações meteorológicas para apoiar a tomada de decisão operacional.</p><p>Fontes: INMET para observações, previsão oficial e avisos; Open-Meteo para rajada prevista, precipitação prevista e probabilidade de chuva; Clima e Saúde para EHF e risco térmico. Campos sem valor numérico válido são identificados como indisponíveis.</p><p>Na base Rio de Janeiro, o painel “Comunicados COR-Rio” mostra o estágio operacional e os comunicados publicados pelo Centro de Operações e Resiliência da Prefeitura do Rio, que valem apenas para o município do Rio de Janeiro.</p><p>Atualização automática conforme a configuração do servidor. Dados de referência: consulte também a Defesa Civil local para confirmação operacional.</p>';
     if (!r) return '<p>Os dados desta base ainda não estão disponíveis.</p>';
     if (String(type).startsWith('ocorrencia:')) return occurrenceDetails(r, type.slice(11));
     if (type === 'mar') return `${marine(r)}<p>Ponto de referência: ${escape(r.mar?.referenciaPonto)}</p><p>Temperatura da água: ${unit(r.mar?.temperaturaMarC, '°C')}</p>`;
-    if (type === 'vento') return `${windRain(r)}<h3>Referências INMET</h3>${(r.ventoPorPeriodo || []).map(p => `<p>${escape(p.periodo)}: ${escape(p.referenciaInmet)}</p>`).join('')}`;
+    if (type === 'vento') return windRain(r);
     const fieldLabel = campo => {
       const labels={condicaoGeral:'Condição geral',atual:'Condições do horário atual',tempMin:'Temperatura mínima',tempMax:'Temperatura máxima',umidadeMin:'Umidade mínima',umidadeMax:'Umidade máxima',rajadaMaxKmh:'Rajada prevista',precipitacaoTotalMm:'Chuva acumulada/dia',precipitacaoDiariaMm:'Chuva acumulada/dia',precipitacaoHoraMm:'Chuva acumulada/Hora',direcao:'Direção do vento',intensidadeVento:'Vento',precipitacaoMm:'Chuva prevista no período',probabilidadeChuva:'Probabilidade de chuva',alturaMaxDiaM:'Altura máxima de onda',temperaturaMarC:'Temperatura da água',pm25Medio:'PM2,5',uvMax:'Índice UV',aqiUsMax:'Índice de qualidade do ar (US)'};
       const parts=campo.split('.'), key=parts.at(-1), periods={manha:'Manhã',tarde:'Tarde',noite:'Noite'};
       return labels[key] ? (periods[parts[1]] ? periods[parts[1]]+' · ' : '')+labels[key] : null;
     };
     const statusLabels = {operacional:'Operacional',degradado:'Degradado',armazenado:'Última coleta armazenada',indisponivel:'Indisponível',nao_configurada:'Não configurada',nao_aplicavel:'Não se aplica'};
-    const apiCards = (r.monitoramentoApis || []).map(api => `<article class="api-status api-${escape(api.status)}"><div><strong>${escape(api.nome)}</strong><span>${escape(statusLabels[api.status] || api.status)}</span></div><p>${escape(api.detalhe)}</p>${api.id === 'oceanop' ? `<a href="areas.html?cidade=${encodeURIComponent(r.cidade.chave)}">Abrir monitoramento Oceanop</a>` : ''}</article>`).join('');
+    const apiCards = (r.monitoramentoApis || []).map(api => `<article class="api-status api-${escape(api.status)}"><div><strong>${escape(api.nome)}</strong><span>${escape(statusLabels[api.status] || api.status)}</span></div><p>${escape(api.detalhe)}</p></article>`).join('');
     const ocorrencias = occurrencesOf(r);
     const resumoEventos = ocorrencias.length
       ? ocorrencias.map(o => `<article class="aviso-item nivel-${nivel(o.grau).classe}"><strong>${escape(tituloOcorrencia(o, NIVEIS[o.grau] ? o.grau : o.classificacaoOficial))}</strong><p>${escape(o.resumo)}</p><p>Validade: ${escape(o.validade)} · Fonte de dados: ${escape((o.fontes || []).join(' + '))}</p><button class="text-link det-link" data-detail="ocorrencia:${escape(o.id)}">Ver detalhes <span aria-hidden="true">→</span></button></article>`).join('')

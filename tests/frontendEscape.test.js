@@ -45,7 +45,6 @@ test("Monitoramento e fontes exibe o estado de todas as APIs", () => {
       { id: "open-meteo", nome: "Open-Meteo — Meteorologia", status: "operacional", detalhe: "Dados recebidos" },
       { id: "open-meteo-air", nome: "Open-Meteo Air Quality", status: "indisponivel", detalhe: "HTTP 429" },
       { id: "open-meteo-marine", nome: "Open-Meteo Marine", status: "degradado", detalhe: "Consulta atual indisponível. Utilizando última coleta válida de 01/10/2026 06:00." },
-      { id: "oceanop", nome: "Oceanop / Petrobras", status: "nao_configurada", detalhe: "Local não vinculado" },
     ],
     avisosInmet: [], avisosColeta: [], divergencias: [], fontesPorCampo: {}, fontesAutomatizadas: [],
   }, "monitoramento");
@@ -57,11 +56,9 @@ test("Monitoramento e fontes exibe o estado de todas as APIs", () => {
   assert.match(html, /Open-Meteo Marine/);
   assert.match(html, /Degradado/);
   assert.match(html, /01\/10\/2026 06:00/);
-  assert.match(html, /Oceanop \/ Petrobras/);
-  assert.match(html, /Não configurada/);
 });
 
-test("painel distingue chuva diária da última hora oficial", () => {
+test("painel distingue chuva diária da última hora sem fonte ou horário de referência", () => {
   const painel = carregarPainel();
   const home = painel.executar("Dashboard.home");
   const html = home({
@@ -78,14 +75,50 @@ test("painel distingue chuva diária da última hora oficial", () => {
     },
     monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
   });
-  assert.match(html, /Chuva acumulada\/dia/);
+  assert.match(html, /Chuva acumulada observada\/dia/);
   assert.match(html, /Chuva acumulada\/Hora/);
-  assert.match(html, /Hora de referência: 14:00–15:00/);
   assert.match(html, />8\.4 <small>mm<\/small>/);
   assert.match(html, />1\.2 <small>mm<\/small>/);
+  assert.doesNotMatch(html, /Acumulado observado no dia|Acumulado na última hora/);
+  assert.doesNotMatch(html, /INMET|14:00–15:00|Hora de referência/);
 });
 
-test("painel identifica fontes autorizadas e indisponibilidade de UV/rajada", () => {
+test("calor antigo não recebe selo NORMAL e ar mostra US AQI sem metadados", () => {
+  const home = carregarPainel().executar("Dashboard.home");
+  const html = home({
+    cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
+    climaSaude: { status: "armazenado", dados: {
+      source: "Clima e Saúde — Ministério da Saúde", consultadoEm: "2020-01-01T12:00:00Z",
+      nivel: { grau: "NORMAL" }, ehf: { classificacao: "Sem excesso" }, temperatura: { maxima: 32 },
+    } },
+    qualidadeAr: { usAqi: 73, classificacao: { nivel: "MODERADO", exibicao: "MODERADO" }, referenciaEm: "2026-10-25T22:00:00Z" },
+    indiceUv: { valorAtual: 0, classificacao: "BAIXO", fonte: "Open-Meteo Air Quality" },
+    fontesPorCampo: { "ar.usAqi": "Open-Meteo Air Quality / CAMS" },
+    monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [], ventoPorPeriodo: [],
+  });
+  assert.match(html, /Calor \/ risco à saúde[\s\S]*Dado desatualizado/);
+  assert.doesNotMatch(html, /CALOR \/ RISCO À SAÚDE — NORMAL/);
+  assert.match(html, /Qualidade do ar[\s\S]*MODERADO/);
+  assert.doesNotMatch(html, /73 US AQI|US AQI ·/);
+  assert.doesNotMatch(html, /Clima e Saúde — Ministério da Saúde|Open-Meteo Air Quality|25\/10\/2026|19:00 \(Brasília\)/);
+});
+
+test("qualidade do ar mostra somente NORMAL, MODERADO ou RUIM", () => {
+  const home = carregarPainel().executar("Dashboard.home");
+  for (const [usAqi, classificacao] of [[30, "NORMAL"], [73, "MODERADO"], [150, "RUIM"]]) {
+    const html = home({
+      cidade: { chave: "rio_de_janeiro", nome: "Rio de Janeiro", uf: "RJ" },
+      qualidadeAr: { usAqi, classificacao: { nivel: classificacao, exibicao: classificacao } },
+      monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [], ventoPorPeriodo: [],
+    });
+    const inicio = html.indexOf('<article class="card air');
+    const card = html.slice(inicio, html.indexOf("</article>", inicio));
+    assert.match(card, new RegExp(`>${classificacao}</span>`));
+    assert.doesNotMatch(card, new RegExp(`${usAqi}|US AQI|Classificação`));
+  }
+});
+
+test("painel mostra indisponibilidade de UV/rajada sem exibir fontes", () => {
   const painel = carregarPainel();
   const home = painel.executar("Dashboard.home");
   const html = home({
@@ -96,27 +129,29 @@ test("painel identifica fontes autorizadas e indisponibilidade de UV/rajada", ()
     precipitacaoUltimas24hMm: null,
     indiceUv: { maximoPrevisto: null, classificacao: null, fonte: "Informação indisponível" },
     qualidadeAr: null,
-    mar: { fonte: "Petrobras — OCEANOP", alturaMaxDiaM: 0.5, estadoMarDia: "Leve", periodos: [] },
+    mar: { fonte: "Open-Meteo Marine", alturaMaxDiaM: 0.5, estadoMarDia: "Leve", periodos: [] },
     fontesPorCampo: {
       "periodos.tarde.rajadaMaxKmh": "Indisponível",
       precipitacaoDiariaMm: "Indisponível",
       precipitacaoHoraMm: "Indisponível",
       precipitacaoUltimas24hMm: "Indisponível",
       "ar.uvMax": "Informação indisponível",
-      "mar.alturaMaxDiaM": "Petrobras — OCEANOP",
+      "mar.alturaMaxDiaM": "Open-Meteo Marine",
     },
     monitoramentoApis: [{ id: "condicoes-maritimas", status: "operacional" }],
     severidade: { eventos: [] }, avisosInmet: [],
   });
 
-  assert.match(html, /Rajada prevista[\s\S]*Dado indisponível[\s\S]*Informação indisponível/);
-  assert.match(html, /Chuva acumulada\/dia[\s\S]*INMET — estação automática/);
-  assert.match(html, /Índice UV[\s\S]*Dado indisponível[\s\S]*Informação indisponível/);
-  assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>[\s\S]*Petrobras — OCEANOP/);
+  assert.match(html, /Rajada prevista[\s\S]*Dado indisponível/);
+  assert.match(html, /Chuva acumulada observada\/dia/);
+  assert.match(html, /Índice UV/);
+  assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>/);
+  assert.doesNotMatch(html, /Acumulado observado no dia|class="detalhe"/);
+  assert.doesNotMatch(html, /INMET|Open-Meteo Marine/);
   assert.doesNotMatch(html, /O portal Clima e Saúde não publica índice UV/);
 });
 
-test("painel usa rajada OCEANOP consolidada e identifica horário/fonte", () => {
+test("painel usa rajada consolidada sem identificar horário ou fonte", () => {
   const painel = carregarPainel();
   const home = painel.executar("Dashboard.home");
   const html = home({
@@ -127,25 +162,38 @@ test("painel usa rajada OCEANOP consolidada e identifica horário/fonte", () => 
       { periodo: "Tarde", rajadaMaxKmh: 43.2 },
       { periodo: "Noite", rajadaMaxKmh: 80 },
     ],
-    fontesPorCampo: { rajadaMaxKmh: "Petrobras — OCEANOP" },
+    fontesPorCampo: { rajadaMaxKmh: "Open-Meteo — previsão meteorológica" },
     monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
   });
   assert.match(html, /Rajada prevista[\s\S]*43 km\/h/);
-  assert.match(html, /Petrobras — OCEANOP/);
-  assert.match(html, /20\/10\/2026 12:00:00/);
+  assert.doesNotMatch(html, /Open-Meteo — previsão meteorológica|20\/10\/2026 12:00:00/);
 });
 
-test("painel usa o pico diário Tetra Tech e mantém a fonte", () => {
+test("condições atuais do painel omitem fonte, estação e horário", () => {
+  const painel = carregarPainel();
+  const html = painel.executar("Dashboard.currentWeather")({
+    cidade: { nome: "Manaus", uf: "AM" },
+    atual: {
+      temperaturaC: 33.8, umidadePct: 56, horario: "2026-10-25T22:00:00Z",
+      statusObservacao: "degradado",
+      estacao: { nome: "Manaus", codigo: "A101", distanciaKm: 4.9 },
+    },
+  });
+  assert.match(html, /33\.8/);
+  assert.match(html, /56%/);
+  assert.doesNotMatch(html, /INMET|A101|19:00|Brasília/);
+});
+
+test("painel usa o pico diário sem exibir fonte nem data de referência", () => {
   const painel = carregarPainel();
   const html = painel.executar("Dashboard.home")({
     cidade: { chave: "santos", nome: "Santos", uf: "SP" },
     rajadaMaxKmh: 51.856,
     rajadaPrevistaReferencia: { periodoReferencia: "pico diário de 2026-10-20" },
     ventoPorPeriodo: [],
-    fontesPorCampo: { rajadaMaxKmh: "Tetra Tech/OCEANOP" },
+    fontesPorCampo: { rajadaMaxKmh: "Open-Meteo — previsão meteorológica" },
     monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
   });
   assert.match(html, /Rajada prevista[\s\S]*52 km\/h/);
-  assert.match(html, /Tetra Tech\/OCEANOP/);
-  assert.match(html, /pico diário de 2026-10-20/);
+  assert.doesNotMatch(html, /Open-Meteo — previsão meteorológica|pico diário de 2026-10-20/);
 });

@@ -39,12 +39,15 @@ function listaDestinatarios(cidadeChave, { permitirFallback = true } = {}) {
     .filter(Boolean));
 }
 
-async function enviarRelatorioPorEmail(report, pdfBuffer, { destinatariosOverride = null } = {}) {
+async function enviarRelatorioPorEmail(report, pdfBuffer, {
+  destinatariosOverride = null,
+  permitirOverrideDestinatarios = false,
+} = {}) {
   validarDocumentoOperacional(report, "envio de e-mail", { exigirCamposCriticos: true });
   let destinatarios;
   if (destinatariosOverride !== null) {
-    if (!report.envioTeste) {
-      throw new Error("Destinatário avulso permitido somente em envio de teste.");
+    if (!report.envioTeste && !permitirOverrideDestinatarios) {
+      throw new Error("Destinatário avulso permitido somente em envio de teste ou autorizado explicitamente.");
     }
     if (!Array.isArray(destinatariosOverride)) {
       throw new Error("A lista de destinatários de teste é inválida.");

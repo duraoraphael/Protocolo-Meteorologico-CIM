@@ -5,6 +5,7 @@ const {
   normalizarObservacao,
   agregarObservacoes,
   direcaoCardeal,
+  observacaoArmazenadaRecente,
   TIMEOUT_MS,
   TENTATIVAS,
 } = require("../src/sources/inmetObservations");
@@ -66,6 +67,25 @@ test("normaliza a observação oficial, preserva UTC e converte vento de m/s par
   assert.equal(direcaoCardeal(225), "SO");
 });
 
+test("rejeita estação distante e identifica a estação e a distância no motivo", () => {
+  assert.throws(() => normalizarObservacao(payload(), {
+    cidade: { ...cidade, latitude: -20.0, longitude: -43.0 },
+    catalogo: [],
+    consultadoEm: "2026-10-14T13:30:00.000Z",
+  }), (erro) => erro.code === "INMET_STATION_TOO_FAR"
+    && /RIO DE JANEIRO - JACAREPAGUÁ, A636/.test(erro.message)
+    && /fora do limite de representatividade de 75 km/.test(erro.message));
+});
+
+test("cache INMET recente exige temperatura, umidade e estação dentro de 75 km", () => {
+  const observacao = normalizarObservacao(payload(), { cidade, consultadoEm: "2026-10-14T13:30:00.000Z" });
+  const agora = Date.parse("2026-10-14T14:30:00.000Z");
+  assert.equal(observacaoArmazenadaRecente(observacao, cidade, agora), true);
+  assert.equal(observacaoArmazenadaRecente({ ...observacao, umidadeAtualPct: null }, cidade, agora), false);
+  assert.equal(observacaoArmazenadaRecente(observacao, { ...cidade, latitude: -20 }, agora), false);
+  assert.equal(observacaoArmazenadaRecente(observacao, cidade, agora + 5 * 60 * 60 * 1000), false);
+});
+
 test("histórico agrupa somente o dia local e identifica cobertura parcial", () => {
   const ponto = (medidoEm, chuva, rajada, velocidade, tempMin, tempMax, direcao = "E") => ({
     medidoEm, chuvaUltimaHoraMm: chuva, rajadaKmh: rajada,
@@ -83,7 +103,7 @@ test("histórico agrupa somente o dia local e identifica cobertura parcial", () 
   assert.equal(agregado.temperaturaMaxC, 30.2);
   assert.equal(agregado.periodos.manha.tempMin, 21.4);
   assert.equal(agregado.periodos.tarde.tempMax, 30.2);
-  assert.equal(agregado.precipitacaoTotalMm, 7);
+  assert.equal(agregado.precipitacaoTotalMm, null, "acumulado observado parcial não é total diário");
   assert.equal(agregado.precipitacaoHorariaMaxMm, 4);
   assert.equal(agregado.rajadaMaxKmh, 45);
   assert.equal(agregado.periodos.manha.precipitacaoMm, 3);
@@ -94,6 +114,18 @@ test("histórico agrupa somente o dia local e identifica cobertura parcial", () 
   assert.equal(agregado.cobertura.amostras, 3);
   assert.equal(agregado.coberturaTemperatura.amostras, 3);
   assert.equal(agregado.coberturaUmidade.amostras, 3);
+});
+
+test("chuva observada de 00h pertence ao dia anterior", () => {
+  const ponto = (hora, chuva) => ({ medidoEm: `2026-10-25T${hora}:00:00Z`, chuvaUltimaHoraMm: chuva });
+  const agregado = agregarObservacoes([
+    ponto("03", 9), // 00h em Brasília: intervalo do dia anterior
+    ponto("04", 0), // 01h: 00h–01h de hoje
+    ponto("05", 2), // 02h: 01h–02h de hoje
+  ], { agora: new Date("2026-10-25T05:30:00Z"), fuso: "America/Sao_Paulo" });
+  assert.equal(agregado.precipitacaoTotalMm, 2);
+  assert.deepEqual(agregado.cobertura, { amostras: 2, horasEsperadas: 2, parcial: false });
+  assert.equal(agregado.chuvaPorHora.length, 2);
 });
 
 test("serviço usa endpoints oficiais, persiste histórico e não chama provedor alternativo", async () => {
@@ -139,4 +171,20 @@ test("falha atual usa somente a última observação INMET armazenada e a marca 
   assert.equal(resultado.observacao.status, "armazenado");
   assert.equal(resultado.observacao.desatualizado, true);
   assert.match(resultado.mensagem, /última observação INMET/);
+});
+
+test("estação distante armazenada não fornece leitura nem agregados observados", async () => {
+  const cidadeAracaju = require("../src/config/cities").CIDADES.aracaju;
+  const antiga = normalizarObservacao(payload(), { cidade, consultadoEm: "2026-10-14T13:30:00.000Z" });
+  antiga.estacao = { ...antiga.estacao, codigo: "A472", latitude: -11.65444444, longitude: -38.01583333 };
+  const estado = { bases: { aracaju: { ultimaValida: antiga, historico: [antiga] } } };
+  const resultado = await buscarObservacaoInmet(cidadeAracaju, {
+    fetchImpl: async () => { throw new Error("rede"); },
+    esperarFn: async () => {}, carregar: () => estado,
+    agora: () => new Date("2026-10-14T13:40:00Z"), logger: null,
+  });
+  assert.equal(resultado.status, "indisponivel");
+  assert.equal(resultado.observacao, null);
+  assert.equal(resultado.agregado.temperaturaAtualC, null);
+  assert.equal(resultado.agregado.umidadeAtualPct, null);
 });

@@ -5,10 +5,11 @@ const { montarRelatorio } = require("./logic/reportBuilder");
 const { gerarPdfBuffer } = require("./render/pdfGenerator");
 const { enviarRelatorioPorEmail, enviarAvisoCorRioPorEmail } = require("./email/sendReport");
 const ged = require("./integrations/sharepointGed");
-const { resumo, compararComManha } = require("./logic/scheduledReport");
 const { obterMonitorSecas } = require("./sources/monitorSecas");
 const {
+  montarPrevisaoProximosDiasInmet,
   montarPrevisaoProximosDiasOpenMeteo,
+  complementarPrevisaoProximosDias,
   aplicarRajadasOceanop,
 } = require("./sources/previsaoProximosDias");
 const { anexarCorRioAoRelatorio } = require("./sources/corRio");
@@ -154,7 +155,7 @@ async function executarPipelineCorRio({ enviarEmail = true, horarioAgendado = nu
   return { report, arquivoPdf: null, caminhoArquivo: null, envio, ged: null };
 }
 
-async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, comparacaoAnterior = null, teste = false, tipoEnvio = "informativo", permitirSemDestinatarios = false, destinatariosTeste = null } = {}) {
+async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgendado = null, teste = false, tipoEnvio = "informativo", permitirSemDestinatarios = false, destinatariosTeste = null, destinatariosAvulsos = null } = {}) {
   if (tipoEnvio === "cor_rio") {
     return executarPipelineCorRio({ enviarEmail, horarioAgendado, teste, permitirSemDestinatarios });
   }
@@ -169,13 +170,8 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   console.log("[RELATORIO] Dados obtidos");
   if (horarioAgendado) {
     report.nomeArquivoBase += `_${horarioAgendado.replace(":", "")}`;
-    // A edição inicial das 08h é uma fotografia autônoma. Removemos
-    // explicitamente qualquer comparação que possa ter vindo de objeto
-    // reutilizado/cache e só permitimos a comparação regular 08h -> 15h.
+    // Cada edição é autônoma, sem carregar comparações de outros relatórios.
     delete report.mudancasDia;
-    if (horarioAgendado === "15:00") {
-      report.mudancasDia = compararComManha(comparacaoAnterior, resumo(report), horarioAgendado);
-    }
   }
   if (teste) {
     report.envioTeste = true;
@@ -192,16 +188,13 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // — falha da fonte vira "Não disponível" na tabela e aviso de coleta.
   const instantePrevisao = new Date(report.geradoEmISO || Date.now());
   const previsaoOpenMeteo3d = montarPrevisaoProximosDiasOpenMeteo(cidade, report.previsaoOpenMeteoDias, { agora: instantePrevisao });
-  report.previsaoProximosDias = aplicarRajadasOceanop(
-    aplicarRajadasOceanop(
-      previsaoOpenMeteo3d,
-      report.previsaoOceanopDias
-    ),
-    report.previsaoRajadaPortalDias,
-    "Tetra Tech/OCEANOP"
+  const previsaoBase3d = complementarPrevisaoProximosDias(
+    montarPrevisaoProximosDiasInmet(cidade, report.inmetPrevisao, { agora: instantePrevisao }),
+    previsaoOpenMeteo3d,
   );
+  report.previsaoProximosDias = aplicarRajadasOceanop(previsaoBase3d, report.previsaoOceanopDias);
   if (report.previsaoProximosDias.status === "indisponivel") {
-    report.avisosColeta.push("Open-Meteo (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
+    report.avisosColeta.push("INMET/Open-Meteo (previsão dos próximos 3 dias): não foi possível obter valores para as datas solicitadas.");
   }
 
   // COR-Rio (só município do Rio): mesmo serviço/cache do painel, então site,
@@ -249,7 +242,8 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
     console.log("[RELATORIO] Enviando SMTP");
     try {
       envio = await enviarRelatorioPorEmail(report, pdfAnexoEmail, {
-        destinatariosOverride: destinatariosTeste,
+        destinatariosOverride: destinatariosTeste ?? destinatariosAvulsos,
+        permitirOverrideDestinatarios: destinatariosAvulsos !== null,
       });
     } catch (erro) {
       throw erroDaEtapa("email", "SMTP", "enviarRelatorioPorEmail", erro);
@@ -267,7 +261,7 @@ async function executarPipeline({ cidadeChave, enviarEmail = true, horarioAgenda
   // Indisponibilidade do GED nunca derruba o e-mail, que já foi enviado
   // (ou está sendo, em paralelo) com o buffer em memória.
   let ged_ = null;
-  if (enviarEmail && !teste && ged.destinoConfigurado()) {
+  if (enviarEmail && !teste && destinatariosAvulsos === null && ged.destinoConfigurado()) {
     try {
       validarDocumentoOperacional(report, "publicação no GED", { exigirCamposCriticos: true });
       ged_ = await ged.enviarInformativo(pdfBuffer, `${report.nomeArquivoBase}.pdf`, report.cidade.nome);

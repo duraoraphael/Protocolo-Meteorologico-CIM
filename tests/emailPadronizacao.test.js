@@ -122,7 +122,7 @@ test("todos os tipos de e-mail reutilizam o cabeçalho institucional completo", 
   assert.doesNotMatch(diario, /logo-petrobras|data-email-header-petrobras/i);
 });
 
-test("localidade e data do informativo são dinâmicas no cabeçalho", () => {
+test("localidade do informativo é dinâmica e a data não aparece no cabeçalho", () => {
   const salvador = renderEmailHtml(relatorioDiario({
     cidade: { nome: "Salvador", uf: "BA" },
     dataFormatadaLonga: "terça-feira, 13 de outubro de 2026",
@@ -132,9 +132,11 @@ test("localidade e data do informativo são dinâmicas no cabeçalho", () => {
     dataFormatadaLonga: "quarta-feira, 14 de outubro de 2026",
   }));
 
-  assert.match(salvador, /Salvador — BA — terça-feira, 13 de outubro de 2026/);
+  assert.match(salvador, /Salvador — BA/);
+  assert.doesNotMatch(salvador, /terça-feira, 13 de outubro de 2026/);
   assert.doesNotMatch(salvador, /Manaus — AM/);
-  assert.match(manaus, /Manaus — AM — quarta-feira, 14 de outubro de 2026/);
+  assert.match(manaus, /Manaus — AM/);
+  assert.doesNotMatch(manaus, /quarta-feira, 14 de outubro de 2026/);
   assert.doesNotMatch(manaus, /Salvador — BA/);
 });
 

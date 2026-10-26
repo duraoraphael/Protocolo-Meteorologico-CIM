@@ -25,6 +25,13 @@ const { avaliarRiscos } = require("./riskEngine");
 const { recomendacoes } = require("./inmetAlertRules");
 const { contextoPrevisao } = require("./forecastAlertContext");
 const { recomendacoesFenomeno } = require("./phenomenonRecommendations");
+const { recomendacoesPorProtocoloEmNiveis } = require("./healthProtection");
+const {
+  configuracaoConfirmacao,
+  decidirReducao,
+  registrarHistorico,
+  tipoTransicao,
+} = require("./motorGatilhos");
 const {
   consolidarAvisosInmet,
   fenomenoAvisoInmet,
@@ -148,6 +155,9 @@ function detectarAlertasGraves(report) {
       detalhe: `EHF ${calorSaude.ehf.classificacao}${calorSaude.ehf.valor == null ? '' : ` (${calorSaude.ehf.valor})`}; risco combinado: ${calorSaude.riscoCombinado ?? 'indisponível'}. ${calorSaude.nivel.significado || ''}`.trim(),
       janela: 'consulta atual', naturezaDado: 'Indicador EHF',
       recomendacoes: calorSaude.recomendacoes,
+      recomendacoesPorNivel: recomendacoesPorProtocoloEmNiveis(calorSaude.nivel.protocolo),
+      valorGatilho: { indicador: 'prontidaoCalor', valor: calorSaude.nivel.protocolo, unidade: 'nível P1/P2/P3', natureza: 'prevista' },
+      referenciaEm: calorSaude.consultadoEm || calorSaude.dataConsulta || null,
     });
   }
 
@@ -222,7 +232,7 @@ function detectarAlertasGraves(report) {
     marGrosso: report.fontesPorCampo?.["mar.alturaMaxDiaM"],
     marModerado: report.fontesPorCampo?.["mar.alturaMaxDiaM"],
     uvAlto: report.fontesPorCampo?.["ar.uvMax"],
-    qualidadeArRuim: report.fontesPorCampo?.["ar.iqar"],
+    qualidadeArRuim: report.fontesPorCampo?.["ar.usAqi"],
     tempestadePrevista: report.fontesPorCampo?.temTempestadeHoje,
   };
   for (const evento of eventos) {
@@ -241,6 +251,17 @@ function detectarAlertasGraves(report) {
       janela: contexto?.janela || evento.janela,
       naturezaDado: contexto?.naturezaDado || evento.naturezaDado || "Classificação interna baseada na previsão",
       recomendacoes: evento.recomendacoes,
+      recomendacoesPorNivel: evento.recomendacoesPorNivel,
+      ...(evento.valores ? {
+        valorGatilho: {
+          indicador: assinatura === "vento" ? (evento.baseDado === "observada" ? "rajadaObservada" : "rajadaPrevista") : "chuva",
+          valores: evento.valores,
+          unidade: evento.unidade,
+          natureza: contexto?.origem === "Observação" || evento.baseDado === "observada" ? "observada" : "prevista",
+        },
+        preventivo: assinatura === "vento" && evento.baseDado !== "observada" && contexto?.origem !== "Observação",
+      } : {}),
+      referenciaEm: report.geradoEmISO || null,
       assinatura,
     });
   }
@@ -248,9 +269,44 @@ function detectarAlertasGraves(report) {
   return consolidarPorFenomeno(achados);
 }
 
-/** Filtra somente transições do último grau enviado por fenômeno. */
-function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => true) {
+// Fenômenos do motor de gatilhos cuja REDUÇÃO exige confirmação (histerese).
+// Elevações são sempre imediatas; avisos oficiais INMET seguem a vigência oficial.
+const GATILHOS_CONFIRMAVEIS = new Set(["chuva", "vento", "calor-ehf"]);
+const GRAU_POR_GRAVIDADE = { atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" };
+
+/**
+ * Filtra somente transições do último grau enviado por fenômeno.
+ *
+ * @param {object} [opcoes]
+ * @param {Date}   [opcoes.agora]       relógio da verificação
+ * @param {object} [opcoes.pendencias]  recebe {chaveEstado: pendência|null}
+ *   para persistir a estabilização de reduções ainda não confirmadas
+ * @param {object} [opcoes.confirmacao] {leituras, minutos}
+ * @param {Function} [opcoes.historico] auditoria de eventos intermediários
+ */
+function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => true, opcoes = {}) {
+  const agoraData = opcoes.agora || new Date();
+  const confirmacao = opcoes.confirmacao || configuracaoConfirmacao();
+  const pendencias = opcoes.pendencias || {};
+  const auditar = opcoes.historico || (() => {});
   const novos = [];
+
+  // Aplica a histerese; devolve a decisão (confirmar, alvo, pendencia).
+  const avaliarReducao = (chave, assinatura, anterior, leitura) => {
+    const decisao = decidirReducao(anterior, leitura, agoraData, confirmacao);
+    const tinha = anterior.reducaoPendente || null;
+    pendencias[chave] = decisao.pendencia;
+    if (decisao.pendencia && (!tinha || tinha.leituras !== decisao.pendencia.leituras)) {
+      auditar({
+        evento: decisao.confirmar ? "reducao_confirmada" : "reducao_aguardando_confirmacao",
+        chave, localidade: chaveBase, fenomeno: assinatura,
+        grauVigente: anterior.grau, grauAlvo: decisao.pendencia.grauAlvo,
+        leituras: decisao.pendencia.leituras, exigidas: confirmacao.leituras,
+      });
+    }
+    return decisao;
+  };
+
   for (const alerta of achados) {
     const chave = `${chaveBase}|${alerta.assinatura}`;
     const anterior = estado[chave];
@@ -264,6 +320,7 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
         conteudoFingerprint: fingerprint,
         chaveEstado: chave,
         motivo,
+        transicao: tipoTransicao("NORMAL", alerta.grau),
         ...(alerta.assinatura.startsWith("inmet:") ? { grauAnterior: "NORMAL" } : {}),
       });
       continue;
@@ -271,6 +328,28 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
 
     const antes = GRAVIDADE[anterior.gravidade] ?? 0;
     const agora = GRAVIDADE[alerta.gravidade] ?? 0;
+    const grauAnterior = anterior.grau || GRAU_POR_GRAVIDADE[anterior.gravidade] || "NORMAL";
+
+    if (agora < antes && GATILHOS_CONFIRMAVEIS.has(alerta.assinatura)) {
+      const decisao = avaliarReducao(chave, alerta.assinatura, anterior, { grau: alerta.grau, valida: true, alerta });
+      if (!decisao.confirmar) continue;
+      // Notifica o MAIOR nível visto na janela de estabilização.
+      const alvo = decisao.alvo.alertaAlvo && decisao.alvo.grauAlvo !== alerta.grau
+        ? decisao.alvo.alertaAlvo : alerta;
+      const motivo = "reduziu";
+      novos.push({
+        ...alvo,
+        fingerprint: fingerprintTransicao(alvo, anterior, motivo),
+        conteudoFingerprint: fingerprintAlerta(alvo),
+        chaveEstado: chave,
+        motivo,
+        grauAnterior,
+        transicao: tipoTransicao(grauAnterior, alvo.grau),
+      });
+      continue;
+    }
+    if (agora >= antes && anterior.reducaoPendente) pendencias[chave] = null;
+
     if (agora !== antes) {
       const motivo = agora > antes ? "agravou" : "reduziu";
       novos.push({
@@ -279,7 +358,8 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
         conteudoFingerprint: fingerprint,
         chaveEstado: chave,
         motivo,
-        grauAnterior: anterior.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[anterior.gravidade],
+        grauAnterior,
+        transicao: tipoTransicao(grauAnterior, alerta.grau),
       });
     } else if (alerta.assinatura.startsWith("inmet:") && anterior.fingerprint && anterior.fingerprint !== fingerprint) {
       const motivo = "atualizou";
@@ -299,8 +379,30 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
         achados.some((alerta) => chave === `${chaveBase}|${alerta.assinatura}`)) continue;
     const assinatura = chave.slice(chaveBase.length + 1);
     if (!assinatura.startsWith("inmet:") && anterior.fonteDados === "INMET") continue;
+    // Dado indisponível não é dado normal: sem leitura válida, o estado,
+    // a pendência e a janela de estabilização permanecem como estão.
     if (!dadosDisponiveis(assinatura) || (GRAVIDADE[anterior.gravidade] ?? 0) === 0) continue;
     const avisoOficial = assinatura.startsWith("inmet:");
+    const grauAnterior = anterior.grau || GRAU_POR_GRAVIDADE[anterior.gravidade];
+
+    let residual = null; // alerta de menor nível mantido pela janela de estabilização
+    if (GATILHOS_CONFIRMAVEIS.has(assinatura)) {
+      const decisao = avaliarReducao(chave, assinatura, anterior, { grau: "NORMAL", valida: true });
+      if (!decisao.confirmar) continue;
+      if (decisao.alvo.alertaAlvo && decisao.alvo.grauAlvo !== "NORMAL") residual = decisao.alvo.alertaAlvo;
+    }
+    if (residual) {
+      novos.push({
+        ...residual,
+        fingerprint: fingerprintTransicao(residual, anterior, "reduziu"),
+        conteudoFingerprint: fingerprintAlerta(residual),
+        chaveEstado: chave,
+        motivo: "reduziu",
+        grauAnterior,
+        transicao: tipoTransicao(grauAnterior, residual.grau),
+      });
+      continue;
+    }
     const normalizacao = {
       chaveEstado: chave,
       assinatura,
@@ -308,7 +410,8 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
       grau: "NORMAL",
       gravidade: "normal",
       motivo: "normalizou",
-      grauAnterior: anterior.grau || ({ atencao: "ATENÇÃO", alto: "ALERTA", severo: "EMERGÊNCIA" })[anterior.gravidade],
+      transicao: "normalizacao",
+      grauAnterior,
       detalhe: avisoOficial
         ? "O aviso oficial não consta mais entre os avisos ativos do INMET para esta base."
         : `O gatilho de ${anterior.tipo || assinatura} retornou ao nível NORMAL.`,
@@ -327,7 +430,7 @@ function filtrarNovidades(chaveBase, achados, estado, dadosDisponiveis = () => t
   return novos;
 }
 
-function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salvarEstado } = {}) {
+function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salvarEstado, auditar = carregar === carregarEstado } = {}) {
   const estado = carregar();
   const emISO = new Date().toISOString();
   const chaveBase = base.chave || String(base.alertas?.[0]?.chaveEstado || "").split("|")[0];
@@ -344,8 +447,29 @@ function marcarAlertasEnviados(base, { carregar = carregarEstado, salvar = salva
       // da transição para deduplicar cada episódio separadamente.
       fingerprint: alerta.conteudoFingerprint || fingerprintAlerta(alerta),
       eventoFingerprint: alerta.fingerprint || null,
+      transicao: alerta.transicao || null,
       emISO,
     };
+    // Trilha de auditoria: somente após o SMTP confirmar a notificação e só
+    // para o estado real (armazenamentos injetados são de teste).
+    if (auditar) registrarHistorico({
+      evento: "notificacao_enviada",
+      chave: alerta.chaveEstado,
+      localidade: chaveBase,
+      fenomeno: alerta.assinatura,
+      transicao: alerta.transicao || null,
+      motivo: alerta.motivo || null,
+      grauAnterior: alerta.grauAnterior || null,
+      grau: alerta.grau,
+      gatilho: alerta.valorGatilho || null,
+      detalhe: alerta.detalhe || null,
+      preventivo: Boolean(alerta.preventivo),
+      fonte: alerta.fonteDados || null,
+      natureza: alerta.naturezaDado || null,
+      referenciaEm: alerta.referenciaEm || null,
+      janela: alerta.janela || null,
+      recomendacoes: alerta.recomendacoes || [],
+    });
   }
   estado[`${chaveBase}|${ASSINATURA_MONITOR}`] = {
     inicializadoEm: estado[`${chaveBase}|${ASSINATURA_MONITOR}`]?.inicializadoEm || emISO,
@@ -408,8 +532,14 @@ async function verificarAlertas({
   carregar = carregarEstado,
   salvar = salvarEstado,
   inicializarSemEnvio = true,
+  agora = () => new Date(),
+  auditar = carregar === carregarEstado,
 } = {}) {
   const estado = ignorarHistorico ? {} : limparExpirados(carregar());
+  const agoraVerificacao = agora();
+  // Estabilização de reduções ainda não confirmadas, persistida ao final.
+  const pendencias = {};
+  const registrarEventoHistorico = ignorarHistorico || !auditar ? () => {} : (evento) => registrarHistorico(evento);
   const porBase = [];
   const falhas = [];
   let estadoAlterado = false;
@@ -422,17 +552,19 @@ async function verificarAlertas({
       const graves = detectarAlertasGraves(report);
       const dadosDisponiveis = (assinatura) => {
         if (assinatura === "vento") return Number.isFinite(report.rajadaMaxKmh) || Number.isFinite(report.rajadaObservadaMaxKmh);
-        if (assinatura === "chuva") return Number.isFinite(report.precipitacaoHorariaMaxMm) || Number.isFinite(report.precipitacaoTotalMm);
+        // Normalizar chuva exige os dois critérios do protocolo (intensidade
+        // horária e acumulado diário): dado ausente não descarta risco.
+        if (assinatura === "chuva") return Number.isFinite(report.precipitacaoHorariaMaxMm) && Number.isFinite(report.precipitacaoTotalMm);
         if (assinatura.startsWith("inmet:")) return report.monitoramentoApis?.some((api) => api.id === "inmet-avisos" && api.status === "operacional");
         if (assinatura === "mar") return !report.mar?.desatualizado && Number.isFinite(report.mar?.alturaMaxDiaM);
         if (assinatura === "calor") return Number.isFinite(report.tempMax);
         if (assinatura === "calor-ehf") return report.climaSaude?.status === "operacional" && Boolean(report.climaSaude.dados?.nivel);
         if (assinatura === "uv") return Number.isFinite(report.qualidadeAr?.uvMax);
-        if (assinatura === "ar") return Number.isFinite(report.qualidadeAr?.iqar);
+        if (assinatura === "ar") return Number.isFinite(report.qualidadeAr?.usAqi);
         if (assinatura === "umidade") return Number.isFinite(report.umidadeMin);
         if (assinatura === "tempestade") return typeof report.temTempestadeHoje === "boolean";
         if (assinatura === "raios") return report.monitoramentoApis?.some((api) =>
-          ["oceanop", "inmet-avisos"].includes(api.id) && api.status === "operacional");
+          api.id === "inmet-avisos" && api.status === "operacional");
         return true;
       };
 
@@ -445,7 +577,11 @@ async function verificarAlertas({
         return;
       }
 
-      const novos = filtrarNovidades(chave, graves, estado, dadosDisponiveis);
+      const novos = filtrarNovidades(chave, graves, estado, dadosDisponiveis, {
+        agora: agoraVerificacao,
+        pendencias,
+        historico: registrarEventoHistorico,
+      });
       if (!novos.length) {
         console.log(`[AGENDADOR] ${cidade.nome}: gatilhos sem mudança; nenhum alerta enviado.`);
         return;
@@ -459,14 +595,32 @@ async function verificarAlertas({
   };
 
   await Promise.all(chaves.map(verificarBase));
-  if (estadoAlterado && !ignorarHistorico) {
+  const chavesPendentes = Object.keys(pendencias);
+  if ((estadoAlterado || chavesPendentes.length) && !ignorarHistorico) {
+    // Recarrega: marcarAlertasEnviados pode ter gravado durante a verificação.
     const estadoAtual = carregar();
+    let alterou = estadoAlterado;
     for (const chave of basesInicializadasAgora) {
       for (const [chaveEstado, valor] of Object.entries(estado)) {
         if (chaveEstado.startsWith(`${chave}|`)) estadoAtual[chaveEstado] = valor;
       }
     }
-    salvar(estadoAtual);
+    for (const chaveEstado of chavesPendentes) {
+      const entrada = estadoAtual[chaveEstado];
+      if (!entrada) continue;
+      // Notificação confirmada durante esta verificação: o estado foi
+      // substituído (marcarAlertasEnviados) e a estabilização já foi consumida.
+      if (entrada.emISO !== estado[chaveEstado]?.emISO) continue;
+      const pendencia = pendencias[chaveEstado];
+      if (pendencia) {
+        entrada.reducaoPendente = pendencia;
+        alterou = true;
+      } else if (entrada.reducaoPendente) {
+        delete entrada.reducaoPendente;
+        alterou = true;
+      }
+    }
+    if (alterou) salvar(estadoAtual);
   }
 
   return {

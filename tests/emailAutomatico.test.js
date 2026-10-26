@@ -11,7 +11,7 @@ const {
   agendarEnvioUnicoHoje,
   iniciarMonitorAlertas,
 } = require("../src/scheduler");
-const { compararComManha, adquirirExecucao } = require("../src/logic/scheduledReport");
+const { adquirirExecucao } = require("../src/logic/scheduledReport");
 
 test("trava persistente impede dois processos de assumir o mesmo envio", (t) => {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), "cim-agendador-"));
@@ -85,7 +85,7 @@ test("cron agenda exclusivamente 08h e 15h no horário de Brasília", () => {
   }
 });
 
-test("edição das 15h compara com as 08h e COR-Rio segue os mesmos horários", async () => {
+test("edições das 08h e 15h são autônomas e COR-Rio segue os mesmos horários", async () => {
   const estado = {};
   const chamadas = [];
   const executar = async (opcoes) => {
@@ -104,10 +104,11 @@ test("edição das 15h compara com as 08h e COR-Rio segue os mesmos horários", 
   await executarHorarioAgendado("08:00", opcoes);
   await executarHorarioAgendado("15:00", opcoes);
   const chamada = chamadas.find((c) => c.horarioAgendado === "15:00" && c.tipoEnvio !== "cor_rio");
-  assert.equal(chamada.comparacaoAnterior.grau, "ATENÇÃO");
+  assert.equal(chamada.comparacaoAnterior, undefined);
+  assert.equal(chamada.teste, undefined);
+  assert.equal(chamada.destinatariosTeste, undefined);
   assert.ok(estado["2026-09-28|rio_de_janeiro|15:00"]);
   assert.deepEqual(chamadas.filter((c) => c.tipoEnvio === "cor_rio").map((c) => c.horarioAgendado), ["08:00", "15:00"]);
-  assert.match(compararComManha({ grau: "NORMAL", vento: "NORMAL", chuva: "NORMAL", fenomenos: [], rajadaMaxKmh: 30 }, { grau: "NORMAL", vento: "NORMAL", chuva: "NORMAL", fenomenos: [], rajadaMaxKmh: 40 }, "15:00").join(" "), /previsão das 08:00 → previsão das 15:00/);
 });
 
 test("duas rodadas percorrem bases, isolam falha e não repetem envio confirmado", async () => {
@@ -134,10 +135,12 @@ test("duas rodadas percorrem bases, isolam falha e não repetem envio confirmado
   await executarHorarioAgendado("08:00", opcoes);
   assert.equal(chamadas.filter((c) => c.horarioAgendado === "08:00" && c.cidadeChave === "rio_de_janeiro" && c.tipoEnvio !== "cor_rio").length, 1);
   await executarHorarioAgendado("15:00", opcoes);
-  assert.equal(chamadas.find((c) => c.horarioAgendado === "15:00" && c.cidadeChave === "rio_de_janeiro" && c.tipoEnvio !== "cor_rio").comparacaoAnterior.grau, "ATENÇÃO");
+  const envioDas15 = chamadas.find((c) => c.horarioAgendado === "15:00" && c.cidadeChave === "rio_de_janeiro" && c.tipoEnvio !== "cor_rio");
+  assert.equal(envioDas15.comparacaoAnterior, undefined);
+  assert.equal(envioDas15.teste, undefined);
+  assert.equal(envioDas15.destinatariosTeste, undefined);
   assert.ok(estado["2026-09-28|rio_de_janeiro|15:00"]);
   assert.ok(estado["2026-09-28|cor_rio|08:00"]);
   assert.ok(estado["2026-09-28|cor_rio|15:00"]);
   assert.equal(chamadas.filter((c) => c.tipoEnvio === "cor_rio").length, 2);
-  assert.match(compararComManha({ grau: "ATENÇÃO", vento: "ATENÇÃO", chuva: "NORMAL", fenomenos: [], rajadaMaxKmh: 35, precipitacaoTotalMm: 0 }, { grau: "ALERTA", vento: "ALERTA", chuva: "NORMAL", fenomenos: ["ALERTA — VENTO"], rajadaMaxKmh: 48, precipitacaoTotalMm: 0 }).join(" "), /ATENÇÃO → ALERTA/);
 });

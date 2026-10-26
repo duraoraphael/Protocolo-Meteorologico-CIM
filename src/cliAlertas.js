@@ -15,7 +15,11 @@
 require("dotenv").config({ quiet: true });
 require("./security/certificados");
 const fs = require("fs");
-const { verificarAlertas, marcarAlertasEnviados, ARQUIVO_ESTADO } = require("./logic/alertWatcher");
+const {
+  verificarAlertas,
+  marcarAlertasEnviados,
+  ARQUIVO_ESTADO,
+} = require("./logic/alertWatcher");
 
 function argumento(nome) {
   const p = process.argv.find((a) => a.startsWith(`--${nome}=`));
@@ -28,7 +32,8 @@ function argumento(nome) {
       fs.unlinkSync(ARQUIVO_ESTADO);
       console.log("[CIM] Histórico de alertas notificados apagado.");
     } catch (erro) {
-      if (erro.code === "ENOENT") console.log("[CIM] Nenhum histórico para apagar.");
+      if (erro.code === "ENOENT")
+        console.log("[CIM] Nenhum histórico para apagar.");
       else throw erro;
     }
     return;
@@ -40,7 +45,7 @@ function argumento(nome) {
   if (basesArg) process.env.BASES_MONITOR_ALERTAS = basesArg;
 
   console.log(
-    `[CIM] Verificando alertas${teste ? " — TESTE: alertas ativos, ignorando o histórico" : ""}${enviar ? " (MODO ENVIO)" : " (simulação — nada será enviado)"}...`
+    `[CIM] Verificando alertas${teste ? " — TESTE: alertas ativos, ignorando o histórico" : ""}${enviar ? " (MODO ENVIO)" : " (simulação — nada será enviado)"}...`,
   );
 
   // A verificação nunca altera o estado; o registro acontece após o SMTP.
@@ -50,15 +55,21 @@ function argumento(nome) {
   if (resultado.totalNovos === 0) {
     console.log("Nenhuma condição de alerta nova nas bases monitoradas.");
   } else {
-    console.log(`${resultado.totalNovos} alerta(s) novo(s) em ${resultado.porBase.length} base(s):`);
+    console.log(
+      `${resultado.totalNovos} alerta(s) novo(s) em ${resultado.porBase.length} base(s):`,
+    );
     console.log("");
     for (const base of resultado.porBase) {
       console.log(`  ${base.cidade.nome} — ${base.cidade.uf}`);
       for (const a of base.alertas) {
         const marca = `[${a.grau || (a.gravidade === "severo" ? "SEVERO" : "ALTO")}]`;
-        console.log(`    ${marca} ${a.tipo}${a.motivo === "agravou" ? " (AGRAVOU)" : ""}`);
+        console.log(
+          `    ${marca} ${a.tipo}${a.motivo === "agravou" ? " (AGRAVOU)" : ""}`,
+        );
         if (a.detalhe) console.log(`             ${a.detalhe}`);
-        console.log(`             janela: ${a.janela} · critério: ${a.origem}${a.fonteDados ? ` · dado: ${a.fonteDados}` : ""}`);
+        console.log(
+          `             janela: ${a.janela} · critério: ${a.origem}${a.fonteDados ? ` · dado: ${a.fonteDados}` : ""}`,
+        );
       }
       console.log("");
     }
@@ -78,16 +89,22 @@ function argumento(nome) {
         // Envio de teste não altera o histórico do monitor automático.
         if (!teste) marcarAlertasEnviados(base);
         if (envio.ignorado) {
-          console.log(`[CIM] Apenas condições normais em ${base.chave}; nenhum Alerta CIM foi enviado.`);
+          console.log(
+            `[CIM] Apenas condições normais em ${base.chave}; nenhum Alerta CIM foi enviado.`,
+          );
         } else {
-          console.log(`[CIM] Alerta${teste ? " de TESTE" : ""} enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`);
+          console.log(
+            `[CIM] Alerta${teste ? " de TESTE" : ""} enviado (${base.chave}) -> ${envio.destinatarios.join(", ")}`,
+          );
         }
       } catch (erro) {
         console.error(`[CIM] Falha ao enviar (${base.chave}): ${erro.message}`);
       }
     }
   } else if (!enviar) {
-    console.log("Simulação: nenhum e-mail enviado e nada marcado como avisado.");
+    console.log(
+      "Simulação: nenhum e-mail enviado e nada marcado como avisado.",
+    );
     console.log("Use --enviar para disparar de verdade.");
   }
 })();

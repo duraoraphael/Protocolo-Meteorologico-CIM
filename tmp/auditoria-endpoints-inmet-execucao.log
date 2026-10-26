@@ -1,0 +1,59 @@
+﻿[
+  {
+    "endpoint": "https://apitempo.inmet.gov.br/estacoes/T",
+    "consultadoEm": "2026-10-26T10:36:12.272Z",
+    "http": 200,
+    "formato": "array",
+    "registros": 669,
+    "camposRaiz": null,
+    "camposPrimeiroRegistro": [
+      "CD_OSCAR",
+      "DC_NOME",
+      "FL_CAPITAL",
+      "DT_FIM_OPERACAO",
+      "CD_SITUACAO",
+      "TP_ESTACAO",
+      "VL_LATITUDE",
+      "CD_WSI",
+      "CD_DISTRITO",
+      "VL_ALTITUDE",
+      "SG_ESTADO",
+      "SG_ENTIDADE",
+      "CD_ESTACAO",
+      "VL_LONGITUDE",
+      "DT_INICIO_OPERACAO"
+    ]
+  },
+  {
+    "endpoint": "https://apitempo.inmet.gov.br/estacao/2026-10-24/2026-10-26/A636",
+    "consultadoEm": "2026-10-26T10:36:12.744Z",
+    "http": 204,
+    "formato": "não JSON",
+    "registros": null,
+    "camposRaiz": null,
+    "camposPrimeiroRegistro": null
+  },
+  {
+    "endpoint": "https://apiprevmet3.inmet.gov.br/previsao/3304557",
+    "consultadoEm": "2026-10-26T10:36:12.893Z",
+    "http": 200,
+    "formato": "objeto",
+    "registros": null,
+    "camposRaiz": [
+      "3304557"
+    ],
+    "camposPrimeiroRegistro": null
+  },
+  {
+    "endpoint": "https://apiprevmet3.inmet.gov.br/avisos/ativos",
+    "consultadoEm": "2026-10-26T10:36:13.240Z",
+    "http": 200,
+    "formato": "objeto",
+    "registros": null,
+    "camposRaiz": [
+      "hoje",
+      "futuro"
+    ],
+    "camposPrimeiroRegistro": null
+  }
+]

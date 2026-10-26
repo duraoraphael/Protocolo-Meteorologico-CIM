@@ -42,6 +42,7 @@ function blocoAlerta(a) {
     periodoPrevisao: a.periodoPrevisao,
     fontePrevisao: a.fontePrevisao,
     recomendacoes: a.recomendacoes,
+    recomendacoesPorNivel: a.recomendacoesPorNivel,
   });
 }
 

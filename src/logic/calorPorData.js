@@ -24,13 +24,14 @@ function dataLocal(instante, fuso = "America/Sao_Paulo") {
  * @returns {{grau: string, rotulo: string, classificacaoEhf: string} | null}
  */
 function calorPorData(climaSaude, dataIso) {
-  if (climaSaude?.status !== "operacional") return null;
+  if (!["operacional", "armazenado", "degradado"].includes(climaSaude?.status)) return null;
   const dados = climaSaude?.dados;
   if (!dados || !dataIso) return null;
   const previsto = (dados.previsaoDias || []).find((dia) => dia.data === dataIso);
   // A classificação "atual" da página vale só para o dia da própria coleta.
   const classificacao = previsto?.classificacao
-    || (dados.dataConsulta === dataIso ? dados.ehf?.classificacao : null);
+    || (dados.dataConsulta === dataIso && dataLocal(dados.consultadoEm) === dataIso
+      ? dados.ehf?.classificacao : null);
   const nivel = nivelEhf(classificacao);
   if (!nivel) return null;
   return { grau: nivel.grau, rotulo: ROTULOS[nivel.grau], classificacaoEhf: classificacao };

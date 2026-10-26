@@ -1,0 +1,1601 @@
+﻿{
+  "executadoEm": "2026-10-26T10:36:17.108Z",
+  "finalidade": "teste técnico sem uso operacional",
+  "resultados": [
+    {
+      "chave": "rio_de_janeiro",
+      "localidade": "Rio de Janeiro/RJ",
+      "coordenadasSolicitadas": {
+        "latitude": -22.9068,
+        "longitude": -43.1729
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:12.629Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -22.952549,
+          "longitude": -43.215027
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          19,
+          22
+        ],
+        "umidadePrevistaModeloPct": [
+          75,
+          98
+        ],
+        "condicaoModelo": "Garoa intensa",
+        "atualModelado": {
+          "temperaturaC": 21.4,
+          "umidadePct": 96,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 7.8,
+        "probabilidadeMaxDiaPct": 100,
+        "uvMaxDiaPrevisto": 1.75,
+        "precipitacaoEstimadaDecorridaMm": 1.8,
+        "rajadaMaxJanela05a00Kmh": 66.6,
+        "rajadaMaxRestanteKmh": 66.6,
+        "rajadaPicoRestanteEm": "2026-10-26T18:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 61.2,
+          "tarde": 66.6,
+          "noite": 46.1
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 18,
+            "acumuladoPrevistoMm": 4.2,
+            "probabilidadeMaxPct": 100,
+            "rajadaPrevistaKmh": 61.2,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 24,
+            "acumuladoPrevistoMm": 1.5,
+            "probabilidadeMaxPct": 98,
+            "rajadaPrevistaKmh": 66.6,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 16,
+            "acumuladoPrevistoMm": 1.7,
+            "probabilidadeMaxPct": 18,
+            "rajadaPrevistaKmh": 46.1,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -22.900002,
+          "longitude": -43.199997
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 67,
+        "classificacaoAqi": "MODERADO",
+        "uvAtual": 0.35,
+        "classificacaoUv": "BAIXO",
+        "pm25": 11.3,
+        "pm10": 14.4,
+        "distanciaGradeKm": 2.9,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "macae",
+      "localidade": "Macaé/RJ",
+      "coordenadasSolicitadas": {
+        "latitude": -22.2828305,
+        "longitude": -41.9649091
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:13.345Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -22.31986,
+          "longitude": -41.97519
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          19,
+          25
+        ],
+        "umidadePrevistaModeloPct": [
+          70,
+          98
+        ],
+        "condicaoModelo": "Garoa moderada",
+        "atualModelado": {
+          "temperaturaC": 22.8,
+          "umidadePct": 92,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 2.6,
+        "probabilidadeMaxDiaPct": 89,
+        "uvMaxDiaPrevisto": 5.2,
+        "precipitacaoEstimadaDecorridaMm": 1,
+        "rajadaMaxJanela05a00Kmh": 64.1,
+        "rajadaMaxRestanteKmh": 64.1,
+        "rajadaPicoRestanteEm": "2026-10-26T17:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 56.5,
+          "tarde": 64.1,
+          "noite": 45
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 10,
+            "acumuladoPrevistoMm": 1.4,
+            "probabilidadeMaxPct": 89,
+            "rajadaPrevistaKmh": 56.5,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 26,
+            "acumuladoPrevistoMm": 0.1,
+            "probabilidadeMaxPct": 58,
+            "rajadaPrevistaKmh": 64.1,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 19,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 10,
+            "rajadaPrevistaKmh": 45,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -22.299995,
+          "longitude": -42
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 51,
+        "classificacaoAqi": "MODERADO",
+        "uvAtual": 0.45,
+        "classificacaoUv": "BAIXO",
+        "pm25": 5,
+        "pm10": 6.3,
+        "distanciaGradeKm": 4.1,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "brasilia",
+      "localidade": "Brasília/DF",
+      "coordenadasSolicitadas": {
+        "latitude": -15.7939869,
+        "longitude": -47.8828
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:13.352Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -15.782073,
+          "longitude": -47.88678
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          20,
+          30
+        ],
+        "umidadePrevistaModeloPct": [
+          48,
+          95
+        ],
+        "condicaoModelo": "Garoa intensa",
+        "atualModelado": {
+          "temperaturaC": 22.8,
+          "umidadePct": 76,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 3.2,
+        "probabilidadeMaxDiaPct": 94,
+        "uvMaxDiaPrevisto": 9.55,
+        "precipitacaoEstimadaDecorridaMm": 0.3,
+        "rajadaMaxJanela05a00Kmh": 31.7,
+        "rajadaMaxRestanteKmh": 31.7,
+        "rajadaPicoRestanteEm": "2026-10-26T20:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 29.2,
+          "tarde": 31.7,
+          "noite": 19.1
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 10,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 35,
+            "rajadaPrevistaKmh": 29.2,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 10,
+            "acumuladoPrevistoMm": 1.8,
+            "probabilidadeMaxPct": 94,
+            "rajadaPrevistaKmh": 31.7,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 4,
+            "acumuladoPrevistoMm": 0.9,
+            "probabilidadeMaxPct": 86,
+            "rajadaPrevistaKmh": 19.1,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -15.799995,
+          "longitude": -47.899994
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 53,
+        "classificacaoAqi": "MODERADO",
+        "uvAtual": 1,
+        "classificacaoUv": "BAIXO",
+        "pm25": 14.9,
+        "pm10": 15.6,
+        "distanciaGradeKm": 2,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "manaus",
+      "localidade": "Manaus/AM",
+      "coordenadasSolicitadas": {
+        "latitude": -3.1316333,
+        "longitude": -59.9825041
+      },
+      "fusoCadastrado": "America/Manaus",
+      "consultadoEm": "2026-10-26T10:36:15.022Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Manaus",
+        "coordenadasGrade": {
+          "latitude": -3.1282952,
+          "longitude": -59.95163
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T06:30",
+        "temperaturaPrevistaModeloC": [
+          25,
+          31
+        ],
+        "umidadePrevistaModeloPct": [
+          64,
+          95
+        ],
+        "condicaoModelo": "Pancadas de chuva fracas e isoladas",
+        "atualModelado": {
+          "temperaturaC": 25.2,
+          "umidadePct": 94,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 5.4,
+        "probabilidadeMaxDiaPct": 88,
+        "uvMaxDiaPrevisto": 8.5,
+        "precipitacaoEstimadaDecorridaMm": 4,
+        "rajadaMaxJanela05a00Kmh": 28.8,
+        "rajadaMaxRestanteKmh": 28.8,
+        "rajadaPicoRestanteEm": "2026-10-26T17:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 27.7,
+          "tarde": 28.8,
+          "noite": 18.7
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 7,
+            "acumuladoPrevistoMm": 2.8,
+            "probabilidadeMaxPct": 88,
+            "rajadaPrevistaKmh": 27.7,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 7,
+            "acumuladoPrevistoMm": 0.4,
+            "probabilidadeMaxPct": 86,
+            "rajadaPrevistaKmh": 28.8,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 6,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 22,
+            "rajadaPrevistaKmh": 18.7,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–06:00",
+        "coberturaEstimativa": {
+          "amostras": 6,
+          "esperadas": 6
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Manaus",
+        "coordenadasGrade": {
+          "latitude": -3.0999985,
+          "longitude": -60
+        },
+        "horarioModelo": "2026-10-26T06:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 146,
+        "classificacaoAqi": "RUIM",
+        "uvAtual": 0.05,
+        "classificacaoUv": "BAIXO",
+        "pm25": 35.3,
+        "pm10": 36.3,
+        "distanciaGradeKm": 4,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "santos",
+      "localidade": "Santos/SP",
+      "coordenadasSolicitadas": {
+        "latitude": -23.9609448,
+        "longitude": -46.3166316
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:15.023Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -23.936731,
+          "longitude": -46.334747
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          18,
+          20
+        ],
+        "umidadePrevistaModeloPct": [
+          76,
+          95
+        ],
+        "condicaoModelo": "Pancadas de chuva moderadas",
+        "atualModelado": {
+          "temperaturaC": 18.6,
+          "umidadePct": 95,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 17.9,
+        "probabilidadeMaxDiaPct": 100,
+        "uvMaxDiaPrevisto": 4.25,
+        "precipitacaoEstimadaDecorridaMm": 6.5,
+        "rajadaMaxJanela05a00Kmh": 42.1,
+        "rajadaMaxRestanteKmh": 42.1,
+        "rajadaPicoRestanteEm": "2026-10-26T18:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 38.9,
+          "tarde": 42.1,
+          "noite": 15.5
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 15,
+            "acumuladoPrevistoMm": 5.6,
+            "probabilidadeMaxPct": 100,
+            "rajadaPrevistaKmh": 38.9,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 16,
+            "acumuladoPrevistoMm": 2.8,
+            "probabilidadeMaxPct": 100,
+            "rajadaPrevistaKmh": 42.1,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 3,
+            "acumuladoPrevistoMm": 4.3,
+            "probabilidadeMaxPct": 94,
+            "rajadaPrevistaKmh": 15.5,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -24,
+          "longitude": -46.300003
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 46,
+        "classificacaoAqi": "NORMAL",
+        "uvAtual": 0.3,
+        "classificacaoUv": "BAIXO",
+        "pm25": 5.9,
+        "pm10": 9.3,
+        "distanciaGradeKm": 4.7,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "aracaju",
+      "localidade": "Aracaju/SE",
+      "coordenadasSolicitadas": {
+        "latitude": -10.9162061,
+        "longitude": -37.0774655
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:15.024Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Maceio",
+        "coordenadasGrade": {
+          "latitude": -10.931458,
+          "longitude": -37.068207
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          25,
+          31
+        ],
+        "umidadePrevistaModeloPct": [
+          57,
+          88
+        ],
+        "condicaoModelo": "Parcialmente nublado",
+        "atualModelado": {
+          "temperaturaC": 28.2,
+          "umidadePct": 66,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 0,
+        "probabilidadeMaxDiaPct": 12,
+        "uvMaxDiaPrevisto": 9.4,
+        "precipitacaoEstimadaDecorridaMm": 0,
+        "rajadaMaxJanela05a00Kmh": 57.2,
+        "rajadaMaxRestanteKmh": 57.2,
+        "rajadaPicoRestanteEm": "2026-10-26T17:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 55.1,
+          "tarde": 57.2,
+          "noite": 48.6
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 16,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 55.1,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 23,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 12,
+            "rajadaPrevistaKmh": 57.2,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 20,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 48.6,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Maceio",
+        "coordenadasGrade": {
+          "latitude": -10.900002,
+          "longitude": -37.09999
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 54,
+        "classificacaoAqi": "MODERADO",
+        "uvAtual": 2.35,
+        "classificacaoUv": "BAIXO",
+        "pm25": 13.7,
+        "pm10": 15.4,
+        "distanciaGradeKm": 3,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "natal",
+      "localidade": "Natal/RN",
+      "coordenadasSolicitadas": {
+        "latitude": -5.8115,
+        "longitude": -35.2415
+      },
+      "fusoCadastrado": "America/Fortaleza",
+      "consultadoEm": "2026-10-26T10:36:16.353Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Fortaleza",
+        "coordenadasGrade": {
+          "latitude": -5.7996483,
+          "longitude": -35.266235
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          24,
+          31
+        ],
+        "umidadePrevistaModeloPct": [
+          55,
+          88
+        ],
+        "condicaoModelo": "Nublado a encoberto",
+        "atualModelado": {
+          "temperaturaC": 28.6,
+          "umidadePct": 66,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 0,
+        "probabilidadeMaxDiaPct": 0,
+        "uvMaxDiaPrevisto": 9.15,
+        "precipitacaoEstimadaDecorridaMm": 0,
+        "rajadaMaxJanela05a00Kmh": 37.8,
+        "rajadaMaxRestanteKmh": 37.8,
+        "rajadaPicoRestanteEm": "2026-10-26T16:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 37.4,
+          "tarde": 37.8,
+          "noite": 25.2
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 10,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 37.4,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 15,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 37.8,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 11,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 25.2,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Fortaleza",
+        "coordenadasGrade": {
+          "latitude": -5.7999954,
+          "longitude": -35.199997
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 60,
+        "classificacaoAqi": "MODERADO",
+        "uvAtual": 2.25,
+        "classificacaoUv": "BAIXO",
+        "pm25": 10,
+        "pm10": 14,
+        "distanciaGradeKm": 4.8,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "oiapoque",
+      "localidade": "Oiapoque/AP",
+      "coordenadasSolicitadas": {
+        "latitude": 3.861224,
+        "longitude": -51.796699
+      },
+      "fusoCadastrado": "America/Belem",
+      "consultadoEm": "2026-10-26T10:36:16.354Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Belem",
+        "coordenadasGrade": {
+          "latitude": 3.8312829,
+          "longitude": -51.8049
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          24,
+          36
+        ],
+        "umidadePrevistaModeloPct": [
+          37,
+          94
+        ],
+        "condicaoModelo": "Nublado a encoberto",
+        "atualModelado": {
+          "temperaturaC": 26.6,
+          "umidadePct": 80,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 0,
+        "probabilidadeMaxDiaPct": 2,
+        "uvMaxDiaPrevisto": 8.7,
+        "precipitacaoEstimadaDecorridaMm": 0,
+        "rajadaMaxJanela05a00Kmh": 35.3,
+        "rajadaMaxRestanteKmh": 35.3,
+        "rajadaPicoRestanteEm": "2026-10-26T20:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 26.6,
+          "tarde": 35.3,
+          "noite": 31.3
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 7,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 2,
+            "rajadaPrevistaKmh": 26.6,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 12,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 2,
+            "rajadaPrevistaKmh": 35.3,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 10,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 31.3,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Belem",
+        "coordenadasGrade": {
+          "latitude": 3.9000015,
+          "longitude": -51.800003
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 41,
+        "classificacaoAqi": "NORMAL",
+        "uvAtual": 0.35,
+        "classificacaoUv": "BAIXO",
+        "pm25": 8.3,
+        "pm10": 10.9,
+        "distanciaGradeKm": 4.3,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "vitoria",
+      "localidade": "Vitória/ES",
+      "coordenadasSolicitadas": {
+        "latitude": -20.3200917,
+        "longitude": -40.3376682
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:16.354Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -20.351494,
+          "longitude": -40.341705
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          22,
+          27
+        ],
+        "umidadePrevistaModeloPct": [
+          78,
+          97
+        ],
+        "condicaoModelo": "Pancadas de chuva moderadas",
+        "atualModelado": {
+          "temperaturaC": 25,
+          "umidadePct": 85,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 13.7,
+        "probabilidadeMaxDiaPct": 100,
+        "uvMaxDiaPrevisto": 7.9,
+        "precipitacaoEstimadaDecorridaMm": 0,
+        "rajadaMaxJanela05a00Kmh": 52.2,
+        "rajadaMaxRestanteKmh": 52.2,
+        "rajadaPicoRestanteEm": "2026-10-26T19:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 33.5,
+          "tarde": 52.2,
+          "noite": 47.2
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 7,
+            "acumuladoPrevistoMm": 1.1,
+            "probabilidadeMaxPct": 78,
+            "rajadaPrevistaKmh": 33.5,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 19,
+            "acumuladoPrevistoMm": 12.4,
+            "probabilidadeMaxPct": 100,
+            "rajadaPrevistaKmh": 52.2,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 22,
+            "acumuladoPrevistoMm": 0.2,
+            "probabilidadeMaxPct": 94,
+            "rajadaPrevistaKmh": 47.2,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -20.299995,
+          "longitude": -40.300003
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 57,
+        "classificacaoAqi": "MODERADO",
+        "uvAtual": 1.15,
+        "classificacaoUv": "BAIXO",
+        "pm25": 14.1,
+        "pm10": 16.2,
+        "distanciaGradeKm": 4.5,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "araucaria",
+      "localidade": "Araucária/PR",
+      "coordenadasSolicitadas": {
+        "latitude": -25.5861107,
+        "longitude": -49.4051209
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:16.731Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -25.623901,
+          "longitude": -49.40219
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          9,
+          21
+        ],
+        "umidadePrevistaModeloPct": [
+          38,
+          99
+        ],
+        "condicaoModelo": "Garoa moderada",
+        "atualModelado": {
+          "temperaturaC": 11.7,
+          "umidadePct": 88,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 1,
+        "probabilidadeMaxDiaPct": 88,
+        "uvMaxDiaPrevisto": 9.1,
+        "precipitacaoEstimadaDecorridaMm": 0.1,
+        "rajadaMaxJanela05a00Kmh": 41.8,
+        "rajadaMaxRestanteKmh": 41.8,
+        "rajadaPicoRestanteEm": "2026-10-26T20:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 28.4,
+          "tarde": 41.8,
+          "noite": 38.5
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 9,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 28.4,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 11,
+            "acumuladoPrevistoMm": 0.1,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 41.8,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 17,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 38.5,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Sao_Paulo",
+        "coordenadasGrade": {
+          "latitude": -25.599998,
+          "longitude": -49.399994
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 47,
+        "classificacaoAqi": "NORMAL",
+        "uvAtual": 0.85,
+        "classificacaoUv": "BAIXO",
+        "pm25": 6.6,
+        "pm10": 7.2,
+        "distanciaGradeKm": 1.6,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    },
+    {
+      "chave": "salvador",
+      "localidade": "Salvador/BA",
+      "coordenadasSolicitadas": {
+        "latitude": -12.9777,
+        "longitude": -38.5016
+      },
+      "fusoCadastrado": "America/Sao_Paulo",
+      "consultadoEm": "2026-10-26T10:36:16.731Z",
+      "meteorologia": {
+        "status": "VALIDADO",
+        "endpoint": "https://api.open-meteo.com/v1/forecast",
+        "http": 200,
+        "fuso": "America/Bahia",
+        "coordenadasGrade": {
+          "latitude": -12.970122,
+          "longitude": -38.45456
+        },
+        "dataLocal": "2026-10-26",
+        "horarioModelo": "2026-10-26T07:30",
+        "temperaturaPrevistaModeloC": [
+          25,
+          31
+        ],
+        "umidadePrevistaModeloPct": [
+          61,
+          87
+        ],
+        "condicaoModelo": "Garoa fraca",
+        "atualModelado": {
+          "temperaturaC": 26.7,
+          "umidadePct": 78,
+          "referenciaEm": "2026-10-26T10:30:00.000Z"
+        },
+        "precipitacaoDiaCivilPrevistaMm": 0.2,
+        "probabilidadeMaxDiaPct": 39,
+        "uvMaxDiaPrevisto": 9.25,
+        "precipitacaoEstimadaDecorridaMm": 0.1,
+        "rajadaMaxJanela05a00Kmh": 50,
+        "rajadaMaxRestanteKmh": 50,
+        "rajadaPicoRestanteEm": "2026-10-26T19:00:00.000Z",
+        "rajadasPorPeriodoKmh": {
+          "manha": 30.6,
+          "tarde": 50,
+          "noite": 47.5
+        },
+        "periodos": {
+          "manha": {
+            "janelaLocal": "05h–12h",
+            "cobertura": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 7,
+              "esperadas": 7,
+              "completa": true
+            },
+            "ventoMedioKmh": 6,
+            "acumuladoPrevistoMm": 0.2,
+            "probabilidadeMaxPct": 0,
+            "rajadaPrevistaKmh": 30.6,
+            "horarioReferencia": "2026-10-26 05h–12h",
+            "status": "VALIDADO"
+          },
+          "tarde": {
+            "janelaLocal": "12h–18h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 18,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 39,
+            "rajadaPrevistaKmh": 50,
+            "horarioReferencia": "2026-10-26 12h–18h",
+            "status": "VALIDADO"
+          },
+          "noite": {
+            "janelaLocal": "18h–00h",
+            "cobertura": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "coberturaChuva": {
+              "amostras": 6,
+              "esperadas": 6,
+              "completa": true
+            },
+            "ventoMedioKmh": 19,
+            "acumuladoPrevistoMm": 0,
+            "probabilidadeMaxPct": 10,
+            "rajadaPrevistaKmh": 47.5,
+            "horarioReferencia": "2026-10-26 18h–00h",
+            "status": "VALIDADO"
+          }
+        },
+        "janelaEstimativa": "2026-10-26 00:00–07:00",
+        "coberturaEstimativa": {
+          "amostras": 7,
+          "esperadas": 7
+        },
+        "motivoEstimativaIndisponivel": null,
+        "unidades": {
+          "chuva": "mm",
+          "probabilidade": "%",
+          "uv": ""
+        }
+      },
+      "qualidadeAr": {
+        "status": "VALIDADO",
+        "endpoint": "https://air-quality-api.open-meteo.com/v1/air-quality",
+        "http": 200,
+        "fuso": "America/Bahia",
+        "coordenadasGrade": {
+          "latitude": -13,
+          "longitude": -38.5
+        },
+        "horarioModelo": "2026-10-26T07:00",
+        "referenciaEm": "2026-10-26T10:00:00.000Z",
+        "usAqi": 53,
+        "classificacaoAqi": "MODERADO",
+        "uvAtual": 1.9,
+        "classificacaoUv": "BAIXO",
+        "pm25": 7.7,
+        "pm10": 9.9,
+        "distanciaGradeKm": 2.5,
+        "unidades": {
+          "time": "iso8601",
+          "interval": "seconds",
+          "uv_index": "",
+          "us_aqi": "USAQI",
+          "pm2_5": "μg/m³",
+          "pm10": "μg/m³"
+        }
+      }
+    }
+  ]
+}

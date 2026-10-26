@@ -70,6 +70,7 @@ function renderEmailHeaderStyles() {
       .email-period-title { font-size:17px !important; line-height:21px !important; }
       .email-period-source { font-size:11px !important; line-height:15px !important; }
       .email-metric-value { font-size:18px !important; line-height:22px !important; overflow-wrap:anywhere !important; word-break:break-word !important; }
+      .email-edition-reference td { display:block !important; width:100% !important; box-sizing:border-box !important; }
     }
   </style>`;
 }
@@ -120,15 +121,19 @@ function seloStatus(grau, atual = false) {
   return `<span style="display:inline-block;border:2px solid ${visual.cor};background:${fundo};color:${corTexto};padding:7px 12px;font:bold 14px/1.1 Arial,sans-serif;white-space:nowrap;">${esc(nivelExibicao(normalizado))}</span>`;
 }
 
-function recomendacoesHtml(itens) {
+function recomendacoesHtml(itens, grupos = null) {
   if (!Array.isArray(itens) || !itens.length) return "";
-  return `<div data-alert-recommendations="true" style="border-top:1px solid #E5E7E6;margin-top:16px;padding-top:14px;color:#333333;font:13px/1.5 Arial,sans-serif;"><strong style="display:block;color:#333333;font-size:13px;line-height:1.4;text-transform:uppercase;">Recomendações – Protocolo Meteorológico do COMPARTILHADO</strong><ul style="margin:9px 0 0 20px;padding:0;">${itens.map((item) => `<li data-alert-recommendation="true" style="margin-bottom:7px;">${esc(item)}</li>`).join("")}</ul></div>`;
+  const lista = (lote) => `<ul style="margin:9px 0 0 20px;padding:0;">${lote.map((item) => `<li data-alert-recommendation="true" style="margin-bottom:7px;">${esc(item)}</li>`).join("")}</ul>`;
+  const corpo = Array.isArray(grupos) && grupos.length
+    ? grupos.map((g) => `<div data-alert-recommendation-level="${esc(g.nivel)}" style="margin-top:10px;font:bold 12px/1.3 Arial,sans-serif;color:#333333;">${esc(g.nivel)}:</div>${lista(g.itens)}`).join("")
+    : lista(itens);
+  return `<div data-alert-recommendations="true" style="border-top:1px solid #E5E7E6;margin-top:16px;padding-top:14px;color:#333333;font:13px/1.5 Arial,sans-serif;"><strong style="display:block;color:#333333;font-size:13px;line-height:1.4;text-transform:uppercase;">Recomendações – Protocolo Meteorológico do COMPARTILHADO</strong>${corpo}</div>`;
 }
 
 function renderStatusChangeCard({
   tipo, grauAnterior, grau, motivo, detalhe, janela, fonteDados, protocolo,
   naturezaDado, severidadeTexto, orgaoEmissor, instrucoesOficiais,
-  previsaoComplementar, periodoPrevisao, fontePrevisao, recomendacoes,
+  previsaoComplementar, periodoPrevisao, fontePrevisao, recomendacoes, recomendacoesPorNivel,
   resumido = false,
 }) {
   const atual = normalizarGrau(grau) || "NORMAL";
@@ -151,7 +156,7 @@ function renderStatusChangeCard({
         ${transicao}
         ${detalhe ? `<div data-alert-notice="true" style="font:13px/1.55 Arial,sans-serif;margin-top:12px;"><strong>Informe do aviso:</strong> ${esc(detalhe)}</div>` : ""}
         ${janela ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:9px;"><strong>${avisoOficial ? "Vigência" : "Período de referência"}:</strong> ${esc(janela)}</div>` : ""}
-        ${recomendacoesHtml(recomendacoes)}
+        ${recomendacoesHtml(recomendacoes, recomendacoesPorNivel)}
       </td></tr>
     </table>`;
   }
@@ -183,8 +188,8 @@ function renderStatusChangeCard({
       ${Array.isArray(instrucoesOficiais) && instrucoesOficiais.length ? `<div style="font:13px/1.55 Arial,sans-serif;margin-top:9px;"><strong>Instruções oficiais:</strong> ${instrucoesOficiais.map(esc).join(" ")}</div>` : ""}
       ${janela ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:9px;">${avisoOficial ? "Vigência" : "Período"}: ${esc(janela)}</div>` : ""}
       ${fonteDados ? `<div style="color:#555555;font:12px/1.5 Arial,sans-serif;margin-top:6px;">Fonte de dados: ${esc(fonteDados)}</div>` : ""}
-      ${previsaoComplementar ? `<div data-alert-forecast-complement="true" style="background:#F7F8F7;border-left:3px solid ${visual.cor};padding:9px 11px;margin-top:12px;font:12.5px/1.5 Arial,sans-serif;"><strong>Previsão complementar:</strong> ${esc(previsaoComplementar)}${periodoPrevisao ? `<div style="margin-top:4px;"><strong>Período da previsão:</strong> ${esc(periodoPrevisao)}</div>` : ""}${fontePrevisao ? `<div style="margin-top:4px;"><strong>Fonte da previsão:</strong> ${esc(fontePrevisao)}</div>` : ""}</div>` : ""}
-      ${recomendacoesHtml(recomendacoes)}
+      ${previsaoComplementar ? `<div data-alert-forecast-complement="true" style="background:#F7F8F7;border-left:3px solid ${visual.cor};padding:9px 11px;margin-top:12px;font:12.5px/1.5 Arial,sans-serif;"><strong>Informação complementar:</strong> ${esc(previsaoComplementar)}${periodoPrevisao ? `<div style="margin-top:4px;"><strong>Período de referência:</strong> ${esc(periodoPrevisao)}</div>` : ""}${fontePrevisao ? `<div style="margin-top:4px;"><strong>Fonte complementar:</strong> ${esc(fontePrevisao)}</div>` : ""}</div>` : ""}
+      ${recomendacoesHtml(recomendacoes, recomendacoesPorNivel)}
     </td></tr>
   </table>`;
 }

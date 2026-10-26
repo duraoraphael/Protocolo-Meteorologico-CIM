@@ -3,8 +3,6 @@ const assert = require("node:assert/strict");
 
 const { CIDADES, getCidade, baseExiste } = require("../src/config/cities");
 const { BASES_DISTRIBUICAO } = require("../src/config/distributionBases");
-const oceanopAreas = require("../src/config/oceanopAreas");
-const rajadaPortais = require("../src/config/rajadaPortais");
 
 test("Natal e Oiapoque usam cadastro operacional exato", () => {
   assert.deepEqual(getCidade("natal"), {
@@ -50,19 +48,4 @@ test("Anchieta e Linhares deixam todos os cadastros operacionais ativos", () => 
   assert.ok(BASES_DISTRIBUICAO.natal);
   assert.ok(BASES_DISTRIBUICAO.oiapoque);
   assert.equal(Object.keys(CIDADES).length, 11);
-});
-
-test("OCEANOP por área não inventa identificadores e Tetra Tech usa áreas confirmadas", () => {
-  assert.equal(oceanopAreas.natal, undefined);
-  assert.equal(oceanopAreas.oiapoque, undefined);
-  assert.deepEqual(rajadaPortais.natal, {
-    fonte: "tetratech", habilitado: true, areaName: "Natal", tipo: "Terrestre",
-    pagina: "https://petrobras.ttforecast.com.br/bulletin/forecast-table/Terrestre/Natal",
-    fusoHorario: "America/Fortaleza",
-  });
-  assert.deepEqual(rajadaPortais.oiapoque, {
-    fonte: "tetratech", habilitado: true, areaName: "Oiapoque", tipo: "Terrestre",
-    pagina: "https://petrobras.ttforecast.com.br/bulletin/forecast-table/Terrestre/Oiapoque",
-    fusoHorario: "America/Belem",
-  });
 });

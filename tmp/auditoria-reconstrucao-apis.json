@@ -1,0 +1,1977 @@
+{
+  "executadoEm": "2026-10-26T10:58:27.015Z",
+  "host": "NOCPU482016",
+  "linhas": [
+    {
+      "localidade": "Rio de Janeiro/RJ",
+      "codigoIbge": "3304557",
+      "coordenadas": [
+        -22.9068,
+        -43.1729
+      ],
+      "estacaoInmet": "A636",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/3304557",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A636",
+          "nome": "RIO DE JANEIRO - JACAREPAGUÁ",
+          "latitude": -22.93999999,
+          "longitude": -43.40277777,
+          "distanciaKm": 23.8
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 17,
+        "maxima": 22,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 70,
+        "maxima": 100,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 21.1,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 96,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens com pancadas de chuva e trovoadas",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:27.496Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:27.496Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:27.496Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:27.496Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:27.496Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:27.496Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "rio_de_janeiro"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Rio de Janeiro"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/3304557",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Macaé/RJ",
+      "codigoIbge": "3302403",
+      "coordenadas": [
+        -22.2828305,
+        -41.9649091
+      ],
+      "estacaoInmet": "A608",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/3302403",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A608",
+          "nome": "MACAÉ",
+          "latitude": -22.3761111,
+          "longitude": -41.81194444,
+          "distanciaKm": 18.8
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 12,
+        "maxima": 23,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 80,
+        "maxima": 100,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 22.7,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 92,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens com pancadas de chuva e trovoadas",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:28.737Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:28.737Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:28.737Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:28.737Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:28.737Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:28.737Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "macae"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Macaé"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/3302403",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Brasília/DF",
+      "codigoIbge": "5300108",
+      "coordenadas": [
+        -15.7939869,
+        -47.8828
+      ],
+      "estacaoInmet": "A001",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/5300108",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A001",
+          "nome": "BRASILIA",
+          "latitude": -15.78944444,
+          "longitude": -47.92583332,
+          "distanciaKm": 4.6
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 20,
+        "maxima": 29,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 45,
+        "maxima": 80,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 21.9,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 80,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:29.716Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:29.716Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:29.716Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:29.716Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:29.716Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:29.716Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "brasilia"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Brasília"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/5300108",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Manaus/AM",
+      "codigoIbge": "1302603",
+      "coordenadas": [
+        -3.1316333,
+        -59.9825041
+      ],
+      "estacaoInmet": "A101",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/1302603",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A101",
+          "nome": "MANAUS",
+          "latitude": -3.10333333,
+          "longitude": -60.01638888,
+          "distanciaKm": 4.9
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 6,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 23,
+        "maxima": 33,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 50,
+        "maxima": 100,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 26.9,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 79,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens com possibilidade de chuva isolada",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:30.599Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:30.599Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:30.599Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:30.599Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:30.599Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:30.599Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 6,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "manaus"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Manaus"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/1302603",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Santos/SP",
+      "codigoIbge": "3548500",
+      "coordenadas": [
+        -23.9609448,
+        -46.3166316
+      ],
+      "estacaoInmet": "A765",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/3548500",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A765",
+          "nome": "BERTIOGA",
+          "latitude": -23.84472221,
+          "longitude": -46.14333333,
+          "distanciaKm": 21.8
+        },
+        "cobertura": {
+          "amostras": 0,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 13,
+        "maxima": 20,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 70,
+        "maxima": 100,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 18.9,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 100,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens com pancadas de chuva e trovoadas isoladas",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:31.747Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:31.747Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:31.747Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:31.747Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:31.747Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:31.747Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 0,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "santos"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Santos"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/3548500",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Aracaju/SE",
+      "codigoIbge": "2800308",
+      "coordenadas": [
+        -10.9162061,
+        -37.0774655
+      ],
+      "estacaoInmet": null,
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/2800308",
+        "status": "indisponivel",
+        "medidoEm": null,
+        "estacao": null,
+        "cobertura": {
+          "amostras": 0,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 24,
+        "maxima": 34,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 50,
+        "maxima": 90,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "FALHA",
+        "valor": null,
+        "em": null
+      },
+      "umidade": {
+        "status": "FALHA",
+        "valor": null,
+        "em": null
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:32.603Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:32.603Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:32.603Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:32.603Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:32.603Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:32.603Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 0,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "aracaju"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Aracaju"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/2800308",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Natal/RN",
+      "codigoIbge": "2408102",
+      "coordenadas": [
+        -5.8115,
+        -35.2415
+      ],
+      "estacaoInmet": "A304",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/2408102",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A304",
+          "nome": "NATAL",
+          "latitude": -5.83722221,
+          "longitude": -35.20805555,
+          "distanciaKm": 4.7
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 25,
+        "maxima": 31,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 55,
+        "maxima": 80,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 28,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 75,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:33.512Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:33.512Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:33.512Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:33.512Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:33.512Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:33.512Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "natal"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Natal"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/2408102",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Oiapoque/AP",
+      "codigoIbge": "1600501",
+      "coordenadas": [
+        3.861224,
+        -51.796699
+      ],
+      "estacaoInmet": "A242",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/1600501",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A242",
+          "nome": "OIAPOQUE",
+          "latitude": 3.81361111,
+          "longitude": -51.8625,
+          "distanciaKm": 9
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 21,
+        "maxima": 38,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 30,
+        "maxima": 100,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 22.2,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 90,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:34.492Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:34.492Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:34.492Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:34.492Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:34.492Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:34.492Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "oiapoque"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Oiapoque"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/1600501",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Vitória/ES",
+      "codigoIbge": "3205309",
+      "coordenadas": [
+        -20.3200917,
+        -40.3376682
+      ],
+      "estacaoInmet": "A612",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/3205309",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A612",
+          "nome": "VITÓRIA",
+          "latitude": -20.27083332,
+          "longitude": -40.30583333,
+          "distanciaKm": 6.4
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 22,
+        "maxima": 27,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 60,
+        "maxima": 100,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 23.5,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 97,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens com pancadas de chuva e trovoadas",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:35.510Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:35.510Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:35.510Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:35.510Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:35.510Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:35.510Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "vitoria"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Vitória"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/3205309",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Araucária/PR",
+      "codigoIbge": "4101804",
+      "coordenadas": [
+        -25.5861107,
+        -49.4051209
+      ],
+      "estacaoInmet": "A807",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/4101804",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A807",
+          "nome": "CURITIBA",
+          "latitude": -25.4486111,
+          "longitude": -49.23055554,
+          "distanciaKm": 23.3
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 8,
+        "maxima": 20,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 45,
+        "maxima": 100,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 13.3,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 85,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens com possibilidade de chuva isolada",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:36.401Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:36.401Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:36.401Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:36.401Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:36.401Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:36.401Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "araucaria"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "NÃO VERIFICADO",
+        "area": "Wenceslau Bráz"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/4101804",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "AREA_NAO_HOMOLOGADA"
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    },
+    {
+      "localidade": "Salvador/BA",
+      "codigoIbge": "2927408",
+      "coordenadas": [
+        -12.9777,
+        -38.5016
+      ],
+      "estacaoInmet": "A456",
+      "observacaoInmet": {
+        "endpoint": "https://apiprevmet3.inmet.gov.br/estacao/proxima/2927408",
+        "status": "operacional",
+        "medidoEm": "2026-10-26T10:00:00.000Z",
+        "estacao": {
+          "codigo": "A456",
+          "nome": "SALVADOR-RADIO FAROL",
+          "latitude": -12.80833333,
+          "longitude": -38.49583333,
+          "distanciaKm": 18.8
+        },
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "temperaturaPrevista": {
+        "status": "VALIDADO",
+        "minima": 24,
+        "maxima": 32,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "umidadePrevista": {
+        "status": "VALIDADO",
+        "minima": 60,
+        "maxima": 95,
+        "data": "2026-10-26",
+        "fonte": "INMET previsão municipal"
+      },
+      "temperatura": {
+        "status": "VALIDADO",
+        "valor": 27.1,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "umidade": {
+        "status": "VALIDADO",
+        "valor": 81,
+        "em": "2026-10-26T10:00:00.000Z"
+      },
+      "condicaoGeral": {
+        "status": "VALIDADO",
+        "valor": "Muitas nuvens",
+        "data": "26/10/2026"
+      },
+      "ventoPeriodoInmet": {
+        "manha": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:37.381Z"
+        },
+        "tarde": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:37.381Z"
+        },
+        "noite": {
+          "status": "FALHA",
+          "valorKmh": null,
+          "consultadoEm": "2026-10-26T10:58:37.381Z"
+        }
+      },
+      "chuvaPeriodoInmet": {
+        "manha": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:37.381Z"
+        },
+        "tarde": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:37.381Z"
+        },
+        "noite": {
+          "statusAcumulado": "FALHA",
+          "acumuladoMm": null,
+          "statusProbabilidade": "FALHA",
+          "probabilidadePct": null,
+          "consultadoEm": "2026-10-26T10:58:37.381Z"
+        }
+      },
+      "chuvaDiariaObservada": {
+        "status": "FALHA",
+        "valorMm": null,
+        "cobertura": {
+          "amostras": 2,
+          "horasEsperadas": 7,
+          "parcial": true
+        }
+      },
+      "rajadaPrevista": {
+        "status": "FALHA",
+        "valorKmh": null,
+        "referenciaOceanop": "salvador"
+      },
+      "chuva": {
+        "previstaDia": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": "00h–24h dia civil local"
+        },
+        "previstaJanela": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null
+        },
+        "probabilidadeMax": {
+          "status": "NÃO VERIFICADO",
+          "valorPct": null,
+          "janela": null
+        },
+        "acumuladaEstimada": {
+          "status": "NÃO VERIFICADO",
+          "valorMm": null,
+          "janela": null,
+          "cobertura": null
+        }
+      },
+      "uv": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "em": null
+      },
+      "ar": {
+        "status": "NÃO VERIFICADO",
+        "valor": null,
+        "classificacao": null,
+        "em": null
+      },
+      "portal": {
+        "status": "FALHA",
+        "area": "Salvador"
+      },
+      "endpoints": {
+        "inmet": "https://apiprevmet3.inmet.gov.br/previsao/2927408",
+        "inmetHttp": 200,
+        "openMeteo": "https://customer-api.open-meteo.com/v1/forecast",
+        "ar": "https://customer-air-quality-api.open-meteo.com/v1/air-quality",
+        "oceanopToken": "https://oceanop-api-disp.petrobras.com.br/api/v1/Servicos/GerarToken"
+      },
+      "falhas": {
+        "ar": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "Licença comercial da Open-Meteo não configurada (OPEN_METEO_API_KEY ausente)."
+        },
+        "oceanop": {
+          "codigo": "HTTP_401",
+          "http": 401,
+          "tipo": "http",
+          "mensagem": "OCEANOP — autenticação respondeu HTTP 401 após 1 tentativas"
+        },
+        "portal": {
+          "codigo": "TETRATECH_TOKEN_EXPIRED",
+          "http": null,
+          "tipo": "ConfigurationError",
+          "mensagem": "TTForecast: token configurado expirou; renove-o ou use conta técnica OAuth autorizada."
+        },
+        "weather": {
+          "codigo": "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED",
+          "http": null,
+          "tipo": "Error",
+          "mensagem": "OPEN_METEO_API_KEY ausente: este protocolo é usado comercialmente e não pode consultar a API gratuita da Open-Meteo."
+        }
+      }
+    }
+  ]
+}

@@ -1,67 +1,54 @@
-# Integração OCEANOP / Petrobras
+# Integração OCEANOP / Petrobras — rajada prevista
 
-## Contrato adotado
+A rajada prevista de cada base vem do OCEANOP. A Open-Meteo continua como
+contingência (por período e no total) quando o OCEANOP falha ou não cobre a base.
 
-O fluxo ativo utiliza o endpoint documentado no Swagger corporativo:
+## Padrão por base (`src/config/oceanopPontos.js`)
 
-- `POST https://oceanop-api-disp.petrobras.com.br/api/v1/previsao/JsonPrevisaoPorListaDePontosLatLonAsync`;
-- corpo: `[{ "ID": "chave_da_base", "Lat": -00.0, "Lon": -00.0 }]`;
-- timeout de 15 segundos, retentativas apenas para falhas transitórias, cache de
-  5 minutos e deduplicação de chamadas simultâneas;
-- credenciais opcionais lidas somente no backend: `OCEANOP_API_KEY`, enviada em
-  `X-API-Key`, e `OCEANOP_ACCESS_TOKEN`, enviado como Bearer;
-- TLS permanece validado. Não há desativação de certificado nem tentativa de
-  contornar autenticação.
+A API só responde para coordenadas **exatamente** cadastradas (arredondar a
+latitude/longitude zera o retorno); o `ID` enviado é livre e volta como `PointID`.
 
-A resposta só é aceita com HTTP 2xx, `success: true`, `data` como array não
-vazio, registros estruturalmente válidos e `Local` correspondente ao `ID`
-solicitado após normalização textual. Resposta de outra base é descartada antes
-do cache e não chega ao painel, PDF ou e-mail.
+| Base | Modo | Consulta |
+|---|---|---|
+| Rio de Janeiro, Santos, Aracaju, Oiapoque, Vitória, Salvador | `coordenadas` | `POST JsonPrevisaoPorListaDePontosLatLonAsync` |
+| Macaé, Natal, Brasília, Wenceslau Bráz (chave `araucaria`) | `area` | `GET JsonPrevisaoAreaAsync?local=` (locais aceitos filtrados na resposta) |
+| Manaus | `ausente` | sem ponto no OCEANOP; usa só a Open-Meteo |
 
-O endpoint legado `GET /api/v1/previsao/JsonPrevisaoAreaAsync?local=...` continua
-no adaptador exclusivamente por compatibilidade. O relatório operacional usa o
-endpoint por coordenadas.
+Verificado em 26/10/2026 (`node --use-system-ca scripts/testarOceanop.js todas`):
+10 das 11 bases retornam ~108–216 registros horários, cobrindo ~9 dias. O Rio
+retorna dois locais por hora ("Rio de Janeiro" e "Santos Dumont (SBRJ)"); usa-se
+a maior rajada.
 
-## Cobertura das bases
+## Contrato e segurança
 
-`src/config/oceanopPontos.js` deriva um ponto individual das coordenadas oficiais
-de cada entrada de `src/config/cities.js`. Assim, todas as 11 bases atuais são
-consultáveis sem reutilizar o retorno de outra localidade: Rio de Janeiro,
-Macaé, Brasília, Manaus, Santos, Aracaju, Natal, Oiapoque, Vitória, Araucária e
-Salvador.
+- credenciais só no backend: `OCEANOP_API_KEY` (`X-API-Key`), `OCEANOP_ACCESS_TOKEN`
+  (Bearer) ou `OCEANOP_USUARIO`/`OCEANOP_SENHA` (HTTP Basic, só se os anteriores
+  estiverem vazios);
+- timeout de 15 s, retentativas só para falhas transitórias, cache de 5 min,
+  deduplicação de chamadas simultâneas, TLS validado, redirecionamento recusado;
+- resposta aceita com HTTP 2xx, `success: true` e `data` em array. No modo
+  coordenadas o `PointID` deve ser igual ao `ID` enviado; `data` vazio = "sem
+  cobertura" (`OCEANOP_NO_COVERAGE`). No modo área só os locais aceitos entram.
 
-Brasília é tratada como ponto terrestre: vento pode ser usado, mas produto
-marítimo permanece desabilitado. A mesma proteção vale para todas as bases não
-costeiras.
+## Uso da rajada
 
-## Unidade, fuso e uso operacional
+Campo `VelocidadeVento_10M_Rajada`, convertido para km/h. Janela por edição:
+08h → 08h–15h; 15h → 15h–00h (horário local da base). A maior rajada da janela é
+usada por período (manhã/tarde/noite) e no total; os 3 dias seguintes recebem a
+máxima diária. Sem dado válido, nada é inventado: cai na Open-Meteo.
 
-O adaptador aceita velocidade declarada em `km/h`, `m/s` ou `nós` e centraliza
-a conversão para km/h (`m/s × 3,6`; `nós × 1,852`). O cadastro atual declara os
-campos OCEANOP de vento e rajada em km/h, conforme o contrato previamente
-homologado do produto por área; a confirmação final do payload do endpoint por
-coordenadas ainda depende de acesso autorizado.
+## Unidade e fuso (validados contra a Open-Meteo, hora a hora)
 
-Datas são interpretadas apenas quando há fuso IANA cadastrado. Para a edição das
-05h, a janela é 05h–15h; para a edição das 15h, 15h–00h. A maior rajada válida
-da janela é usada com fonte, local e horário preservados. Os três dias seguintes
-recebem a máxima diária quando houver registro válido.
+- **Unidade: nós** (`OCEANOP_UNIDADE_VENTO`). Como nós, a diferença média para a
+  Open-Meteo é de 3–6 km/h; como m/s seria ~20 km/h. Coerente com os "20 nós" do site.
+- **Fuso das datas: UTC** (`OCEANOP_FUSO_DADOS`). Em Santos, Vitória e Oiapoque a
+  melhor aderência foi com deslocamento 0 h (Santos: 2,7 km/h em UTC contra
+  5,9 km/h em horário local); Rio e Salvador não discriminam. É inferência forte,
+  mas deve ser confirmada pela equipe OCEANOP.
+- **Atualização:** o modelo parece gerar uma corrida por dia (~06h, `DataEscrita`).
 
-Ondas, período e demais variáveis marítimas permanecem desabilitados até que
-unidades, cobertura geográfica e payload real sejam validados formalmente.
-Campos sem fonte autorizada aparecem como `Informação indisponível`, sem valor
-inventado nem mistura entre bases.
+## Pendências com a equipe OCEANOP
 
-## Validação real em 22/10/2026
-
-- DNS corporativo, TCP/443 e TLS: disponíveis;
-- Swagger: HTTP 200;
-- contrato `PontoLatLonDTO` (`ID`, `Lat`, `Lon`): confirmado no Swagger;
-- `POST` real para Brasília, com suas coordenadas exatas: HTTP 401;
-- endpoint legado consultado para sete áreas: HTTP 401;
-- resposta autenticada com `success: true`: não obtida.
-
-Conclusão: o adaptador, o isolamento por base, o cache e a normalização estão
-implementados e testados. A ativação produtiva dos dados OCEANOP depende do
-fornecimento das credenciais/permissões oficiais e de homologação com payload
-real. Até lá, o sistema falha de forma segura e mantém a origem indisponível.
+1. Confirmar formalmente unidade (nós) e fuso (UTC) dos campos.
+2. Pontos/áreas de **Manaus** (nome de área ou coordenada exata).
+3. Credencial de serviço para uso contínuo (hoje funciona com usuário/senha).

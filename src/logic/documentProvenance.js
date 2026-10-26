@@ -35,6 +35,7 @@ function conteudoVerificavel(documento) {
       probabilidadeChuvaPrevista: documento?.probabilidadeChuvaPrevista,
     },
     fontesPorCampo: documento?.fontesPorCampo || null,
+    indicadoresSnapshot: documento?.indicadoresSnapshot || null,
     previsaoDias: documento?.previsaoDias || null,
     previsaoProximosDias: documento?.previsaoProximosDias || null,
     ventoPorPeriodo: documento?.ventoPorPeriodo || null,

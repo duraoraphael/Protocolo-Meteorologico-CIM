@@ -18,7 +18,16 @@ function esperar(ms) {
 }
 
 function statusTransitorio(status) {
-  return status === 408 || status === 425 || status === 429 || [502, 503, 504].includes(status);
+  return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+}
+
+function retryAfterMs(resposta, agora = Date.now()) {
+  const valor = resposta?.headers?.get?.("retry-after");
+  if (!valor) return null;
+  const segundos = Number(valor);
+  if (Number.isFinite(segundos) && segundos >= 0) return Math.min(segundos * 1000, 60_000);
+  const instante = Date.parse(valor);
+  return Number.isFinite(instante) ? Math.max(0, Math.min(instante - agora, 60_000)) : null;
 }
 
 function codigoOriginal(erro) {
@@ -195,11 +204,13 @@ async function buscarJsonComRetentativa(url, {
       });
 
       if (!resposta.ok) {
+        const aguardarMs = retryAfterMs(resposta);
         throw criarErro(`${nomeFonte} respondeu HTTP ${resposta.status}`, {
           name: "HttpSourceError",
           tipo: "http",
           code: `HTTP_${resposta.status}`,
           httpStatus: resposta.status,
+          retryAfterMs: aguardarMs,
           transitorio: statusTransitorio(resposta.status),
           normalizado: true,
         });
@@ -222,7 +233,7 @@ async function buscarJsonComRetentativa(url, {
       });
       registrarErro(logger, prefixoLog, erro, `${numeroTentativa}/${tentativas}`, tempoMs);
       if (!erro.transitorio || numeroTentativa >= tentativas) break;
-      await esperarFn(atrasoDaTentativa(tentativa, atrasoBaseMs));
+      await esperarFn(erro.retryAfterMs ?? atrasoDaTentativa(tentativa, atrasoBaseMs));
     }
   }
 

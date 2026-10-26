@@ -4,7 +4,6 @@ const {
   interpretarHtml, nivelEhf, recomendacoesCalor, riscoCombinadoCanonico, consultar, lerArmazenado, validarUrl,
 } = require('../src/sources/climaSaudeService');
 const { CIDADES } = require('../src/config/cities');
-const { resumo, compararComManha } = require('../src/logic/scheduledReport');
 const { detectarAlertasGraves, filtrarNovidades } = require('../src/logic/alertWatcher');
 const { renderPdfHtml } = require('../src/render/pdfTemplate');
 const { renderEmailHtml } = require('../src/render/emailTemplate');
@@ -117,13 +116,10 @@ test('coleta válida persiste e risco combinado não altera grau EHF', async () 
   assert.match(urlConsultada, /data=2026-09-29/);
 });
 
-test('05h→15h informa mudança e alerta de calor só em transição', () => {
+test('alerta de calor é detectado e só notifica em transição', () => {
   const baixo = interpretarHtml(pagina({ ehf: 'Baixo' }), parametros);
   const severo = interpretarHtml(pagina({ ehf: 'Severo' }), parametros);
   const base = { severidade: { grau: 'NORMAL', eventos: [] }, climaSaude: { status: 'operacional', dados: baixo } };
-  const manha = resumo(base);
-  const tarde = resumo({ ...base, climaSaude: { status: 'operacional', dados: severo } });
-  assert.ok(compararComManha(manha, tarde).some((x) => x.includes('ATENÇÃO P1 → ALERTA P2')));
   const alerta = detectarAlertasGraves(base).find((a) => a.assinatura === 'calor-ehf');
   assert.equal(alerta.grau, 'ATENÇÃO');
   const estado = { 'petropolis|calor-ehf': { gravidade: 'atencao', grau: 'ATENÇÃO' } };
@@ -141,6 +137,7 @@ test('PDF técnico, e-mail e painel exibem calor sem alterar severidade meteorol
   const dados = interpretarHtml(pagina(), parametros);
   const report = {
     cidade: { chave: 'petropolis', nome: 'Petrópolis', uf: 'RJ' },
+    geradoEmISO: '2026-09-29T10:00:00.000Z',
     dataFormatadaLonga: 'terça-feira, 29 de setembro de 2026', dataFormatadaCurta: '29/09/2026', horaConsulta: '07:00',
     condicaoGeral: 'Ensolarado', tempMin: 20, tempMax: 30, umidadeMin: 40, umidadeMax: 80,
     precipitacaoTotalMm: 0, tabelaTemperaturaUmidade: [], ventoPorPeriodo: [], chuvaPorPeriodo: [],

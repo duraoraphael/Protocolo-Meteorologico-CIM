@@ -7,20 +7,19 @@
 //   node src/cli.js --sem-email      (gera o PDF em /output mas não envia)
 //   node src/cli.js --cidade=salvador
 //   node src/cli.js --teste --horario=08:00 --cidade=rio_de_janeiro --enviar-para=voce@empresa.com
+//   node src/cli.js --avulso-automatico --horario=15:00 --cidade=rio_de_janeiro --enviar-para=voce@empresa.com
 //   node src/cli.js --teste --horario=08:00,15:00 --todas-bases
 //                                    (envio de TESTE dos informativos agendados:
 //                                     assunto "[TESTE 08:00]", PDF *_TESTE, sem
-//                                     histórico do agendador e sem GED; as
-//                                     edição das 15h compara com a das 08h
-//                                     deste teste). Edições: 08:00, 15:00 ou "todas".
+//                                     histórico do agendador e sem GED.
+//                                     Edições: 08:00, 15:00 ou "todas".
 
 require("dotenv").config();
 require("./security/certificados");
 const { executarPipeline } = require("./pipeline");
 const { fecharNavegador } = require("./render/pdfGenerator");
 const { CIDADES } = require("./config/cities");
-const { resumo } = require("./logic/scheduledReport");
-const { HORARIO_EDICAO_INICIAL, horariosConfigurados } = require("./logic/informativoValidity");
+const { horariosConfigurados } = require("./logic/informativoValidity");
 
 function lerArgumento(nome) {
   const arg = process.argv.find((a) => a.startsWith(`--${nome}=`));
@@ -34,7 +33,6 @@ async function enviarTeste(enviarEmail) {
   const bases = process.argv.includes("--todas-bases") ? Object.keys(CIDADES) : [lerArgumento("cidade") || process.env.CIDADE];
   let falhas = 0;
   for (const cidadeChave of bases) {
-    let anterior = null;
     for (const horarioAgendado of horarios) {
       try {
         const r = await executarPipeline({
@@ -42,10 +40,8 @@ async function enviarTeste(enviarEmail) {
           enviarEmail,
           horarioAgendado,
           teste: true,
-          comparacaoAnterior: anterior,
           destinatariosTeste: destinoTeste ? [destinoTeste] : null,
         });
-        if (horarioAgendado === HORARIO_EDICAO_INICIAL) anterior = resumo(r.report);
         console.log(`[CIM][TESTE ${horarioAgendado}] ${r.report.cidade.nome}: ${r.envio ? `enviado para ${r.envio.destinatarios.join(", ")}` : "e-mail não enviado (--sem-email)"} | ${r.arquivoPdf}`);
       } catch (erro) {
         falhas += 1;
@@ -54,6 +50,26 @@ async function enviarTeste(enviarEmail) {
     }
   }
   return falhas;
+}
+
+async function enviarAvulsoAutomatico() {
+  const cidadeChave = lerArgumento("cidade");
+  const horario = lerArgumento("horario");
+  const destinatario = lerArgumento("enviar-para");
+  if (!cidadeChave || !horario || !destinatario) {
+    throw new Error("--avulso-automatico exige --cidade, --horario e --enviar-para.");
+  }
+  const horarios = horariosConfigurados(horario);
+  if (horarios.length !== 1) {
+    throw new Error("--avulso-automatico aceita somente um horário: 08:00 ou 15:00.");
+  }
+  const resultado = await executarPipeline({
+    cidadeChave,
+    enviarEmail: true,
+    horarioAgendado: horarios[0],
+    destinatariosAvulsos: [destinatario],
+  });
+  console.log(`[CIM][ENVIO AVULSO ${horarios[0]}] ${resultado.report.cidade.nome}: enviado para ${resultado.envio.destinatarios.join(", ")} | ${resultado.arquivoPdf}`);
 }
 
 async function main() {
@@ -66,6 +82,19 @@ async function main() {
       process.exitCode = falhas ? 1 : 0;
     } catch (erro) {
       console.error("[CIM] Falha no envio de teste:", erro.message);
+      process.exitCode = 1;
+    } finally {
+      await fecharNavegador();
+    }
+    return;
+  }
+
+  if (process.argv.includes("--avulso-automatico")) {
+    try {
+      await enviarAvulsoAutomatico();
+      process.exitCode = 0;
+    } catch (erro) {
+      console.error("[CIM] Falha no envio avulso:", erro.message);
       process.exitCode = 1;
     } finally {
       await fecharNavegador();

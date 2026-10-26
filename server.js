@@ -66,7 +66,6 @@ function criarApp({
   if (confiancaProxy !== false) app.set("trust proxy", confiancaProxy);
   app.use(cabecalhosSeguranca());
   app.use(express.json({ limit: "100kb" }));
-  app.use("/api/oceanop", require("./src/integrations/oceanopRoutes").criarOceanopRouter({ verificarSenha }));
   app.use(express.static(path.join(__dirname, "public"), { index: "dashboard.html" }));
   // Ativos visuais do CIM ficam em Logo/, na raiz do projeto.
   app.use("/logo", express.static(path.join(__dirname, "Logo")));
@@ -400,12 +399,17 @@ function iniciarServidor() {
   }
 
   const app = criarApp();
+  const publicarSnapshotInformativo = (erro, resultado) => {
+    if (erro || !resultado?.report?.snapshotId || !resultado?.report?.cidade?.chave) return;
+    try { app.locals.atualizadorDados.registrar(resultado.report); }
+    catch (falha) { console.error("[ATUALIZACAO] Não foi possível publicar no painel o snapshot enviado:", falha.message); }
+  };
   let agendamentosIniciados = false;
   const iniciarAgendamentos = () => {
     if (agendamentosIniciados) return;
     agendamentosIniciados = true;
-    iniciarAgendamentoDiario();
-    agendarEnvioUnicoHoje();
+    iniciarAgendamentoDiario(publicarSnapshotInformativo);
+    agendarEnvioUnicoHoje(publicarSnapshotInformativo);
     iniciarMonitorAlertas();
     iniciarAtualizacaoAutomatica(app.locals.atualizadorDados);
     iniciarVerificacaoFontes();
@@ -455,4 +459,3 @@ function iniciarServidor() {
 if (executadoDiretamente) iniciarServidor();
 
 module.exports = { criarApp, iniciarServidor };
-

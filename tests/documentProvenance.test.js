@@ -74,6 +74,17 @@ test("alterar valor meteorológico depois do registro invalida o documento", () 
   );
 });
 
+test("alterar indicador do snapshot depois do registro invalida o documento", () => {
+  const documento = documentoBase();
+  documento.indicadoresSnapshot = { temperaturaObservada: { valor: 24, unidade: "°C" } };
+  registrarDocumentoOperacional(documento, { fontes: ["Open-Meteo"] });
+  documento.indicadoresSnapshot.temperaturaObservada.valor = 26;
+  assert.throws(
+    () => validarDocumentoOperacional(documento, "publicação", { exigirCamposCriticos: true }),
+    (erro) => erro.code === "CONTENT_TAMPERED"
+  );
+});
+
 test("campo numérico sem fonte verificável bloqueia publicação", () => {
   const documento = documentoBase();
   delete documento.fontesPorCampo.tempMax;

@@ -1,3 +1,5 @@
+const { acumularRecomendacoes } = require("./recomendacoesCumulativas");
+
 const RECOMENDACOES = Object.freeze({
   tempestade: Object.freeze({
     "ATENÇÃO": Object.freeze([
@@ -67,10 +69,7 @@ const RECOMENDACOES = Object.freeze({
 });
 
 function recomendacoesFenomeno(fenomeno, grau) {
-  const niveis = ["ATENÇÃO", "ALERTA", "EMERGÊNCIA"];
-  const indice = niveis.indexOf(grau);
-  if (indice < 0) return [];
-  return niveis.slice(0, indice + 1).flatMap((nivel) => RECOMENDACOES[fenomeno]?.[nivel] || []);
+  return acumularRecomendacoes(fenomeno, grau, RECOMENDACOES);
 }
 
 module.exports = { recomendacoesFenomeno };

@@ -33,10 +33,10 @@ function relatorioBase(sobrescritas = {}) {
   };
 }
 
-test("informativo do e-mail mostra chuva acumulada/dia e onda em cards distintos", () => {
+test("informativo do e-mail mostra chuva prevista/dia e onda em cards distintos", () => {
   const html = renderEmailHtml(relatorioBase());
 
-  assert.match(html, /Chuva acumulada\/dia/i);
+  assert.match(html, /Chuva prevista\/dia/i);
   assert.match(html, /12\.4 mm/);
   assert.doesNotMatch(html, /Mar — onda máx\./i);
   assert.match(html, /MAR — ALTURA MÁX\. DE ONDA/);
@@ -97,6 +97,53 @@ test("envio reutiliza o PDF completo em memória como anexo SMTP", { concurrency
     assert.equal(resultado.respostaSmtp, "250 2.0.0 OK");
     assert.equal(resultado.aceitos, 1);
     assert.equal(resultado.rejeitados, 0);
+  } finally {
+    transport.criarTransportador = criarTransportadorAnterior;
+    transport.enderecoRemetente = enderecoRemetenteAnterior;
+    delete require.cache[caminhoEnvio];
+    if (destinatariosAnteriores === undefined) delete process.env.REPORT_RECIPIENTS;
+    else process.env.REPORT_RECIPIENTS = destinatariosAnteriores;
+  }
+});
+
+test("destinatário avulso exige autorização explícita e não marca o e-mail como teste", { concurrency: false }, async () => {
+  const caminhoTransport = require.resolve("../src/email/transport");
+  const caminhoEnvio = require.resolve("../src/email/sendReport");
+  const transport = require(caminhoTransport);
+  const criarTransportadorAnterior = transport.criarTransportador;
+  const enderecoRemetenteAnterior = transport.enderecoRemetente;
+  const destinatariosAnteriores = process.env.REPORT_RECIPIENTS;
+  let mensagem;
+
+  try {
+    process.env.REPORT_RECIPIENTS = "ponto.focal@exemplo.com";
+    transport.criarTransportador = () => ({
+      sendMail: async (opcoes) => {
+        mensagem = opcoes;
+        return { messageId: "avulso-message-id", accepted: [opcoes.to], rejected: [] };
+      },
+    });
+    transport.enderecoRemetente = () => ({
+      email: "remetente@exemplo.com",
+      formatado: '"Protocolo Meteorológico CIM" <remetente@exemplo.com>',
+    });
+    delete require.cache[caminhoEnvio];
+
+    const { enviarRelatorioPorEmail } = require(caminhoEnvio);
+    const report = registrarOperacionalTeste(relatorioBase({ envioTeste: false }));
+    const pdf = Buffer.from("PDF-AVULSO");
+    await assert.rejects(
+      enviarRelatorioPorEmail(report, pdf, { destinatariosOverride: ["usuario@exemplo.com"] }),
+      /autorizado explicitamente/,
+    );
+    const resultado = await enviarRelatorioPorEmail(report, pdf, {
+      destinatariosOverride: ["usuario@exemplo.com"],
+      permitirOverrideDestinatarios: true,
+    });
+    assert.deepEqual(resultado.destinatarios, ["usuario@exemplo.com"]);
+    assert.match(mensagem.subject, /^Informativo Meteorológico/);
+    assert.doesNotMatch(mensagem.subject, /\[TESTE/);
+    assert.equal(mensagem.to, "usuario@exemplo.com");
   } finally {
     transport.criarTransportador = criarTransportadorAnterior;
     transport.enderecoRemetente = enderecoRemetenteAnterior;

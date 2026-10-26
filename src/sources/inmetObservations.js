@@ -12,7 +12,7 @@ const ARQUIVO_CACHE = path.join(__dirname, "..", "..", "data", "inmet-observacoe
 const TIMEOUT_MS = 15000;
 const TENTATIVAS = 3;
 const IDADE_MAXIMA_MS = 4 * 60 * 60 * 1000;
-const DISTANCIA_MAXIMA_KM = 150;
+const DISTANCIA_MAXIMA_KM = 75;
 const RETENCAO_HISTORICO_MS = 8 * 24 * 60 * 60 * 1000;
 
 let agenteSistema;
@@ -107,7 +107,8 @@ function normalizarObservacao(payload, { cidade, consultadoEm = new Date().toISO
     throw erro;
   }
   if (distanciaKm !== null && distanciaKm > DISTANCIA_MAXIMA_KM) {
-    const erro = new Error(`Estação INMET mais próxima está a ${distanciaKm} km, fora do limite de representatividade de ${DISTANCIA_MAXIMA_KM} km.`);
+    const nomeEstacao = String(estacaoApi.NOME || dados.DC_NOME || codigo).trim();
+    const erro = new Error(`Estação INMET mais próxima (${nomeEstacao}, ${codigo}) está a ${distanciaKm} km, fora do limite de representatividade de ${DISTANCIA_MAXIMA_KM} km.`);
     erro.name = "ParserError";
     erro.code = "INMET_STATION_TOO_FAR";
     throw erro;
@@ -200,6 +201,33 @@ function atualizarHistorico(cache, cidade, observacao, agoraMs = Date.now()) {
     .sort((a, b) => Date.parse(a.medidoEm) - Date.parse(b.medidoEm));
   cache.bases[cidade.chave] = { ultimaValida: observacao, historico };
   return cache.bases[cidade.chave];
+}
+
+function observacaoArmazenadaRecente(observacao, cidade, agoraMs) {
+  const medidoMs = Date.parse(observacao?.medidoEm || "");
+  const estacao = observacao?.estacao;
+  const distancia = haversineKm(
+    numero(cidade?.latitude), numero(cidade?.longitude),
+    numero(estacao?.latitude), numero(estacao?.longitude),
+  );
+  return Number.isFinite(medidoMs)
+    && agoraMs - medidoMs >= -15 * 60 * 1000
+    && agoraMs - medidoMs <= IDADE_MAXIMA_MS
+    && Number.isFinite(distancia) && distancia <= DISTANCIA_MAXIMA_KM
+    && Boolean(estacao?.codigo)
+    && Number.isFinite(observacao?.temperaturaAtualC)
+    && Number.isFinite(observacao?.umidadeAtualPct);
+}
+
+function estacaoArmazenadaRepresentativa(observacao, cidade, catalogo = []) {
+  const estacao = observacao?.estacao;
+  const distancia = haversineKm(
+    numero(cidade?.latitude), numero(cidade?.longitude),
+    numero(estacao?.latitude), numero(estacao?.longitude),
+  );
+  const cadastro = catalogo.find((item) => item.codigo === estacao?.codigo);
+  return Boolean(estacao?.codigo) && Number.isFinite(distancia) && distancia <= DISTANCIA_MAXIMA_KM
+    && (!cadastro || (cadastro.entidade === "INMET" && cadastro.tipo === "Automatica" && cadastro.situacao === "Operante"));
 }
 
 function partesLocais(instante, fuso) {
@@ -295,20 +323,29 @@ function agregarObservacoes(historico, {
       tipoDado: "observado",
     };
   }
-  const chuvas = pontos.map((item) => item.chuvaUltimaHoraMm).filter(Number.isFinite);
+  // CHUVA da estação é o intervalo encerrado no horário da medição. O rótulo
+  // local 00h pertence ao dia anterior; o acumulado de hoje usa 01h..hora atual.
+  const pontosChuvaHoje = pontos.filter((item) => {
+    const hora = partesLocais(item.medidoEm, fuso).hora;
+    return hora >= 1 && hora <= agoraLocal.hora && Date.parse(item.medidoEm) <= agoraData.getTime();
+  });
+  const chuvas = pontosChuvaHoje.map((item) => item.chuvaUltimaHoraMm).filter(Number.isFinite);
   const inicio24h = agoraData.getTime() - 24 * 60 * 60 * 1000;
   const pontos24h = todos.filter((item) => {
     const instante = Date.parse(item.medidoEm);
     return instante > inicio24h && instante <= agoraData.getTime();
   });
-  const pontosJanela = pontos.filter((item) => {
+  const pontosJanela = pontosChuvaHoje.filter((item) => {
     const hora = partesLocais(item.medidoEm, fuso).hora;
-    return hora >= inicioHora && hora < fimHora && Date.parse(item.medidoEm) <= agoraData.getTime();
+    return hora > inicioHora && hora <= fimHora;
   });
-  const horasEsperadasDia = agoraLocal.hora + 1;
-  const fimEfetivoJanela = Math.min(fimHora, agoraLocal.hora + 1);
+  const horasEsperadasDia = agoraLocal.hora;
+  const fimEfetivoJanela = Math.min(fimHora, agoraLocal.hora);
   const horasEsperadasJanela = Math.max(0, fimEfetivoJanela - inicioHora);
-  const chuvaPorHora = pontos.filter((item) => Number.isFinite(item.chuvaUltimaHoraMm)).map((item) => {
+  const coberturaDia = coberturaHoraria(pontosChuvaHoje, horasEsperadasDia);
+  const cobertura24h = coberturaHoraria(pontos24h, 24);
+  const coberturaJanela = coberturaHoraria(pontosJanela, horasEsperadasJanela);
+  const chuvaPorHora = pontosChuvaHoje.filter((item) => Number.isFinite(item.chuvaUltimaHoraMm)).map((item) => {
     const fim = partesLocais(item.medidoEm, fuso);
     const inicio = partesLocais(new Date(Date.parse(item.medidoEm) - 60 * 60 * 1000), fuso);
     const horaInicio = `${String(inicio.hora).padStart(2, "0")}:${String(inicio.minuto).padStart(2, "0")}`;
@@ -332,12 +369,12 @@ function agregarObservacoes(historico, {
     umidadeMinPct: extremos(pontos.map((item) => item.umidadeMinPct), "min"),
     umidadeMaxPct: extremos(pontos.map((item) => item.umidadeMaxPct), "max"),
     umidadeAtualPct: pontos.at(-1)?.umidadeAtualPct ?? null,
-    precipitacaoTotalMm: somaOuNull(chuvas),
-    precipitacaoUltimas24hMm: somaOuNull(pontos24h.map((item) => item.chuvaUltimaHoraMm)),
-    precipitacaoPeriodoMm: somaOuNull(pontosJanela.map((item) => item.chuvaUltimaHoraMm)),
+    precipitacaoTotalMm: horasEsperadasDia === 0 || coberturaDia.parcial ? null : somaOuNull(chuvas),
+    precipitacaoUltimas24hMm: cobertura24h.parcial ? null : somaOuNull(pontos24h.map((item) => item.chuvaUltimaHoraMm)),
+    precipitacaoPeriodoMm: coberturaJanela.parcial ? null : somaOuNull(pontosJanela.map((item) => item.chuvaUltimaHoraMm)),
     precipitacaoHorariaMaxMm: extremos(chuvas, "max"),
     rajadaMaxKmh: extremos(pontos.map((item) => item.rajadaKmh), "max"),
-    cobertura: coberturaHoraria(pontos, horasEsperadasDia),
+    cobertura: coberturaDia,
     coberturaTemperatura: coberturaIndicador(
       pontos,
       ["temperaturaMinC", "temperaturaMaxC", "temperaturaAtualC"],
@@ -348,8 +385,8 @@ function agregarObservacoes(historico, {
       ["umidadeMinPct", "umidadeMaxPct", "umidadeAtualPct"],
       horasEsperadasDia
     ),
-    coberturaUltimas24h: coberturaHoraria(pontos24h, 24),
-    coberturaPeriodo: coberturaHoraria(pontosJanela, horasEsperadasJanela),
+    coberturaUltimas24h: cobertura24h,
+    coberturaPeriodo: coberturaJanela,
     janelaSelecionada: { inicioHora, fimHora },
   };
 }
@@ -415,11 +452,15 @@ async function buscarObservacaoInmet(cidade, {
   } catch (erro) {
     let baseCache = null;
     try { baseCache = carregar()?.bases?.[cidade.chave] || null; } catch {}
-    if (baseCache?.ultimaValida) {
-      const ultima = { ...baseCache.ultimaValida, status: "armazenado", desatualizado: true, metadados: { ...baseCache.ultimaValida.metadados, status: "armazenado" } };
+    if (baseCache?.ultimaValida && estacaoArmazenadaRepresentativa(baseCache.ultimaValida, cidade, catalogo)) {
+      const recente = observacaoArmazenadaRecente(baseCache.ultimaValida, cidade, agora().getTime());
+      const estado = recente ? "armazenado_recente" : "armazenado";
+      const ultima = { ...baseCache.ultimaValida, status: estado, desatualizado: !recente, metadados: { ...baseCache.ultimaValida.metadados, status: estado } };
       return {
         status: "degradado", fonte: FONTE, endpoint: url, endpointCatalogo: URL_CATALOGO,
-        mensagem: `Consulta atual indisponível; usando última observação INMET de ${ultima.medidoEm}.`,
+        mensagem: recente
+          ? `Consulta atual indisponível; última observação INMET válida de ${ultima.medidoEm}, armazenada localmente.`
+          : `Consulta atual indisponível; última observação INMET armazenada de ${ultima.medidoEm} não é válida como leitura atual.`,
         observacao: ultima, historico: baseCache.historico || [],
         agregado: agregarObservacoes(baseCache.historico || [], { agora: agora(), fuso: cidade.fusoHorario || "America/Sao_Paulo", inicioHora, fimHora }),
         erro: { tipo: tipoErro(erro), mensagem: erro.message },
@@ -427,7 +468,9 @@ async function buscarObservacaoInmet(cidade, {
     }
     return {
       status: "indisponivel", fonte: FONTE, endpoint: url, endpointCatalogo: URL_CATALOGO,
-      mensagem: "INMET: observação de temperatura, umidade, chuva e vento indisponível nesta atualização.",
+      mensagem: erro.code === "INMET_STATION_TOO_FAR"
+        ? `INMET: ${erro.message}`
+        : "INMET: observação de temperatura, umidade, chuva e vento indisponível nesta atualização.",
       observacao: null, historico: [], agregado: agregarObservacoes([], { agora: agora(), fuso: cidade.fusoHorario || "America/Sao_Paulo", inicioHora, fimHora }),
       erro: { tipo: tipoErro(erro), mensagem: erro.message },
     };
@@ -442,6 +485,7 @@ module.exports = {
   direcaoCardeal,
   instanteMedicao,
   atualizarHistorico,
+  observacaoArmazenadaRecente,
   FONTE,
   URL_BASE,
   URL_CATALOGO,

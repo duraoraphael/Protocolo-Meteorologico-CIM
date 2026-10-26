@@ -48,27 +48,13 @@ test("POST /api/responsaveis/consultar exige a senha", async (t) => {
   assert.equal(dados.bases[0].chave, "rio_de_janeiro");
 });
 
-test("diagnóstico OCEANOP exige senha e a listagem pública não revela identificadores locais", async (t) => {
+test("rotas e interface da integração desativada não são expostas", async (t) => {
   const srv = await subirApp();
   t.after(srv.fechar);
-  let r = await fetch(srv.base + "/api/oceanop/areas");
-  assert.equal(r.status, 200);
-  const areas = await r.json();
-  assert.equal(areas.ok, true);
-  assert.ok(areas.areas.length > 0);
-  assert.equal(JSON.stringify(areas).includes('"local"'), false);
-
-  r = await fetch(srv.base + "/api/oceanop/previsao", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cidade: "rio_de_janeiro" }),
-  });
-  assert.equal(r.status, 401);
-
-  r = await fetch(srv.base + "/api/oceanop/previsao", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cidade: "cabiunas", senha: SENHA_TESTE }),
-  });
-  assert.equal(r.status, 400, "base desativada não pode iniciar nova consulta");
+  for (const url of ["/api/oceanop/areas", "/api/oceanop/previsao", "/areas.html"]) {
+    const resposta = await fetch(srv.base + url);
+    assert.equal(resposta.status, 404, `${url} não deve ser servido`);
+  }
 });
 
 test("PDF: 401 sem credencial; 200 com senha (Basic) ou token válido", async (t) => {

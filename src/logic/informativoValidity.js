@@ -15,9 +15,9 @@ const EDICOES_INFORMATIVO = Object.freeze({
     codigo: "08h",
     papel: "inicial",
     inicioHora: 8,
-    fimPrevisaoHora: 24,
-    previsaoAte: "00h",
-    periodo: "hoje, das 08h até 00h do dia seguinte",
+    fimPrevisaoHora: 15,
+    previsaoAte: "15h",
+    periodo: "hoje, das 08h até 15h",
     validadeFimDia: 0,
     validadeFimHora: 15,
   }),
@@ -129,6 +129,14 @@ function edicaoInformativo(horarioAgendado) {
   return EDICOES_INFORMATIVO[horarioAgendado] || null;
 }
 
+function referenciaEdicaoVisual(horarioAgendado) {
+  if (!HORARIOS_INFORMATIVO.includes(horarioAgendado)) return null;
+  return {
+    hora: edicaoInformativo(horarioAgendado).codigo,
+    previsaoAte: "00h",
+  };
+}
+
 function intervaloAvisos(horarioAgendado, instante = new Date()) {
   const edicao = edicaoInformativo(horarioAgendado);
   if (!edicao) return { inicioPeriodo: instante, fimPeriodo: null };
@@ -176,6 +184,7 @@ module.exports = {
   instanteNoFuso,
   adicionarDias,
   edicaoInformativo,
+  referenciaEdicaoVisual,
   intervaloAvisos,
   validadeInformativo,
   informativoVigente,

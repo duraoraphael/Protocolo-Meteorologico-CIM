@@ -1,3 +1,5 @@
+const { acumularRecomendacoes, acumularRecomendacoesPorNivel } = require("./recomendacoesCumulativas");
+
 const PROTOCOLO_POR_GRAU = Object.freeze({
   "ATENÇÃO": "P1",
   ALERTA: "P2",
@@ -7,30 +9,40 @@ const PROTOCOLO_POR_GRAU = Object.freeze({
 const RECOMENDACOES_POR_PROTOCOLO = Object.freeze({
   P1: Object.freeze([
     "Reforçar a hidratação.",
-    "Realizar pausas em sombra ou ambiente climatizado.",
-    "Realizar ajuste do horário das atividades com exposição, priorizando períodos mais cedo ou mais tarde.",
+    "Realizar pausas em ambientes sombreados ou climatizados.",
+    "Ajustar horários de atividades com exposição ao calor, antecipando ou postergando os trabalhos quando viável.",
   ]),
   P2: Object.freeze([
     "Impor pausas adicionais e rodízio em atividades essenciais.",
-    "Paralisar atividades não essenciais, conforme protocolo operacional.",
+    "Paralisar atividades não essenciais.",
     "Limitar tarefas pesadas.",
-    "Ampliar a vigilância.",
-    "Disponibilizar água e local de recuperação.",
+    "Ampliar a vigilância das condições dos trabalhadores.",
+    "Disponibilizar água e locais adequados de recuperação.",
     "Disponibilizar protetor solar e intensificar seu uso.",
-    "Preparar a equipe de saúde para eventual aumento da demanda de atendimento.",
+    "Preparar a equipe de saúde para aumento da demanda de atendimento.",
   ]),
   P3: Object.freeze([
-    "Cessar trabalho externo.",
+    "Cessar trabalhos externos conforme o protocolo de emergência.",
     "Remover pessoas para ambiente climatizado.",
     "Providenciar assistência médica imediata e remoção conforme PRE, quando necessário.",
   ]),
 });
 
+const CONFIG_CALOR = Object.freeze({
+  calor: Object.freeze({
+    "ATENÇÃO": RECOMENDACOES_POR_PROTOCOLO.P1,
+    ALERTA: RECOMENDACOES_POR_PROTOCOLO.P2,
+    "EMERGÊNCIA": RECOMENDACOES_POR_PROTOCOLO.P3,
+  }),
+});
+const GRAU_POR_PROTOCOLO = Object.freeze({ P1: "ATENÇÃO", P2: "ALERTA", P3: "EMERGÊNCIA" });
+
 function recomendacoesPorProtocolo(protocolo) {
-  const niveis = ["P1", "P2", "P3"];
-  const indice = niveis.indexOf(protocolo);
-  if (indice < 0) return [];
-  return niveis.slice(0, indice + 1).flatMap((nivel) => RECOMENDACOES_POR_PROTOCOLO[nivel]);
+  return acumularRecomendacoes("calor", GRAU_POR_PROTOCOLO[protocolo], CONFIG_CALOR);
+}
+
+function recomendacoesPorProtocoloEmNiveis(protocolo) {
+  return acumularRecomendacoesPorNivel("calor", GRAU_POR_PROTOCOLO[protocolo], CONFIG_CALOR);
 }
 
 function recomendacoesProtecao(grau) {
@@ -41,5 +53,6 @@ module.exports = {
   PROTOCOLO_POR_GRAU,
   RECOMENDACOES_POR_PROTOCOLO,
   recomendacoesPorProtocolo,
+  recomendacoesPorProtocoloEmNiveis,
   recomendacoesProtecao,
 };

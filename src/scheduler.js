@@ -3,7 +3,7 @@ const { executarPipeline } = require("./pipeline");
 const { CIDADES } = require("./config/cities");
 const { dataBrasilia, lerEstado, gravarEstado, registroHistorico, adquirirExecucao } = require("./logic/scheduledReport");
 const { BASE_COR_RIO } = require("./config/distributionBases");
-const { HORARIOS_INFORMATIVO, HORARIO_EDICAO_INICIAL, horariosConfigurados } = require("./logic/informativoValidity");
+const { HORARIOS_INFORMATIVO, horariosConfigurados } = require("./logic/informativoValidity");
 
 const HORARIOS_COR_RIO_PADRAO = Object.freeze(["08:00", "15:00"]);
 const {
@@ -73,10 +73,6 @@ async function executarHorarioAgendado(horario, {
           cidadeChave,
           enviarEmail: true,
           horarioAgendado: horario,
-          // A edição das 15h compara com a edição inicial (08:00) do dia.
-          comparacaoAnterior: horario === "15:00"
-            ? estado[`${data}|${cidadeChave}|${HORARIO_EDICAO_INICIAL}`]?.resumo || null
-            : null,
         });
         if (!resultado.envio) throw new Error("SMTP não confirmou o envio do relatório.");
         estado[chave] = registroHistorico(resultado.report);

@@ -2,9 +2,8 @@
 // A produção usa o endpoint comercial customer-* com chave. Fornece altura/período/direção de ondas,
 // marulho (swell) e temperatura da superfície do mar.
 //
-// Atende ao item do protocolo original que pedia dados de mar (OCEANOP) para
-// instalações costeiras/offshore — relevante para operação portuária,
-// embarque/desembarque, transferência de pessoal e uso de heliponto.
+// Fornece dados marítimos para instalações costeiras/offshore — relevante
+// para operação portuária, embarque/desembarque e uso de heliponto.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -13,7 +12,7 @@ const {
   API_TENTATIVAS,
   buscarJsonComRetentativa,
 } = require("./httpJsonClient");
-const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo } = require("./openMeteoConfig");
+const { aplicarConfiguracaoOpenMeteo, removerCredenciaisOpenMeteo, apiPublicaPermitida } = require("./openMeteoConfig");
 const {
   operacional,
   degradado,
@@ -29,6 +28,7 @@ const PERIODOS = {
 
 const OPEN_METEO_MARINE_TIMEOUT_MS = 15000;
 const OPEN_METEO_MARINE_TENTATIVAS = API_TENTATIVAS;
+const CACHE_MARINE_MAX_AGE_MS = 60 * 60 * 1000;
 const ARQUIVO_CACHE_MARINE = path.join(__dirname, "..", "..", "data", "marine-cache.json");
 
 // Escala Douglas simplificada (estado do mar), usada na marinha mercante.
@@ -114,6 +114,7 @@ function resumirPeriodo(horas, chave) {
 async function buscarMar(latitude, longitude, {
   fuso = "America/Sao_Paulo",
   fetchImpl = fetch,
+  env = process.env,
   timeoutMs = OPEN_METEO_MARINE_TIMEOUT_MS,
   esperarFn,
   logger,
@@ -134,7 +135,7 @@ async function buscarMar(latitude, longitude, {
     forecast_days: "1",
   });
 
-  const url = aplicarConfiguracaoOpenMeteo(`https://marine-api.open-meteo.com/v1/marine?${params.toString()}`);
+  const url = aplicarConfiguracaoOpenMeteo(`https://marine-api.open-meteo.com/v1/marine?${params.toString()}`, env);
 
   const json = await buscarJsonComRetentativa(url, {
     nomeFonte: "Open-Meteo Marine",
@@ -217,6 +218,7 @@ async function buscarMarComFallback(cidade, {
   carregarCache = lerCacheMarine,
   salvarCache = salvarCacheMarine,
   agora = () => new Date(),
+  env = process.env,
 } = {}) {
   const ponto = cidade.pontoMar;
   const checkedAt = agora().toISOString();
@@ -226,9 +228,16 @@ async function buscarMarComFallback(cidade, {
     });
     return { dados: null, erro, health: indisponivel("Open-Meteo Marine", erro, erro.message, { checkedAt }) };
   }
+  if (!String(env.OPEN_METEO_API_KEY || "").trim() && !apiPublicaPermitida(env)) {
+    const erro = Object.assign(new Error("Open-Meteo Marine: licença comercial não configurada."), {
+      code: "OPEN_METEO_COMMERCIAL_LICENSE_REQUIRED", tipo: "configuration", transitorio: false,
+    });
+    return { dados: null, erro, health: indisponivel("Open-Meteo Marine", erro, erro.message, { checkedAt }) };
+  }
   try {
     const resultado = await consultar(ponto.latitude, ponto.longitude, {
       fuso: cidade.fusoHorario || "America/Sao_Paulo",
+      env,
     });
     const dados = {
       ...resultado,
@@ -254,7 +263,13 @@ async function buscarMarComFallback(cidade, {
     try { armazenado = carregarCache()[cidade.chave] || null; }
     catch (erroCache) { registrarFalha("OPEN-METEO-MARINE-CACHE", erroCache); }
     const lastSuccessAt = armazenado?.consultadoEm || armazenado?.dados?.consultadoEm || null;
-    if (armazenado?.dados && lastSuccessAt) {
+    const idadeMs = Date.parse(checkedAt) - Date.parse(lastSuccessAt);
+    const origemComercial = (() => {
+      try { return new URL(armazenado?.dados?.url).hostname === "customer-marine-api.open-meteo.com"; }
+      catch { return false; }
+    })();
+    if (armazenado?.dados && origemComercial && Number.isFinite(idadeMs)
+        && idadeMs >= 0 && idadeMs <= CACHE_MARINE_MAX_AGE_MS) {
       return {
         dados: {
           ...armazenado.dados,
@@ -282,6 +297,7 @@ module.exports = {
   mediaCircular,
   OPEN_METEO_MARINE_TIMEOUT_MS,
   OPEN_METEO_MARINE_TENTATIVAS,
+  CACHE_MARINE_MAX_AGE_MS,
   ARQUIVO_CACHE_MARINE,
   lerCacheMarine,
   salvarCacheMarine,

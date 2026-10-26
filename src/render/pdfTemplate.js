@@ -6,7 +6,8 @@ const monitorSecas = require("../sources/monitorSecas");
 const CorRio = require("../../public/cor-rio-compartilhado");
 const { comunicadoDoDia } = require("./corRioEmail");
 const { informativoProgramado, tipoDocumentoDoRelatorio } = require("../logic/alertPresentation");
-const { calorPorData, fonteCalor, DESCRICAO_CALOR } = require("../logic/calorPorData");
+const { referenciaEdicaoVisual } = require("../logic/informativoValidity");
+const { calorPorData, dataLocal, fonteCalor, DESCRICAO_CALOR } = require("../logic/calorPorData");
 const { formatarRajadaNumero, formatarRajadaPrevista } = require("../../public/weather-format");
 
 function esc(valor) {
@@ -20,6 +21,14 @@ function esc(valor) {
 function horaConsultaPdf(valor) {
   const horaCheia = /^(\d{2}):00$/.exec(String(valor || "").trim());
   return horaCheia ? `${horaCheia[1]}h` : valor;
+}
+
+function referenciaEdicaoPdf(r) {
+  const referencia = referenciaEdicaoVisual(r.horarioAgendado);
+  if (referencia) return referencia;
+  if (r.horarioAgendado) return null;
+  if (!r.horaConsulta || !r.previsaoAte) return null;
+  return { hora: horaConsultaPdf(r.horaConsulta), previsaoAte: r.previsaoAte };
 }
 
 function escAtributo(valor) {
@@ -79,7 +88,7 @@ function cardAlertaHtml(card) {
         <div class="card-alerta-rec-titulo" style="color:${v.texto};">RECOMENDAÇÕES</div>
         <div class="card-alerta-rec-origem">${esc(rec.titulo)}</div>
       </div>
-      ${listaHtml(rec.itens)}
+      ${rec.grupos ? rec.grupos.map((g) => `<div class="card-alerta-rec-nivel"><strong>${esc(g.nivel)}:</strong>${listaHtml(g.itens)}</div>`).join("") : listaHtml(rec.itens)}
     </div>` : ""}
   </section>`;
 }
@@ -322,14 +331,14 @@ function textoOuIndisponivel(valor) {
 function tabelaVento(periodos) {
   if (!periodos?.length) return "";
   return `<table class="tabela-periodo tabela-vento-periodo">
-    <colgroup><col style="width:14%"><col style="width:12%"><col style="width:19%"><col style="width:19%"><col style="width:36%"></colgroup>
-    <thead><tr><th>Período</th><th>Direção</th><th>Vento (velocidade média)</th><th>Rajada prevista (máx.)</th><th>Referência da previsão</th></tr></thead>
+    <colgroup><col style="width:17%"><col style="width:16%"><col style="width:33%"><col style="width:34%"></colgroup>
+    <thead><tr><th>Período</th><th>Direção</th><th>Vento (velocidade média)</th><th>Rajada prevista (máx.)</th></tr></thead>
     <tbody>
       ${periodos
         .map(
           (p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
             <td><strong>${celulaPeriodo(p)}</strong></td><td>${textoOuIndisponivel(p.direcao)}</td><td>${Number.isFinite(p.velocidadeMediaKmh) ? `${numeroBr(p.velocidadeMediaKmh, 1)} km/h` : "Não disponível"}</td>
-            <td>${Number.isFinite(p.rajadaMaxKmh) ? formatarRajadaPrevista(p.rajadaMaxKmh) : "Não disponível"}</td><td>${textoOuIndisponivel(p.referenciaInmet)}</td>
+            <td>${Number.isFinite(p.rajadaMaxKmh) ? formatarRajadaPrevista(p.rajadaMaxKmh) : "Não disponível"}</td>
           </tr>`
         )
         .join("")}
@@ -340,25 +349,26 @@ function tabelaVento(periodos) {
 function tabelaChuvaPorPeriodo(periodos) {
   if (!periodos?.length) return "";
   return `<table class="tabela-periodo tabela-chuva-periodo">
-    <colgroup><col style="width:16%"><col style="width:18%"><col style="width:25%"><col style="width:41%"></colgroup>
-    <thead><tr><th>Período</th><th>Probabilidade máxima</th><th>Acumulado no período (mm)</th><th>Resumo INMET</th></tr></thead>
+    <colgroup><col style="width:20%"><col style="width:25%"><col style="width:55%"></colgroup>
+    <thead><tr><th>Período</th><th>Probabilidade máxima</th><th>Acumulado previsto (mm)</th></tr></thead>
     <tbody>${periodos.map((p, i) => `<tr class="${i % 2 === 1 ? "zebra" : ""}">
       <td><strong>${celulaPeriodo(p)}</strong></td>
       <td>${Number.isFinite(p.probabilidade) ? `${numeroBr(p.probabilidade, 0)}%` : "Não disponível"}</td>
       <td>${Number.isFinite(p.precipitacaoMm) ? `${numeroBr(p.precipitacaoMm, 1)} mm` : "Não disponível"}</td>
-      <td>${textoOuIndisponivel(p.resumoInmet)}</td>
     </tr>`).join("")}</tbody>
   </table>`;
 }
 
 function tabelaCalor(r) {
   const dadosBrutos = r.climaSaude?.dados || null;
-  const diaDado = dadosBrutos?.consultadoEm ? formatarDataBrasilia(dadosBrutos.consultadoEm)?.slice(0, 10) : null;
-  const dados = dadosBrutos && diaDado === r.dataFormatadaCurta ? dadosBrutos : null;
+  const dataCiclo = dataLocal(r.geradoEmISO || Date.now(), r.cidade?.fuso);
+  const calor = calorPorData(r.climaSaude, dataCiclo);
+  const dados = calor ? dadosBrutos : null;
   return blocoTabela({
     titulo: `<h4 class="subsecao">Excesso de calor</h4>`,
-    tabela: `<table class="tabela-calor"><colgroup><col style="width:18%"><col style="width:22%"><col style="width:30%"><col style="width:30%"></colgroup><thead><tr><th>Período</th><th>EHF</th><th>Classificação</th><th>Risco combinado</th></tr></thead><tbody><tr><td>Dia</td><td>${Number.isFinite(dados?.ehf?.valor) ? esc(dados.ehf.valor) : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td><td>${esc(dados?.riscoCombinado || "Não disponível")}</td></tr></tbody></table>`,
-    fonte: dados ? "Fonte de dados: Clima e Saúde." : "Fonte prioritária consultada: Clima e Saúde. Dados indisponíveis nesta emissão.",
+    tabela: `<table class="tabela-calor"><thead><tr><th>Período</th><th>EHF</th><th>Classificação EHF</th><th>Nível CIM</th><th>Risco combinado</th></tr></thead><tbody><tr><td>${esc(dataCiclo || "Dia indisponível")}</td><td>${Number.isFinite(dados?.ehf?.valor) ? esc(dados.ehf.valor) : "Não disponível"}</td><td>${esc(dados?.ehf?.classificacao || "Não disponível")}</td><td>${esc(calor?.rotulo || "Não disponível")}</td><td>${esc(dados?.riscoCombinado || "Não disponível")}</td></tr></tbody></table>`,
+    fonte: dados ? `Fonte de dados: Clima e Saúde — Ministério da Saúde; EHF de ${esc(dataCiclo)}; consulta ${esc(dados.consultadoEm || "horário indisponível")}.`
+      : "Fonte prioritária consultada: Clima e Saúde. Classificação EHF da data indisponível nesta emissão.",
   });
 }
 
@@ -423,27 +433,27 @@ function tabelaMar(mar, fontesPorCampo = {}) {
 
 function tabelaQualidadeAr(qa, indiceUv, fontesPorCampo = {}) {
   qa ||= {};
-  const fontePm = fontesPorCampo["ar.iqar"] && !/indisponível/i.test(fontesPorCampo["ar.iqar"])
-    ? fontesPorCampo["ar.iqar"]
-    : Number.isFinite(qa.iqar) ? (qa.fonte || "Qualidade do ar estimada — Open-Meteo/CAMS") : "Informação indisponível";
-  const classificacaoAr = Number.isFinite(qa.iqar) ? qa.classificacao : null;
+  const fontePm = fontesPorCampo["ar.usAqi"] && !/indisponível/i.test(fontesPorCampo["ar.usAqi"])
+    ? fontesPorCampo["ar.usAqi"]
+    : Number.isFinite(qa.usAqi) ? (qa.fonte || "Open-Meteo — estimativa modelada") : "Informação indisponível";
+  const classificacaoAr = Number.isFinite(qa.usAqi) ? qa.classificacao : null;
   const uvDisponivel = Number.isFinite(indiceUv?.valorAtual) && Boolean(indiceUv?.classificacao);
   const uvValor = uvDisponivel ? indiceUv.valorAtual : "Índice UV indisponível";
   const uvClassificacao = uvDisponivel ? indiceUv.classificacao : "Não disponível";
   const uvReferencia = uvDisponivel
-    ? "Previsão e classificação calculada a partir da fonte autorizada indicada."
+    ? `Valor atual modelado em ${indiceUv.referenciaEm || "horário não informado"}; classificação interna.`
     : "A fonte integrada de índice UV não retornou um valor válido nesta atualização.";
   return blocoTabela({
     titulo: `<h4 class="subsecao">Qualidade do Ar e Índice UV</h4>`,
-    fonte: `${Number.isFinite(qa.iqar) ? "Qualidade do ar estimada — Open-Meteo/CAMS" : "Qualidade do ar indisponível"}. Referência: ${esc(qa.referenciaEm || "indisponível")}. ${esc(fontePm)}. ${uvDisponivel ? "Índice UV previsto disponível." : "Índice UV indisponível nesta atualização."}`,
+    fonte: `${Number.isFinite(qa.usAqi) ? "Classificação simplificada interna baseada em US AQI — Open-Meteo/CAMS" : "Qualidade do ar indisponível"}. Referência: ${esc(qa.referenciaEm || "indisponível")}. ${esc(fontePm)}. ${uvDisponivel ? "Índice UV atual modelado disponível." : "Índice UV indisponível nesta atualização."}`,
     tabela: `<table>
     <thead><tr><th>Indicador</th><th>Valor</th><th>Classificação</th><th>Referência</th></tr></thead>
     <tbody>
       <tr>
-        <td>Índice brasileiro (IQAr)</td>
-        <td>${Number.isFinite(qa.iqar) ? qa.iqar : "—"}</td>
+        <td>Classificação simplificada (base US AQI)</td>
+        <td>${classificacaoAr ? esc(qa.usAqi) : "—"}</td>
         <td>${classificacaoAr ? `<strong style="color:${esc(classificacaoAr.cor)}">${esc(classificacaoAr.exibicao)}</strong>` : "Informação indisponível"}</td>
-        <td>${classificacaoAr ? `Maior subíndice: ${esc(qa.subindiceResponsavel || "—")}` : esc(qa.motivoIndisponibilidade || "Sem dados suficientes/licença")}</td>
+        <td>${classificacaoAr ? `Faixa interna de US AQI · ${esc(qa.fonte || "Open-Meteo")} · ${esc(qa.referenciaEm || "horário indisponível")}` : esc(qa.motivoIndisponibilidade || "Sem dados suficientes/licença")}</td>
       </tr>
       <tr class="zebra">
         <td>Índice UV</td>
@@ -709,7 +719,7 @@ function blocoPrevisaoAgendada(r, tituloSecao = "") {
   return blocoTabela({
     titulo: tituloSecao,
     tabela: `<table class="previsao-hoje"><thead><tr><th>Período</th><th>Condição</th><th>Temperatura mín./máx.</th><th>Umidade mín./máx.</th><th>Chuva prevista/dia</th><th>Rajada prevista</th><th>Calor</th></tr></thead><tbody>${linhas}</tbody></table>`,
-    fonte: `Fontes por campo: condição — ${fonteAgrupada(["condicaoGeral"], "Open-Meteo")}; temperatura — ${fonteAgrupada(["tempMin", "tempMax"], "Open-Meteo")}; umidade — ${fonteAgrupada(["umidadeMin", "umidadeMax"], "Open-Meteo")}; chuva — ${fonteAgrupada(["precipitacaoTotalMm"], "Dado indisponível")}; probabilidade de chuva — ${fonteAgrupada(["probabilidadeChuvaPrevista"], "Dado indisponível")}; rajada — ${fonteAgrupada(["rajadaMaxKmh"], "Dado indisponível")}; calor — ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))}. Cada campo permanece associado à sua fonte efetiva; avisos oficiais são do INMET.`,
+    fonte: `Fontes por campo: condição — ${fonteAgrupada(["condicaoGeral"], "Dado indisponível")}; temperatura — ${fonteAgrupada(["tempMin", "tempMax"], "Dado indisponível")}; umidade — ${fonteAgrupada(["umidadeMin", "umidadeMax"], "Dado indisponível")}; chuva — ${fonteAgrupada(["precipitacaoTotalMm"], "Dado indisponível")}; probabilidade de chuva — ${fonteAgrupada(["probabilidadeChuvaPrevista"], "Dado indisponível")}; rajada — ${fonteAgrupada(["rajadaMaxKmh"], "Dado indisponível")}; calor — ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))}. Cada campo permanece associado à sua fonte efetiva; avisos oficiais são do INMET.`,
   });
 }
 
@@ -799,19 +809,11 @@ function blocoPrevisaoProximosDias(r, numeroSecao) {
       </tr></thead>
       <tbody>${linhas}</tbody>
     </table>
-    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "Open-Meteo")}; umidade — ${esc(p.fontesCampo?.umidade || "Open-Meteo")}; rajada — ${esc(p.fontesCampo?.rajada || "Informação indisponível")}; chuva — ${esc(p.fontesCampo?.chuva || p.fonte)}; probabilidade de chuva — ${esc(p.fontesCampo?.probabilidadeChuva || p.fonte)}; índice UV — ${esc(p.fontesCampo?.uv || p.fonte)}; condição — ${esc(p.fontesCampo?.condicao || p.fonte)}. Local: ${local}.${ponto}
+    <p class="fonte-tabela">Fontes por campo: temperatura — ${esc(p.fontesCampo?.temperatura || "Informação indisponível")}; umidade — ${esc(p.fontesCampo?.umidade || "Informação indisponível")}; rajada — ${esc(p.fontesCampo?.rajada || "Informação indisponível")}; chuva — ${esc(p.fontesCampo?.chuva || "Informação indisponível")}; probabilidade de chuva — ${esc(p.fontesCampo?.probabilidadeChuva || "Informação indisponível")}; índice UV — ${esc(p.fontesCampo?.uv || "Informação indisponível")}; condição — ${esc(p.fontesCampo?.condicao || "Informação indisponível")}. Local: ${local}.${ponto}
       ${p.status === "indisponivel" ? "Tentativa de consulta" : "Atualização (horário da consulta à fonte)"}: ${esc(consulta || "horário indisponível")}, horário local.
-      Open-Meteo fornece a previsão meteorológica; INMET fornece avisos e observações; o portal Tetra Tech fornece rajada somente com cobertura e acesso autorizados. Campos sem fonte válida aparecem como informação indisponível.
+      OCEANOP fornece a rajada prevista (Open-Meteo como contingência); Open-Meteo fornece chuva prevista e probabilidade de chuva; INMET fornece avisos e observações. Campos sem fonte válida aparecem como informação indisponível.
       Fonte de dados de calor: ${esc(fonteCalor(r.climaSaude, formatarDataBrasilia))} — ${DESCRICAO_CALOR}.</p>
   </div>`;
-}
-
-function blocoMudancasDia(r) {
-  // Defesa no template: mesmo que um relatório antigo/cacheado carregue o
-  // campo, a edição das 08h nunca exibe comparação. A seção pertence
-  // exclusivamente à atualização regular das 15h.
-  if (r.horarioAgendado !== "15:00" || !r.mudancasDia) return "";
-  return `<section class="bloco-lista"><h4 class="subsecao">Mudanças do dia em relação ao relatório das 08:00</h4>${listaHtml(r.mudancasDia)}</section>`;
 }
 
 // Fontes efetivas de um campo nos três períodos (normalmente uma só).
@@ -839,14 +841,14 @@ function blocosPrevisao(r) {
   const temperatura = blocoTabela({
     titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao secao-modelo">Temperatura e umidade</h4><p class="subtitulo-tabela">Indicadores consolidados do período consultado.</p>`,
     tabela: tabelaTemperatura(r.tabelaTemperaturaUmidade),
-    fonte: `Fonte de dados: ${fontesTemperatura || "Dado indisponível"}.`,
+    fonte: `Fonte de dados: ${fontesTemperatura || "Dado indisponível"}. Previsão para ${esc(r.inmetPrevisao?.data || "dia local")}; consulta ${esc(r.inmetPrevisao?.consultadoEm || r.geradoEmISO || "horário indisponível")}.`,
   });
   const vento = blocoTabela({
     titulo: `<h4 class="subsecao secao-modelo">Vento por período</h4>`,
     tabela: tabelaVento(r.ventoPorPeriodo),
     fonte: fonteVento === "Dado indisponível"
       ? "Fonte de dados: informação indisponível."
-      : `Fonte de dados: ${fonteVento}. Open-Meteo fornece vento médio e direção; o portal Tetra Tech fornece rajada prevista.`,
+      : `Fonte de dados: ${fonteVento}. Vento sustentado e rajada são grandezas distintas; rajada prevista usa ${/OCEANOP/.test(fonteVento) ? "a previsão OCEANOP (rajada a 10 m), com Open-Meteo wind_gusts_10m como contingência" : "a variável Open-Meteo wind_gusts_10m"}.`,
   });
   const chuvaPeriodo = blocoTabela({
     titulo: `<h4 class="subsecao secao-modelo">Chuva por período</h4>`,
@@ -944,10 +946,12 @@ function cabecalhoPdfHtml({ titulo, linhaLocal }) {
 const { faixaSimulacaoDocumento } = require("./simulationBanner");
 
 function renderPdfHtml(r, opcoes = {}) {
+  const referenciaEdicao = referenciaEdicaoPdf(r);
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
+<meta name="cim-snapshot-id" content="${esc(r.snapshotId || "")}" />
 <style>
   * { box-sizing: border-box; }
   html { background: #ffffff; }
@@ -960,8 +964,9 @@ function renderPdfHtml(r, opcoes = {}) {
     margin: 0;
     padding: 0 36px 20px 36px;
   }
-  .referencia-edicao { break-inside: avoid; page-break-inside: avoid; }
-  .previsao-ate { color: ${brand.verde}; white-space: nowrap; }
+  table.referencia-edicao { width: 100%; margin: 0 0 12px; border-left: 4px solid ${brand.verde}; background: #F3F6F4; border-collapse: collapse; table-layout: fixed; break-inside: avoid; page-break-inside: avoid; }
+  table.referencia-edicao td { width: 50%; border: 0; padding: 9px 12px; vertical-align: middle; }
+  table.referencia-edicao td:last-child { text-align: right; }
   ${cabecalhoPdfCss(36)}
   h3.secao {
     break-after: avoid;
@@ -1176,8 +1181,10 @@ function renderPdfHtml(r, opcoes = {}) {
     linhaLocal: `${esc(r.cidade.nome)} — ${esc(r.cidade.uf)} — ${esc(r.dataFormatadaLonga)}`,
   })}
 
-  <p class="referencia-edicao"><strong>Data da previsão:</strong> ${esc(r.dataFormatadaCurta)} &nbsp;|&nbsp; <strong>Hora da consulta:</strong> ${esc(horaConsultaPdf(r.horaConsulta))} (Horário de Brasília)${r.previsaoAte ? ` <strong class="previsao-ate">| Previsão até ${esc(r.previsaoAte)}</strong>` : ""}</p>
-  ${blocoMudancasDia(r)}
+  ${referenciaEdicao ? `<table class="referencia-edicao" role="presentation"><tbody><tr>
+    <td>Hora da consulta: ${esc(referenciaEdicao.hora)} (Horário de Brasília)</td>
+    <td>Previsão até ${esc(referenciaEdicao.previsaoAte)}</td>
+  </tr></tbody></table>` : ""}
 
   ${blocosPrevisao(r)}
 
