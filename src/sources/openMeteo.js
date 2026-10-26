@@ -318,6 +318,11 @@ function validarResposta(json, fuso, coordenadasSolicitadas = null, { permitirFa
     erro.name = "ParserError";
     throw erro;
   }
+  if (json.hourly.time.some((valor, indice, serie) => indice > 0 && valor <= serie[indice - 1])) {
+    const erro = new Error("Open-Meteo retornou horas duplicadas ou fora de ordem.");
+    erro.name = "ParserError";
+    throw erro;
+  }
   if (json.timezone && json.timezone !== fuso) {
     const erro = new Error(`Open-Meteo retornou fuso divergente (${json.timezone}).`);
     erro.name = "ParserError";
@@ -683,6 +688,80 @@ async function buscarOpenMeteo(latitude, longitude, {
   return respostaNormalizada;
 }
 
+// precipitation já contém rain e showers: somar essas séries duplicaria a chuva.
+// Cada horário da API representa o acumulado da hora precedente.
+function agregarChuvaEstimada(json, agora = new Date()) {
+  const vazio = (motivo) => ({
+    diaMm: null,
+    ultimaHoraMm: null,
+    ultimas24hMm: null,
+    referenciaEm: null,
+    ultimaHoraReferencia: null,
+    coberturaDia: { amostras: 0, horasEsperadas: 0, parcial: true },
+    cobertura24h: { amostras: 0, horasEsperadas: 24, parcial: true },
+    motivoIndisponibilidade: motivo,
+    consultadoEm: agora.toISOString(),
+    tipoDado: "estimado",
+  });
+  const offset = json?.utc_offset_seconds;
+  if (!Number.isInteger(offset) || Math.abs(offset) > 50400) return vazio("Deslocamento UTC ausente ou inválido.");
+  let local;
+  let localCompleto;
+  try {
+    local = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: json.timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
+    }).format(agora).replace(" ", "T");
+    localCompleto = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: json.timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit",
+      minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    }).format(agora).replace(" ", "T");
+  } catch {
+    return vazio("Fuso da localidade ausente ou inválido.");
+  }
+  const offsetEsperado = Math.round((Date.parse(`${localCompleto}Z`) - agora.getTime()) / 60000) * 60;
+  if (offsetEsperado !== offset) return vazio("Deslocamento UTC incompatível com o fuso da localidade.");
+  const limite = `${local}:00`;
+  const limiteUtc = Date.parse(`${limite}:00Z`) - offset * 1000;
+  const tempos = json.hourly?.time;
+  const precipitacao = json.hourly?.precipitation;
+  if (!Array.isArray(tempos) || !Array.isArray(precipitacao) || tempos.length !== precipitacao.length) {
+    return vazio("Série histórica de precipitação ausente ou desalinhada.");
+  }
+  const itens = tempos.map((tempo, i) => ({
+    tempo,
+    utc: Date.parse(`${tempo}:00Z`) - offset * 1000,
+    mm: precipitacao[i],
+  })).filter((item) => item.tempo <= limite && Number.isFinite(item.utc));
+  const ultimo = itens.at(-1);
+  if (!ultimo || agora.getTime() - ultimo.utc > 3 * 3600000 || ultimo.utc > agora.getTime() + 15 * 60000) {
+    return vazio("Série histórica do modelo ausente ou anterior à janela de atualização de 3 horas.");
+  }
+  const valido = (item) => Number.isFinite(item.mm) && item.mm >= 0 && item.mm <= 500;
+  const somar = (lista) => lista.some(valido)
+    ? Math.round(lista.filter(valido).reduce((soma, item) => soma + item.mm, 0) * 10) / 10
+    : null;
+  const dia = local.slice(0, 10);
+  const hoje = itens.filter((item) => item.tempo.slice(0, 10) === dia && item.tempo.slice(11, 13) !== "00");
+  const ultimas24h = itens.filter((item) => item.utc > limiteUtc - 24 * 3600000 && item.utc <= limiteUtc);
+  const ultimaValida = itens.filter((item) => item.utc > limiteUtc - 3 * 3600000 && valido(item)).at(-1);
+  const horasEsperadasDia = Number(local.slice(11, 13));
+  const horasDiaValidas = hoje.filter(valido).length;
+  const horas24Validas = ultimas24h.filter(valido).length;
+  return {
+    diaMm: somar(hoje),
+    ultimaHoraMm: ultimaValida?.mm ?? null,
+    ultimas24hMm: somar(ultimas24h),
+    referenciaEm: ultimo.tempo,
+    ultimaHoraReferencia: ultimaValida?.tempo || null,
+    coberturaDia: { amostras: horasDiaValidas, horasEsperadas: horasEsperadasDia, parcial: horasDiaValidas !== horasEsperadasDia },
+    cobertura24h: { amostras: horas24Validas, horasEsperadas: 24, parcial: horas24Validas !== 24 },
+    motivoIndisponibilidade: !hoje.some(valido) && !ultimas24h.some(valido)
+      ? "Precipitação histórica sem horas numéricas válidas." : null,
+    consultadoEm: agora.toISOString(),
+    tipoDado: "estimado",
+  };
+}
+
 function normalizarRespostaOpenMeteo(json, latitude, longitude, {
   inicioHora = INICIO_JANELA_HOJE,
   fimHora = 24,
@@ -696,6 +775,7 @@ function normalizarRespostaOpenMeteo(json, latitude, longitude, {
   cache = null,
 } = {}) {
   validarResposta(json, fuso, { latitude, longitude });
+  const estimativaChuva = agregarChuvaEstimada(json, now || new Date());
   const horas = json.hourly;
   const dia = json.daily;
   const agoraLocal = now ? null : json.current?.time;
@@ -828,6 +908,7 @@ function normalizarRespostaOpenMeteo(json, latitude, longitude, {
     precipitacaoAcumuladaEstimadaJanela: chuvaAcumuladaEstimada.janela,
     precipitacaoAcumuladaEstimadaCobertura: chuvaAcumuladaEstimada.cobertura,
     precipitacaoAcumuladaEstimadaMotivo: chuvaAcumuladaEstimada.motivo,
+    estimativaChuva,
     precipitacaoPrevistaDiaMm: (() => {
       const indice = dia.time.indexOf(dataReferencia);
       const valor = indice >= 0 ? dia.precipitation_sum?.[indice] : null;
@@ -887,6 +968,7 @@ module.exports = {
   OPEN_METEO_TIMEOUT_MS,
   OPEN_METEO_TENTATIVAS,
   validarResposta,
+  agregarChuvaEstimada,
   normalizarRespostaOpenMeteo,
   resumirPeriodo,
   criarUrlPublicaOpenMeteo,

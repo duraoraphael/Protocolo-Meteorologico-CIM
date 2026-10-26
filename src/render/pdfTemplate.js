@@ -318,6 +318,21 @@ function tabelaTemperatura(linhas) {
   </table>`;
 }
 
+function blocoChuvaEstimada(r) {
+  const itens = [
+    ["Chuva acumulada estimada", r.chuvaEstimadaDiaMm],
+    ["Chuva estimada na última hora completa", r.chuvaEstimadaHoraMm],
+    ["Chuva estimada nas últimas 24 h", r.chuvaEstimada24hMm],
+  ].filter(([, valor]) => Number.isFinite(valor));
+  if (!itens.length) return "";
+  return blocoTabela({
+    titulo: `<h4 class="subsecao">Chuva acumulada estimada</h4>`,
+    tabela: `<table class="chuva-estimada"><thead><tr><th>Indicador</th><th>Valor (mm)</th></tr></thead><tbody>${itens
+      .map(([nome, valor]) => `<tr><td>${nome}</td><td>${numeroBr(valor, 1)}</td></tr>`).join("")}</tbody></table>`,
+    fonte: `ESTIMATIVA OPEN-METEO — precipitação modelada; referência ${esc(r.chuvaEstimadaReferencia || "indisponível")}.`,
+  });
+}
+
 function celulaPeriodo(p) {
   return `${esc(p.periodo)}${p.janela ? `<br/><small>${esc(p.janela)}</small>` : ""}`;
 }
@@ -838,10 +853,14 @@ function blocosPrevisao(r) {
     .map(([, fonte]) => fonte))].join(" / ") || "Dado indisponível";
   const fonteVento = fontesCampos([".direcao", ".intensidadeVento", ".velocidadeMediaKmh", ".rajadaMaxKmh"]);
   const fonteChuva = fontesCampos([".precipitacaoMm", ".probabilidadeChuva"]);
+  const coberturaTemperatura = r.coberturaTemperaturaObservada;
+  const textoCoberturaTemperatura = coberturaTemperatura?.parcial
+    ? ` Cobertura parcial (${coberturaTemperatura.amostras}/${coberturaTemperatura.horasEsperadas} leituras).`
+    : "";
   const temperatura = blocoTabela({
     titulo: `${previsao ? "" : tituloSecao}<h4 class="subsecao secao-modelo">Temperatura e umidade</h4><p class="subtitulo-tabela">Indicadores consolidados do período consultado.</p>`,
     tabela: tabelaTemperatura(r.tabelaTemperaturaUmidade),
-    fonte: `Fonte de dados: ${fontesTemperatura || "Dado indisponível"}. Previsão para ${esc(r.inmetPrevisao?.data || "dia local")}; consulta ${esc(r.inmetPrevisao?.consultadoEm || r.geradoEmISO || "horário indisponível")}.`,
+    fonte: `Fonte de dados: ${fontesTemperatura || "Dado indisponível"}. Previsão para ${esc(r.inmetPrevisao?.data || "dia local")}; consulta ${esc(r.inmetPrevisao?.consultadoEm || r.geradoEmISO || "horário indisponível")}.${textoCoberturaTemperatura}`,
   });
   const vento = blocoTabela({
     titulo: `<h4 class="subsecao secao-modelo">Vento por período</h4>`,
@@ -857,7 +876,8 @@ function blocosPrevisao(r) {
       ? `Fonte de dados: informação indisponível. ${referenciaConsulta(r)}.`
       : `Fonte de dados: ${fonteChuva}. Probabilidade (%) e volume (mm) permanecem separados; campos ausentes não são estimados. ${referenciaConsulta(r)}.`,
   });
-  return `${previsao}${temperatura || (previsao ? "" : tituloSecao)}${vento}${chuvaPeriodo}`;
+  const chuvaEstimada = blocoChuvaEstimada(r);
+  return `${previsao}${temperatura || (previsao ? "" : tituloSecao)}${chuvaEstimada}${vento}${chuvaPeriodo}`;
 }
 
 // Compatibilidade com relatórios antigos; a tabela de calor agora sempre

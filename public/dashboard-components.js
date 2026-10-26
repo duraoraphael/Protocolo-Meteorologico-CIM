@@ -33,6 +33,7 @@ const Dashboard = (() => {
   const unit = (value, suffix) => value == null ? '—' : `${escape(value)}${suffix}`;
   const oneDecimal = value => Number(value).toFixed(1);
   const pair = (a, b, suffix) => a == null && b == null ? '—' : `${unit(a, suffix)} / ${unit(b, suffix)}`;
+  const annotatedValue = (value, detail) => `${value}${detail ? `<small>${escape(detail)}</small>` : ''}`;
   const list = (items) => `<ul>${items.map(x => `<li>${escape(x)}</li>`).join('')}</ul>`;
   // Níveis do protocolo: nomes preservados, cores do painel por gravidade.
   const NIVEIS = {
@@ -117,22 +118,38 @@ const Dashboard = (() => {
     const gustSource = sourceOrPolicy('Informação indisponível', 'rajadaMaxKmh','periodos.manha.rajadaMaxKmh','periodos.tarde.rajadaMaxKmh','periodos.noite.rajadaMaxKmh');
     const gustDetail = Number.isFinite(gustValue) ? 'Máxima prevista no período' : 'Dado indisponível';
     const comMar = marAplicavel(r);
-    const detalheTemp = 'Mínima e máxima previstas';
-    const detalheUmidade = 'Mínima e máxima previstas';
+    const tempObservada = Number.isFinite(r.temperaturaObservadaMinC) || Number.isFinite(r.temperaturaObservadaMaxC);
+    const umidadeObservada = Number.isFinite(r.umidadeObservadaMinPct) || Number.isFinite(r.umidadeObservadaMaxPct);
+    const formatarMedida = valor => Number.isFinite(valor) ? valor.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : null;
+    const coberturaParcial = cobertura => cobertura?.parcial
+      ? `Parcial · ${cobertura.amostras || 0}/${cobertura.horasEsperadas || 0} leituras`
+      : '';
+    const temperatura = tempObservada
+      ? pair(formatarMedida(r.temperaturaObservadaMinC), formatarMedida(r.temperaturaObservadaMaxC), '°')
+      : pair(r.tempMin, r.tempMax, '°');
+    const umidade = umidadeObservada
+      ? pair(formatarMedida(r.umidadeObservadaMinPct), formatarMedida(r.umidadeObservadaMaxPct), '%')
+      : pair(r.umidadeMin, r.umidadeMax, '%');
+    const fonteTemperatura = sourceOrPolicy('INMET — estação automática', 'tempMin', 'tempMax');
+    const fonteUmidade = sourceOrPolicy('INMET — estação automática', 'umidadeMin', 'umidadeMax');
+    const notaTemperatura = [tempObservada ? coberturaParcial(r.coberturaTemperaturaObservada) : 'Mínima e máxima previstas', tempObservada ? fonteTemperatura : ''].filter(Boolean).join(' · ');
+    const notaUmidade = [umidadeObservada ? coberturaParcial(r.coberturaUmidadeObservada) : 'Mínima e máxima previstas', umidadeObservada ? fonteUmidade : ''].filter(Boolean).join(' · ');
+    const chuvaEstimadaDia = Number.isFinite(r.chuvaEstimadaDiaMm) ? r.chuvaEstimadaDiaMm : r.precipitacaoAcumuladaEstimadaMm;
+    const chuvaEstimadaFonte = 'ESTIMATIVA OPEN-METEO';
     const ce = r.conteudoEmail;
     const cardsEmail = ce ? [
       metric('Chuva prevista/dia', ce.chuvaPrevistaMm == null ? 'Dado indisponível' : unit(ce.chuvaPrevistaMm, ' <small>mm</small>'), 'Previsão acumulada para o dia · mesmo valor do e-mail', 'rain', '', ce.fonteChuvaPrevista || ''),
       metric('Probabilidade de chuva', ce.probabilidadeChuva == null ? 'Dado indisponível' : unit(ce.probabilidadeChuva, '%'), ce.janelaProbabilidade ? `Máxima prevista ${ce.janelaProbabilidade}` : 'Máxima prevista entre os períodos do dia', 'rain', '', ce.fonteProbabilidade || ''),
     ] : [];
     const cards = [
-      metric('Temperatura prevista', pair(r.tempMin, r.tempMax, '°'), detalheTemp, 'thermometer', '', sources('tempMin','tempMax')),
-      metric('Umidade relativa prevista', pair(r.umidadeMin, r.umidadeMax, '%'), detalheUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
+      metric(tempObservada ? 'Temperatura observada mín/máx' : 'Temperatura prevista', annotatedValue(temperatura, notaTemperatura), notaTemperatura, 'thermometer', '', sources('tempMin','tempMax')),
+      metric(umidadeObservada ? 'Umidade observada mín/máx' : 'Umidade relativa prevista', annotatedValue(umidade, notaUmidade), notaUmidade, 'drop', '', sources('umidadeMin','umidadeMax')),
       metric('Rajada prevista', Number.isFinite(gustValue) ? formatarRajadaPrevista(gustValue) : 'Dado indisponível', gustDetail, 'wind', '', gustSource),
       ...cardsEmail,
-      metric('Chuva acumulada observada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), 'Acumulado observado no dia', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
-      metric('Chuva acumulada estimada', unit(r.precipitacaoAcumuladaEstimadaMm, ' <small>mm</small>'), r.precipitacaoAcumuladaEstimadaStatus === 'operacional' ? 'Estimativa acumulada no período' : 'Dado indisponível', 'rain', '', sourceOrPolicy('Open-Meteo — estimativa modelada', 'precipitacaoAcumuladaEstimadaMm')),
-      metric('Chuva acumulada/Hora', unit(r.precipitacaoHoraMm, ' <small>mm</small>'), 'Acumulado na última hora', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
-      metric('Chuva nas últimas 24 h', unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), 'Acumulado nas últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
+      metric('Chuva acumulada/dia', unit(r.precipitacaoDiariaMm, ' <small>mm</small>'), 'Acumulado observado no dia', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoDiariaMm')),
+      metric('Chuva acumulada estimada', annotatedValue(unit(chuvaEstimadaDia, ' <small>mm</small>'), chuvaEstimadaDia == null ? '' : chuvaEstimadaFonte), chuvaEstimadaDia == null ? 'Dado indisponível' : chuvaEstimadaFonte, 'rain', '', sourceOrPolicy('Open-Meteo — estimativa modelada', 'chuvaEstimadaDiaMm', 'precipitacaoAcumuladaEstimadaMm')),
+      metric('Chuva acumulada/Hora', annotatedValue(unit(r.precipitacaoHoraMm, ' <small>mm</small>'), Number.isFinite(r.chuvaEstimadaHoraMm) ? `${r.chuvaEstimadaHoraMm} mm · ${chuvaEstimadaFonte}` : 'Acumulado observado na última hora'), 'Acumulado na última hora', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoHoraMm')),
+      metric('Chuva nas últimas 24 h', annotatedValue(unit(r.precipitacaoUltimas24hMm, ' <small>mm</small>'), Number.isFinite(r.chuvaEstimada24hMm) ? `${r.chuvaEstimada24hMm} mm · ${chuvaEstimadaFonte}` : 'Acumulado observado nas últimas 24 horas'), 'Acumulado nas últimas 24 horas', 'rain', '', sourceOrPolicy('INMET — estação automática', 'precipitacaoUltimas24hMm')),
       metric('Índice UV', uv == null ? 'Dado indisponível' : unit(uv, ''), uvDetail, 'sun', '', uvSource),
       metric('Condição geral', escape(r.condicaoGeral), '', 'cloud', `condition${comMar ? '' : ' span-2'}`, sources('condicaoGeral')),
       metric('Qualidade do ar', arDisponivel ? ar : escape(ar), '', 'leaf', 'air', sources('ar.usAqi')),

@@ -21,6 +21,7 @@ const { edicaoInformativo, intervaloAvisos, validadeInformativo, partesNoFuso } 
 const { aplicarPoliticaFontes, complementarRajadaPrevista, aplicarRajadaOceanop } = require("./weatherSourcePolicy");
 const { metadadosMeteorologicos } = require("./weatherSourceMetadata");
 const { criarIndicadoresSnapshot } = require("./indicatorSnapshot");
+const { classificarDadosRelatorio, validarDadosRelatorio } = require("./meteorologicalValidity");
 const { montarContextoMeteorologicoSetor } = require("./sectorWeatherContext");
 const {
   buscarOceanopDaBase,
@@ -324,6 +325,16 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     tempMax: inmetPrevisao?.periodos?.tarde?.tempMax ?? null,
     umidadeMin: inmetPrevisao?.periodos?.tarde?.umidadeMin ?? null,
     umidadeMax: inmetPrevisao?.periodos?.manha?.umidadeMax ?? null,
+    temperaturaObservadaMinC: inmetObservacao?.status === "operacional" && !inmetObservacao.observacao?.desatualizado
+      ? inmetObservacao.agregado?.temperaturaMinC ?? null : null,
+    temperaturaObservadaMaxC: inmetObservacao?.status === "operacional" && !inmetObservacao.observacao?.desatualizado
+      ? inmetObservacao.agregado?.temperaturaMaxC ?? null : null,
+    umidadeObservadaMinPct: inmetObservacao?.status === "operacional" && !inmetObservacao.observacao?.desatualizado
+      ? inmetObservacao.agregado?.umidadeMinPct ?? null : null,
+    umidadeObservadaMaxPct: inmetObservacao?.status === "operacional" && !inmetObservacao.observacao?.desatualizado
+      ? inmetObservacao.agregado?.umidadeMaxPct ?? null : null,
+    coberturaTemperaturaObservada: inmetObservacao?.agregado?.coberturaTemperatura ?? null,
+    coberturaUmidadeObservada: inmetObservacao?.agregado?.coberturaUmidade ?? null,
     precipitacaoTotalMm: null,
     precipitacaoHorariaMaxMm: null,
     probabilidadeChuvaMax: null,
@@ -418,13 +429,28 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     integrado.fontesPorCampo.umidadeMin,
     integrado.fontesPorCampo.umidadeMax,
   ].filter((fonte) => fonte && fonte !== "Indisponível"))];
+  const temTemperaturaObservada = Number.isFinite(base.temperaturaObservadaMinC)
+    || Number.isFinite(base.temperaturaObservadaMaxC)
+    || Number.isFinite(base.umidadeObservadaMinPct)
+    || Number.isFinite(base.umidadeObservadaMaxPct);
+  const fonteEstacao = inmetObservacao?.observacao?.estacao?.codigo
+    ? `INMET — estação automática (${inmetObservacao.observacao.estacao.codigo})`
+    : "INMET — estação automática";
+  const chuvaEstimada = openMeteo?.estimativaChuva;
+  for (const campo of ["chuvaEstimadaDiaMm", "chuvaEstimadaHoraMm", "chuvaEstimada24hMm"]) {
+    integrado.fontesPorCampo[campo] = Number.isFinite(chuvaEstimada?.[
+      campo === "chuvaEstimadaDiaMm" ? "diaMm" : campo === "chuvaEstimadaHoraMm" ? "ultimaHoraMm" : "ultimas24hMm"
+    ]) ? "Open-Meteo — estimativa de modelo" : "Indisponível";
+  }
   const tabelaTemperaturaUmidade = [{
-    fonte: fontesTabelaTemperatura.join(" / ") || "Indisponível",
-    natureza: fontesTabelaTemperatura.every((fonte) => fonte.includes("INMET")) ? "Previsão diária oficial" : "Previsão diária com fonte modelada identificada",
-    tempMin: base.tempMin,
-    tempMax: base.tempMax,
-    umidadeMin: base.umidadeMin,
-    umidadeMax: base.umidadeMax,
+    fonte: temTemperaturaObservada ? fonteEstacao : fontesTabelaTemperatura.join(" / ") || "Indisponível",
+    natureza: temTemperaturaObservada
+      ? "Observação do dia civil local"
+      : fontesTabelaTemperatura.every((fonte) => fonte.includes("INMET")) ? "Previsão diária oficial" : "Previsão diária com fonte modelada identificada",
+    tempMin: temTemperaturaObservada ? base.temperaturaObservadaMinC : base.tempMin,
+    tempMax: temTemperaturaObservada ? base.temperaturaObservadaMaxC : base.tempMax,
+    umidadeMin: temTemperaturaObservada ? base.umidadeObservadaMinPct : base.umidadeMin,
+    umidadeMax: temTemperaturaObservada ? base.umidadeObservadaMaxPct : base.umidadeMax,
   }];
   // No PDF das duas edições, o vento cobre sempre o dia operacional inteiro
   // (05h–00h); apenas os cards consolidados permanecem limitados à edição.
@@ -642,6 +668,14 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
     precipitacaoAcumuladaEstimadaJanela: base.precipitacaoAcumuladaEstimadaJanela,
     precipitacaoAcumuladaEstimadaCobertura: base.precipitacaoAcumuladaEstimadaCobertura,
     precipitacaoAcumuladaEstimadaMotivo: base.precipitacaoAcumuladaEstimadaMotivo,
+    chuvaEstimadaDiaMm: chuvaEstimada?.diaMm ?? null,
+    chuvaEstimadaHoraMm: chuvaEstimada?.ultimaHoraMm ?? null,
+    chuvaEstimada24hMm: chuvaEstimada?.ultimas24hMm ?? null,
+    chuvaEstimadaReferencia: chuvaEstimada?.referenciaEm ?? null,
+    chuvaEstimadaHoraReferencia: chuvaEstimada?.ultimaHoraReferencia ?? null,
+    coberturaChuvaEstimadaDia: chuvaEstimada?.coberturaDia ?? null,
+    coberturaChuvaEstimada24h: chuvaEstimada?.cobertura24h ?? null,
+    chuvaEstimadaMotivoIndisponibilidade: chuvaEstimada?.motivoIndisponibilidade ?? null,
     precipitacaoPrevistaDiaMm: base.precipitacaoPrevistaDiaMm ?? null,
     precipitacaoHoraMm: base.precipitacaoHoraMm ?? null,
     precipitacaoHoraReferencia: base.precipitacaoHoraReferencia ?? null,
@@ -737,6 +771,8 @@ async function montarRelatorio(cidade, { horarioAgendado = null, atualizarClimaS
   };
   if (horarioAgendado) relatorio.horaConsulta = horarioAgendado;
   relatorio.indicadoresSnapshot = criarIndicadoresSnapshot(relatorio);
+  relatorio.classificacaoDados = classificarDadosRelatorio(relatorio);
+  validarDadosRelatorio(relatorio);
   relatorio.ocorrencias = montarOcorrencias(relatorio);
   return registrarDocumentoOperacional(relatorio);
 }

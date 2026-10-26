@@ -23,7 +23,7 @@ function conteudoEmailPainel(r) {
     // Fora das edições agendadas o painel cobre o dia operacional (05h–00h).
     frasePrevisao: email.frasePrevisao(r) || "Previsão até 00h",
     chuvaPrevistaMm: Number.isFinite(chuva) ? chuva : null,
-    fonteChuvaPrevista: fontesUnicas([fontes.precipitacaoTotalMm]),
+    fonteChuvaPrevista: fontesUnicas([fontes.chuvaPrevistaDiaMm, fontes.precipitacaoTotalMm]),
     probabilidadeChuva: Number.isFinite(probabilidade) ? probabilidade : null,
     janelaProbabilidade: r.probabilidadeChuvaJanela || null,
     fonteProbabilidade,

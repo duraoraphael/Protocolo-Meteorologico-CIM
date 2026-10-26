@@ -47,6 +47,8 @@ function mapearFontesDoRelatorio(base, mar, qualidadeAr, fonteMeteorologica) {
   const fonteAr = qualidadeAr?.fonte || "Informação indisponível";
   fontesPorCampo["ar.pm25Medio"] = fonteDo(qualidadeAr?.pm25Medio, fonteAr);
   fontesPorCampo["ar.pm10Medio"] = fonteDo(qualidadeAr?.pm10Medio, fonteAr);
+  fontesPorCampo["ar.pm25"] = fonteDo(qualidadeAr?.pm25, fonteAr);
+  fontesPorCampo["ar.pm10"] = fonteDo(qualidadeAr?.pm10, fonteAr);
   fontesPorCampo["ar.iqar"] = fonteDo(qualidadeAr?.iqar, fonteAr);
   fontesPorCampo["ar.usAqi"] = fonteDo(qualidadeAr?.usAqi, fonteAr);
   fontesPorCampo["ar.uvAtual"] = fonteDo(qualidadeAr?.uvAtual, qualidadeAr?.fonteUv || fonteAr);

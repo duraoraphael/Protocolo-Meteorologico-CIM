@@ -75,7 +75,7 @@ test("painel distingue chuva diária da última hora sem fonte ou horário de re
     },
     monitoramentoApis: [], severidade: { eventos: [] }, avisosInmet: [],
   });
-  assert.match(html, /Chuva acumulada observada\/dia/);
+  assert.match(html, /Chuva acumulada\/dia/);
   assert.match(html, /Chuva acumulada\/Hora/);
   assert.match(html, />8\.4 <small>mm<\/small>/);
   assert.match(html, />1\.2 <small>mm<\/small>/);
@@ -143,7 +143,7 @@ test("painel mostra indisponibilidade de UV/rajada sem exibir fontes", () => {
   });
 
   assert.match(html, /Rajada prevista[\s\S]*Dado indisponível/);
-  assert.match(html, /Chuva acumulada observada\/dia/);
+  assert.match(html, /Chuva acumulada\/dia/);
   assert.match(html, /Índice UV/);
   assert.match(html, /Mar — altura máx\. de onda[\s\S]*0\.5 <small>m<\/small>/);
   assert.doesNotMatch(html, /Acumulado observado no dia|class="detalhe"/);

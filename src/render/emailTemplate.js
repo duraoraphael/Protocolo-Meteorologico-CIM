@@ -86,6 +86,33 @@ function probabilidadeChuvaPrevista(r) {
   return Math.max(...relevantes.map((p) => p.probabilidade));
 }
 
+function valoresPrevisaoEmail(r) {
+  const previsao = r.inmetPrevisao;
+  const dia = previsao?.dias?.find((item) => item.dataBr === previsao.data) || previsao?.dias?.[0];
+  if (dia) {
+    return {
+      tempMin: dia.tempMin ?? null,
+      tempMax: dia.tempMax ?? null,
+      umidadeMin: dia.umidadeMin ?? null,
+      umidadeMax: dia.umidadeMax ?? null,
+    };
+  }
+  const periodos = previsao?.periodos;
+  if (periodos) {
+    return {
+      tempMin: periodos.manha?.tempMin ?? null,
+      tempMax: periodos.tarde?.tempMax ?? null,
+      umidadeMin: periodos.tarde?.umidadeMin ?? null,
+      umidadeMax: periodos.manha?.umidadeMax ?? null,
+    };
+  }
+  return {
+    tempMin: r.tempMin,
+    tempMax: r.tempMax,
+    umidadeMin: r.umidadeMin,
+    umidadeMax: r.umidadeMax,
+  };
+}
 
 function celulaMetrica(rotulo, valor, ultimaColuna = false) {
   return `<td colspan="2" width="33.33%" valign="middle" align="center" bgcolor="${COR.celula}" style="width:33.33%;background:${COR.celula};border-right:${ultimaColuna ? "0" : `1px solid ${COR.borda}`};border-bottom:1px solid ${COR.borda};padding:13px 8px 12px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;">
@@ -139,6 +166,7 @@ function valorCalor(r) {
 }
 
 function resumoMeteorologico(r) {
+  const previsao = valoresPrevisaoEmail(r);
   const rajada = rajadaMaxima(r);
   const rajadaValor = Number.isFinite(rajada.valor) ? formatarRajadaPrevista(rajada.valor) : "Dado indisponível";
   const chuvaPrevista = chuvaPrevistaAcumulada(r);
@@ -154,8 +182,8 @@ function resumoMeteorologico(r) {
       <col width="16.67%"><col width="16.67%"><col width="16.66%">
     </colgroup>
     <tr data-email-metric-row="1">
-      ${celulaMetrica("PREVISÃO TEMP. MÍN/MÁX", parOuTraco(r.tempMin, r.tempMax, "°", "°C"))}
-      ${celulaMetrica("PREVISÃO UMIDADE MÍN/MÁX", parOuTraco(r.umidadeMin, r.umidadeMax, "%", "%"))}
+      ${celulaMetrica("PREVISÃO TEMP. MÍN/MÁX", parOuTraco(previsao.tempMin, previsao.tempMax, "°", "°C"))}
+      ${celulaMetrica("PREVISÃO UMIDADE MÍN/MÁX", parOuTraco(previsao.umidadeMin, previsao.umidadeMax, "%", "%"))}
       ${celulaMetrica("RAJADA PREVISTA", rajadaValor, true)}
     </tr>
     <tr data-email-metric-row="2">
